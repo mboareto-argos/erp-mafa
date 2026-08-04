@@ -1,0 +1,334 @@
+// Schema inicial — modulos Identity, Tenancy e Catalog (fase 1 do roadmap,
+// docs/architecture/overview.md secao 15). Demais modulos entram conforme o
+// roadmap avanca — ver TA-DATA-004 (modelagem final incremental, nunca ad-hoc).
+//
+// Convencoes aplicadas em todo o schema:
+// - TA-DATA-001: toda tabela operacional tem id/company_id/created_at/updated_at/
+//   created_by/deleted_at.
+// - TA-DATA-002: indice composto iniciando por company_id em toda tabela operacional.
+// - TA-DATA-003: unicidade de negocio composta com company_id, exceto entidades
+//   verdadeiramente globais (users.email de login).
+// - TA-DOMAIN-001: valores monetarios usam Decimal, nunca float/double.
+//
+// Company e User sao as duas excecoes a TA-DATA-001: Company e a raiz do tenant
+// (nao pertence a uma empresa) e User e global por desenho de autenticacao
+// (TA-DATA-003) — o vinculo com empresa(s) e feito via Membership.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Identity & Tenancy (docs/architecture/overview.md, secao 6.1)
+// ---------------------------------------------------------------------------
+
+enum CompanyStatus {
+  active
+  inactive
+}
+
+model Company {
+  id                String        @id @default(uuid()) @db.Uuid
+  name              String
+  document          String?
+  segment           String?
+  plan              String?
+  brandAccentColor  String        @default("#C49A28") @map("brand_accent_color")
+  status            CompanyStatus @default(active)
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+  deletedAt         DateTime?     @map("deleted_at")
+
+  memberships    Membership[]
+  invitations    Invitation[]
+  categories     Category[]
+  brands         Brand[]
+  tags           Tag[]
+  products       Product[]
+  productVariants ProductVariant[]
+  productPrices  ProductPrice[]
+  productTags    ProductTag[]
+
+  @@map("companies")
+}
+
+enum UserStatus {
+  active
+  invited
+  blocked
+}
+
+// Entidade global por desenho de autenticacao (TA-DATA-003) — um mesmo usuario
+// pode ter Membership em varias empresas.
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  name         String
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  status       UserStatus @default(active)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  deletedAt    DateTime?  @map("deleted_at")
+
+  memberships       Membership[]
+  createdMemberships Membership[] @relation("MembershipCreatedBy")
+  createdInvitations Invitation[] @relation("InvitationCreatedBy")
+  createdCategories  Category[]   @relation("CategoryCreatedBy")
+  createdBrands      Brand[]      @relation("BrandCreatedBy")
+  createdTags        Tag[]        @relation("TagCreatedBy")
+  createdProducts    Product[]    @relation("ProductCreatedBy")
+  createdProductVariants ProductVariant[] @relation("ProductVariantCreatedBy")
+  createdProductPrices   ProductPrice[]   @relation("ProductPriceCreatedBy")
+  createdProductTags     ProductTag[]     @relation("ProductTagCreatedBy")
+
+  @@map("users")
+}
+
+// Catalogo global de papeis do sistema (secao 9.2 do Documento de Negocio).
+// Nao e uma tabela operacional por empresa no MVP — permissoes personalizadas
+// por empresa sao extensao futura (secao 6.3 do Design System).
+enum RoleName {
+  owner
+  admin
+  sales
+  inventory
+  finance
+  viewer
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        RoleName @unique
+  permissions String[]
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  memberships Membership[]
+  invitations Invitation[]
+
+  @@map("roles")
+}
+
+enum MembershipStatus {
+  active
+  invited
+  removed
+}
+
+model Membership {
+  id        String           @id @default(uuid()) @db.Uuid
+  companyId String           @map("company_id") @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  roleId    String           @map("role_id") @db.Uuid
+  status    MembershipStatus @default(invited)
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+  createdBy String?          @map("created_by") @db.Uuid
+  deletedAt DateTime?        @map("deleted_at")
+
+  company        Company @relation(fields: [companyId], references: [id])
+  user           User    @relation(fields: [userId], references: [id])
+  role           Role    @relation(fields: [roleId], references: [id])
+  createdByUser  User?   @relation("MembershipCreatedBy", fields: [createdBy], references: [id])
+
+  @@unique([companyId, userId])
+  @@index([companyId, status])
+  @@map("memberships")
+}
+
+model Invitation {
+  id        String    @id @default(uuid()) @db.Uuid
+  companyId String    @map("company_id") @db.Uuid
+  email     String
+  roleId    String    @map("role_id") @db.Uuid
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  createdBy String?   @map("created_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at")
+
+  company       Company @relation(fields: [companyId], references: [id])
+  role          Role    @relation(fields: [roleId], references: [id])
+  createdByUser User?   @relation("InvitationCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([companyId, email])
+  @@map("invitations")
+}
+
+// ---------------------------------------------------------------------------
+// Catalog (docs/architecture/overview.md, secao 6.2)
+// ---------------------------------------------------------------------------
+
+enum CategoryStatus {
+  active
+  inactive
+}
+
+model Category {
+  id        String         @id @default(uuid()) @db.Uuid
+  companyId String         @map("company_id") @db.Uuid
+  name      String
+  status    CategoryStatus @default(active)
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+  createdBy String?        @map("created_by") @db.Uuid
+  deletedAt DateTime?      @map("deleted_at")
+
+  company       Company   @relation(fields: [companyId], references: [id])
+  createdByUser User?     @relation("CategoryCreatedBy", fields: [createdBy], references: [id])
+  products      Product[]
+
+  @@unique([companyId, name])
+  @@index([companyId, status])
+  @@map("categories")
+}
+
+enum BrandStatus {
+  active
+  inactive
+}
+
+model Brand {
+  id        String      @id @default(uuid()) @db.Uuid
+  companyId String      @map("company_id") @db.Uuid
+  name      String
+  status    BrandStatus @default(active)
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+  createdBy String?     @map("created_by") @db.Uuid
+  deletedAt DateTime?   @map("deleted_at")
+
+  company       Company   @relation(fields: [companyId], references: [id])
+  createdByUser User?     @relation("BrandCreatedBy", fields: [createdBy], references: [id])
+  products      Product[]
+
+  @@unique([companyId, name])
+  @@index([companyId, status])
+  @@map("brands")
+}
+
+model Tag {
+  id        String    @id @default(uuid()) @db.Uuid
+  companyId String    @map("company_id") @db.Uuid
+  name      String
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  createdBy String?   @map("created_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at")
+
+  company       Company      @relation(fields: [companyId], references: [id])
+  createdByUser User?        @relation("TagCreatedBy", fields: [createdBy], references: [id])
+  productTags   ProductTag[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@map("tags")
+}
+
+enum ProductStatus {
+  active
+  inactive
+}
+
+model Product {
+  id         String        @id @default(uuid()) @db.Uuid
+  companyId  String        @map("company_id") @db.Uuid
+  sku        String
+  name       String
+  categoryId String?       @map("category_id") @db.Uuid
+  brandId    String?       @map("brand_id") @db.Uuid
+  unit       String
+  status     ProductStatus @default(active)
+  aliases    String[]      @default([])
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+  createdBy  String?       @map("created_by") @db.Uuid
+  deletedAt  DateTime?     @map("deleted_at")
+
+  company       Company          @relation(fields: [companyId], references: [id])
+  category      Category?        @relation(fields: [categoryId], references: [id])
+  brand         Brand?           @relation(fields: [brandId], references: [id])
+  createdByUser User?            @relation("ProductCreatedBy", fields: [createdBy], references: [id])
+  variants      ProductVariant[]
+  prices        ProductPrice[]
+  productTags   ProductTag[]
+
+  @@unique([companyId, sku])
+  @@index([companyId, status])
+  @@map("products")
+}
+
+model ProductVariant {
+  id         String    @id @default(uuid()) @db.Uuid
+  companyId  String    @map("company_id") @db.Uuid
+  productId  String    @map("product_id") @db.Uuid
+  skuVariant String    @map("sku_variant")
+  attributes Json
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  createdBy  String?   @map("created_by") @db.Uuid
+  deletedAt  DateTime? @map("deleted_at")
+
+  company       Company        @relation(fields: [companyId], references: [id])
+  product       Product        @relation(fields: [productId], references: [id])
+  createdByUser User?          @relation("ProductVariantCreatedBy", fields: [createdBy], references: [id])
+  prices        ProductPrice[]
+
+  @@unique([companyId, skuVariant])
+  @@index([companyId, productId])
+  @@map("product_variants")
+}
+
+// Preco e historico (RN-PRC-003): cada alteracao insere uma nova linha,
+// nunca sobrescreve a anterior. costPrice e sempre calculado, nunca digitado
+// diretamente pelo usuario (regra DS-FORM-004) — a UI nunca expõe este campo
+// como input livre.
+model ProductPrice {
+  id               String    @id @default(uuid()) @db.Uuid
+  companyId        String    @map("company_id") @db.Uuid
+  productId        String    @map("product_id") @db.Uuid
+  productVariantId String?   @map("product_variant_id") @db.Uuid
+  costPrice        Decimal   @map("cost_price") @db.Decimal(14, 4)
+  salePrice        Decimal   @map("sale_price") @db.Decimal(14, 2)
+  margin           Decimal?  @db.Decimal(7, 4)
+  effectiveFrom    DateTime  @map("effective_from")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  createdBy        String?   @map("created_by") @db.Uuid
+  deletedAt        DateTime? @map("deleted_at")
+
+  company        Company         @relation(fields: [companyId], references: [id])
+  product        Product         @relation(fields: [productId], references: [id])
+  productVariant ProductVariant? @relation(fields: [productVariantId], references: [id])
+  createdByUser  User?           @relation("ProductPriceCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([companyId, productId, effectiveFrom])
+  @@map("product_prices")
+}
+
+// Tabela de associacao explicita (em vez de m:n implicito do Prisma) para
+// poder cumprir TA-DATA-001/002 (company_id + indice) tambem no vinculo.
+model ProductTag {
+  id        String    @id @default(uuid()) @db.Uuid
+  companyId String    @map("company_id") @db.Uuid
+  productId String    @map("product_id") @db.Uuid
+  tagId     String    @map("tag_id") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at")
+
+  company       Company @relation(fields: [companyId], references: [id])
+  product       Product @relation(fields: [productId], references: [id])
+  tag           Tag     @relation(fields: [tagId], references: [id])
+  createdByUser User?   @relation("ProductTagCreatedBy", fields: [createdBy], references: [id])
+
+  @@unique([productId, tagId])
+  @@index([companyId])
+  @@map("product_tags")
+}

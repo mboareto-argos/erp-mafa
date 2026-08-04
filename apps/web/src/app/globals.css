@@ -1,0 +1,16 @@
+@import "tailwindcss";
+@config "../../tailwind.config.ts";
+
+/*
+ * Cores de fundo/texto usam os tokens neutros de
+ * packages/design-tokens/tokens.json (via tailwind.config.ts), nunca hex
+ * redigitado aqui — ver docs/product/design-system.md, secao 4.1.
+ */
+@theme inline {
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+body {
+  @apply bg-neutral-25 text-neutral-900;
+}

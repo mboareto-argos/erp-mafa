@@ -12,8 +12,6 @@ negócio, a fonte de negócio vence; em caso de dúvida sobre visual, a fonte vi
 em caso de dúvida sobre arquitetura/stack, a fonte técnica vence.
 
 ## Comandos do projeto
-(a confirmar após o scaffold inicial de `apps/web` e `apps/api` — ver os `README.md` de cada pasta)
-
 - `pnpm install` — instala dependências do monorepo
 - `pnpm dev` — sobe web + api em modo desenvolvimento
 - `pnpm test` — roda toda a suíte de testes
