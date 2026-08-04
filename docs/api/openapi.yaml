@@ -16,6 +16,14 @@ tags:
     description: Inventory — saldo, movimentações e ajustes de estoque (docs/architecture/overview.md §6.3)
   - name: purchasing
     description: Purchasing — fornecedores, compras e recebimento (docs/architecture/overview.md §6.4)
+  - name: customers
+    description: Customers — cadastro de clientes (docs/architecture/overview.md §6.5)
+  - name: payments
+    description: Payments — formas de pagamento (docs/architecture/overview.md §6.6)
+  - name: sales
+    description: >
+      Sales — vendas só à vista nesta fase (docs/architecture/overview.md §6.5).
+      Venda a prazo/conta a receber ainda não existem (Receivables é Fase 4).
 paths:
   /auth/register:
     post:
@@ -663,6 +671,300 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
 
+  /customers:
+    post:
+      tags: [customers]
+      summary: Cria cliente (requer permission:manage_customers)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                whatsapp: { type: string }
+                phone: { type: string }
+                email: { type: string, format: email }
+                instagram: { type: string }
+                birthDate: { type: string, format: date }
+      responses:
+        "201":
+          description: Criado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+    get:
+      tags: [customers]
+      summary: Lista clientes (requer permission:view_customers)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Customer" }
+  /customers/{id}/deactivate:
+    patch:
+      tags: [customers]
+      summary: Inativa o cliente (nunca deleta — histórico de compras permanece, RN 10.9.4)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+
+  /payments/methods:
+    post:
+      tags: [payments]
+      summary: Cria forma de pagamento (requer permission:manage_payment_methods)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, name]
+              properties:
+                type:
+                  type: string
+                  enum: [cash, pix, debit_card, credit_card, bank_transfer, store_credit, other]
+                name: { type: string }
+                feeRate: { type: number, description: "Percentual (0-100)" }
+                feeFixed: { type: number }
+      responses:
+        "201":
+          description: Criada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentMethod" }
+    get:
+      tags: [payments]
+      summary: Lista formas de pagamento (requer permission:view_payment_methods)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PaymentMethod" }
+  /payments/methods/{id}/deactivate:
+    patch:
+      tags: [payments]
+      summary: Inativa a forma de pagamento (nunca deleta)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentMethod" }
+
+  /sales:
+    post:
+      tags: [sales]
+      summary: Cria venda em rascunho com itens (requer permission:manage_sales) — RN 10.10.1, não altera estoque
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channel, items]
+              properties:
+                customerId: { type: string, format: uuid }
+                channel: { type: string, enum: [presencial, whatsapp, instagram, catalogo, outro] }
+                discount: { type: number, default: 0, description: Desconto geral da venda }
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [productVariantId, quantity, unitPrice]
+                    properties:
+                      productVariantId: { type: string, format: uuid }
+                      quantity: { type: number }
+                      unitPrice: { type: number }
+                      discount: { type: number, default: 0 }
+      responses:
+        "201":
+          description: Criada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Sale" }
+    get:
+      tags: [sales]
+      summary: Lista vendas (requer permission:view_sales)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Sale" }
+  /sales/{id}:
+    get:
+      tags: [sales]
+      summary: Detalhe da venda, com itens/pagamentos/devoluções (requer permission:view_sales)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Sale" }
+        "404":
+          description: Venda não encontrada nesta empresa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /sales/{id}/confirm:
+    post:
+      tags: [sales]
+      summary: >
+        Confirma a venda: congela o custo por item, baixa estoque via
+        InventoryService.releaseStock() na mesma transação (TA-ARCH-003),
+        registra os pagamentos (só à vista — a soma precisa bater exatamente
+        com o total) e calcula CMV/lucro bruto.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [payments]
+              properties:
+                payments:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [paymentMethodId, amount]
+                    properties:
+                      paymentMethodId: { type: string, format: uuid }
+                      amount: { type: number }
+      responses:
+        "201":
+          description: Confirmada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Sale" }
+        "400":
+          description: Estoque insuficiente ou soma dos pagamentos diferente do total
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: Venda não está em rascunho
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /sales/{id}/cancel:
+    post:
+      tags: [sales]
+      summary: >
+        Cancela a venda — permitido em draft (sem efeito) e confirmed
+        (restaura o estoque ainda não devolvido). Bloqueado se já
+        returned/partially_returned/cancelled.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "201":
+          description: Cancelada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Sale" }
+        "409":
+          description: Status da venda não permite cancelamento
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /sales/{id}/return:
+    post:
+      tags: [sales]
+      summary: >
+        Devolução parcial ou total (RN 10.11). Item apto restaura estoque;
+        item avariado só é registrado (não volta ao estoque disponível
+        nesta fase). Recalcula receita líquida e CMV/lucro proporcionalmente.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason, items]
+              properties:
+                reason: { type: string }
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [saleItemId, quantity, condition]
+                    properties:
+                      saleItemId: { type: string, format: uuid }
+                      quantity: { type: number }
+                      condition: { type: string, enum: [apt, damaged] }
+      responses:
+        "201":
+          description: Devolução registrada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Sale" }
+        "400":
+          description: Item inválido ou quantidade devolvida maior que a vendida
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: Status da venda não permite devolução
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -792,6 +1094,76 @@ components:
                     purchaseItemId: { type: string, format: uuid }
                     quantityReceived: { type: string }
                     unitCostFinal: { type: string }
+    Customer:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        name: { type: string }
+        whatsapp: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        instagram: { type: string, nullable: true }
+        status: { type: string, enum: [active, inactive] }
+    PaymentMethod:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        type: { type: string, enum: [cash, pix, debit_card, credit_card, bank_transfer, store_credit, other] }
+        name: { type: string }
+        feeRate: { type: string, nullable: true }
+        feeFixed: { type: string, nullable: true }
+        status: { type: string, enum: [active, inactive] }
+    Sale:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        customerId: { type: string, format: uuid, nullable: true }
+        channel: { type: string, enum: [presencial, whatsapp, instagram, catalogo, outro] }
+        status: { type: string, enum: [draft, confirmed, cancelled, partially_returned, returned] }
+        subtotal: { type: string }
+        discount: { type: string }
+        total: { type: string }
+        cmvCalculated: { type: string, nullable: true }
+        grossProfitCalculated: { type: string, nullable: true }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              productVariantId: { type: string, format: uuid }
+              quantity: { type: string }
+              unitPrice: { type: string }
+              discount: { type: string }
+              unitCostAtSale: { type: string, nullable: true }
+              quantityReturned: { type: string }
+        payments:
+          type: array
+          items:
+            type: object
+            properties:
+              paymentMethodId: { type: string, format: uuid }
+              amount: { type: string }
+              feeAmount: { type: string }
+              netAmount: { type: string }
+        returns:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              reason: { type: string }
+              items:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    saleItemId: { type: string, format: uuid }
+                    quantity: { type: string }
+                    condition: { type: string, enum: [apt, damaged] }
     ErrorResponse:
       type: object
       description: Formato padrão TA-API-001 (docs/architecture/overview.md, secao 10.2)

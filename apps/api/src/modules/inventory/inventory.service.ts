@@ -115,6 +115,122 @@ export class InventoryService {
     return { movement, newAvgCost };
   }
 
+  // Chamado pelo Sales dentro da MESMA transacao da confirmacao da venda
+  // (TA-ARCH-003) — baixa estoque na venda (RN 10.10.3). Nunca deixa o
+  // disponivel negativo (RN 10.10.23), nunca mexe no custo medio movel
+  // (RN 11.4 e' so' sobre compras).
+  async releaseStock(
+    tx: Prisma.TransactionClient,
+    params: {
+      companyId: string;
+      productVariantId: string;
+      quantity: Prisma.Decimal.Value;
+      unitCost: Prisma.Decimal.Value;
+      originType: StockMovementOriginType;
+      originId: string;
+      createdBy?: string;
+    },
+  ) {
+    const balance = await tx.stockBalance.findUnique({
+      where: {
+        companyId_productVariantId: {
+          companyId: params.companyId,
+          productVariantId: params.productVariantId,
+        },
+      },
+    });
+
+    const currentAvailable = new Prisma.Decimal(
+      balance?.quantityAvailable ?? 0,
+    );
+    const quantity = new Prisma.Decimal(params.quantity);
+
+    if (currentAvailable.lessThan(quantity)) {
+      throw new AppError(
+        'STOCK_INSUFFICIENT',
+        'Quantidade solicitada maior que o estoque disponível.',
+        HttpStatus.BAD_REQUEST,
+        'quantity',
+        {
+          available: currentAvailable.toString(),
+          requested: quantity.toString(),
+        },
+      );
+    }
+
+    const [movement] = await Promise.all([
+      tx.stockMovement.create({
+        data: {
+          companyId: params.companyId,
+          productVariantId: params.productVariantId,
+          type: 'out',
+          quantity: quantity.negated(),
+          unitCost: params.unitCost,
+          originType: params.originType,
+          originId: params.originId,
+          createdBy: params.createdBy,
+        },
+      }),
+      tx.stockBalance.update({
+        where: {
+          companyId_productVariantId: {
+            companyId: params.companyId,
+            productVariantId: params.productVariantId,
+          },
+        },
+        data: { quantityAvailable: { decrement: quantity } },
+      }),
+    ]);
+
+    return { movement };
+  }
+
+  // Reverte uma saida de venda — cancelamento de venda confirmada ou
+  // devolucao com item apto (RN 10.10.15/10.11.4). Nunca mexe no custo
+  // medio movel.
+  async restoreStock(
+    tx: Prisma.TransactionClient,
+    params: {
+      companyId: string;
+      productVariantId: string;
+      quantity: Prisma.Decimal.Value;
+      originId: string;
+      createdBy?: string;
+    },
+  ) {
+    const quantity = new Prisma.Decimal(params.quantity);
+
+    const [movement] = await Promise.all([
+      tx.stockMovement.create({
+        data: {
+          companyId: params.companyId,
+          productVariantId: params.productVariantId,
+          type: 'return',
+          quantity,
+          originType: 'return',
+          originId: params.originId,
+          createdBy: params.createdBy,
+        },
+      }),
+      tx.stockBalance.upsert({
+        where: {
+          companyId_productVariantId: {
+            companyId: params.companyId,
+            productVariantId: params.productVariantId,
+          },
+        },
+        create: {
+          companyId: params.companyId,
+          productVariantId: params.productVariantId,
+          quantityAvailable: quantity,
+        },
+        update: { quantityAvailable: { increment: quantity } },
+      }),
+    ]);
+
+    return { movement };
+  }
+
   // Ajuste manual pontual (RN 10.7.9/10.7.10) — abre a propria transacao,
   // ninguem mais participa dela nesta fase.
   async adjustStock(

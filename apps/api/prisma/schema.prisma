@@ -64,6 +64,13 @@ model Company {
   purchaseReceipts        PurchaseReceipt[]
   purchaseReceiptItems    PurchaseReceiptItem[]
   purchaseCostAllocations PurchaseCostAllocation[]
+  customers               Customer[]
+  paymentMethods          PaymentMethod[]
+  sales                   Sale[]
+  saleItems               SaleItem[]
+  salePayments            SalePayment[]
+  saleReturns             SaleReturn[]
+  saleReturnItems         SaleReturnItem[]
 
   @@map("companies")
 }
@@ -107,6 +114,13 @@ model User {
   createdPurchaseReceipts        PurchaseReceipt[]        @relation("PurchaseReceiptCreatedBy")
   createdPurchaseReceiptItems    PurchaseReceiptItem[]    @relation("PurchaseReceiptItemCreatedBy")
   createdPurchaseCostAllocations PurchaseCostAllocation[] @relation("PurchaseCostAllocationCreatedBy")
+  createdCustomers               Customer[]               @relation("CustomerCreatedBy")
+  createdPaymentMethods          PaymentMethod[]          @relation("PaymentMethodCreatedBy")
+  createdSales                   Sale[]                   @relation("SaleCreatedBy")
+  createdSaleItems               SaleItem[]               @relation("SaleItemCreatedBy")
+  createdSalePayments            SalePayment[]            @relation("SalePaymentCreatedBy")
+  createdSaleReturns             SaleReturn[]             @relation("SaleReturnCreatedBy")
+  createdSaleReturnItems         SaleReturnItem[]         @relation("SaleReturnItemCreatedBy")
 
   @@map("users")
 }
@@ -330,6 +344,8 @@ model ProductVariant {
   stockReservations    StockReservation[]
   purchaseItems        PurchaseItem[]
   purchaseReceiptItems PurchaseReceiptItem[]
+  saleItems            SaleItem[]
+  saleReturnItems      SaleReturnItem[]
 
   @@unique([companyId, skuVariant])
   @@index([companyId, productId])
@@ -420,6 +436,7 @@ enum StockMovementOriginType {
   purchase
   adjustment
   return
+  sale
 }
 
 // Registro imutavel (RN 10.7.1/10.7.2/10.7.3 do Documento de Negocio) — toda
@@ -661,4 +678,221 @@ model PurchaseCostAllocation {
 
   @@index([companyId, purchaseReceiptId])
   @@map("purchase_cost_allocations")
+}
+
+// ---------------------------------------------------------------------------
+// Customers, Payments, Sales (docs/architecture/overview.md, secao 6.5/6.6)
+// — Fase 3 do roadmap, so venda a vista (ver plano da Fase 3: Receivables/
+// CashFlow sao Fase 4, ainda nao existem).
+// ---------------------------------------------------------------------------
+
+enum CustomerStatus {
+  active
+  inactive
+}
+
+model Customer {
+  id        String         @id @default(uuid()) @db.Uuid
+  companyId String         @map("company_id") @db.Uuid
+  name      String
+  whatsapp  String?
+  phone     String?
+  email     String?
+  instagram String?
+  birthDate DateTime?      @map("birth_date")
+  status    CustomerStatus @default(active)
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+  createdBy String?        @map("created_by") @db.Uuid
+  deletedAt DateTime?      @map("deleted_at")
+
+  company       Company @relation(fields: [companyId], references: [id])
+  createdByUser User?   @relation("CustomerCreatedBy", fields: [createdBy], references: [id])
+  sales         Sale[]
+
+  @@index([companyId, status])
+  @@map("customers")
+}
+
+enum PaymentMethodType {
+  cash
+  pix
+  debit_card
+  credit_card
+  bank_transfer
+  store_credit
+  other
+}
+
+enum PaymentMethodStatus {
+  active
+  inactive
+}
+
+// Sem prazo de recebimento/parcelas ainda (venda so' a vista nesta fase —
+// ver contexto do plano da Fase 3).
+model PaymentMethod {
+  id        String              @id @default(uuid()) @db.Uuid
+  companyId String              @map("company_id") @db.Uuid
+  type      PaymentMethodType
+  name      String
+  feeRate   Decimal?            @map("fee_rate") @db.Decimal(7, 4)
+  feeFixed  Decimal?            @map("fee_fixed") @db.Decimal(14, 2)
+  status    PaymentMethodStatus @default(active)
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @updatedAt @map("updated_at")
+  createdBy String?             @map("created_by") @db.Uuid
+  deletedAt DateTime?           @map("deleted_at")
+
+  company       Company       @relation(fields: [companyId], references: [id])
+  createdByUser User?         @relation("PaymentMethodCreatedBy", fields: [createdBy], references: [id])
+  salePayments  SalePayment[]
+
+  @@index([companyId, status])
+  @@map("payment_methods")
+}
+
+enum SalesChannel {
+  presencial
+  whatsapp
+  instagram
+  catalogo
+  outro
+}
+
+enum SaleStatus {
+  draft
+  confirmed
+  cancelled
+  partially_returned
+  returned
+}
+
+model Sale {
+  id                    String       @id @default(uuid()) @db.Uuid
+  companyId             String       @map("company_id") @db.Uuid
+  customerId            String?      @map("customer_id") @db.Uuid
+  channel               SalesChannel
+  status                SaleStatus   @default(draft)
+  subtotal              Decimal      @default(0) @db.Decimal(14, 2)
+  discount              Decimal      @default(0) @db.Decimal(14, 2)
+  total                 Decimal      @default(0) @db.Decimal(14, 2)
+  cmvCalculated         Decimal?     @map("cmv_calculated") @db.Decimal(14, 2)
+  grossProfitCalculated Decimal?     @map("gross_profit_calculated") @db.Decimal(14, 2)
+  createdAt             DateTime     @default(now()) @map("created_at")
+  updatedAt             DateTime     @updatedAt @map("updated_at")
+  createdBy             String?      @map("created_by") @db.Uuid
+  deletedAt             DateTime?    @map("deleted_at")
+
+  company       Company       @relation(fields: [companyId], references: [id])
+  customer      Customer?     @relation(fields: [customerId], references: [id])
+  createdByUser User?         @relation("SaleCreatedBy", fields: [createdBy], references: [id])
+  items         SaleItem[]
+  payments      SalePayment[]
+  returns       SaleReturn[]
+
+  @@index([companyId, status])
+  @@map("sales")
+}
+
+// quantityReturned e' materializado (somatorio de SaleReturnItem deste
+// item), mesmo padrao de PurchaseItem.quantityReceived.
+model SaleItem {
+  id               String    @id @default(uuid()) @db.Uuid
+  companyId        String    @map("company_id") @db.Uuid
+  saleId           String    @map("sale_id") @db.Uuid
+  productVariantId String    @map("product_variant_id") @db.Uuid
+  quantity         Decimal   @db.Decimal(14, 3)
+  unitPrice        Decimal   @map("unit_price") @db.Decimal(14, 2)
+  discount         Decimal   @default(0) @db.Decimal(14, 2)
+  // Congelado na confirmacao (RN 10.10.9/10.10.10) — o CMV historico nunca
+  // muda quando o custo atual do produto muda.
+  unitCostAtSale   Decimal?  @map("unit_cost_at_sale") @db.Decimal(14, 4)
+  quantityReturned Decimal   @default(0) @map("quantity_returned") @db.Decimal(14, 3)
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  createdBy        String?   @map("created_by") @db.Uuid
+  deletedAt        DateTime? @map("deleted_at")
+
+  company        Company          @relation(fields: [companyId], references: [id])
+  sale           Sale             @relation(fields: [saleId], references: [id])
+  productVariant ProductVariant   @relation(fields: [productVariantId], references: [id])
+  createdByUser  User?            @relation("SaleItemCreatedBy", fields: [createdBy], references: [id])
+  returnItems    SaleReturnItem[]
+
+  @@index([companyId, saleId])
+  @@map("sale_items")
+}
+
+// Criado so' na confirmacao — imutavel dali em diante (sem updated_at,
+// mesma logica de PurchaseReceipt).
+model SalePayment {
+  id              String    @id @default(uuid()) @db.Uuid
+  companyId       String    @map("company_id") @db.Uuid
+  saleId          String    @map("sale_id") @db.Uuid
+  paymentMethodId String    @map("payment_method_id") @db.Uuid
+  amount          Decimal   @db.Decimal(14, 2)
+  feeAmount       Decimal   @default(0) @map("fee_amount") @db.Decimal(14, 2)
+  netAmount       Decimal   @map("net_amount") @db.Decimal(14, 2)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  createdBy       String?   @map("created_by") @db.Uuid
+  deletedAt       DateTime? @map("deleted_at")
+
+  company       Company       @relation(fields: [companyId], references: [id])
+  sale          Sale          @relation(fields: [saleId], references: [id])
+  paymentMethod PaymentMethod @relation(fields: [paymentMethodId], references: [id])
+  createdByUser User?         @relation("SalePaymentCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([companyId, saleId])
+  @@map("sale_payments")
+}
+
+// Evento de devolucao (imutavel, sem updated_at — mesma logica de
+// PurchaseReceipt).
+model SaleReturn {
+  id        String    @id @default(uuid()) @db.Uuid
+  companyId String    @map("company_id") @db.Uuid
+  saleId    String    @map("sale_id") @db.Uuid
+  reason    String
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at")
+
+  company       Company          @relation(fields: [companyId], references: [id])
+  sale          Sale             @relation(fields: [saleId], references: [id])
+  createdByUser User?            @relation("SaleReturnCreatedBy", fields: [createdBy], references: [id])
+  items         SaleReturnItem[]
+
+  @@index([companyId, saleId])
+  @@map("sale_returns")
+}
+
+// condition=damaged nunca volta ao estoque disponivel nesta fase (nao ha
+// bucket de "estoque indisponivel" ainda — decisao explicita do plano da
+// Fase 3).
+enum SaleReturnItemCondition {
+  apt
+  damaged
+}
+
+model SaleReturnItem {
+  id               String                  @id @default(uuid()) @db.Uuid
+  companyId        String                  @map("company_id") @db.Uuid
+  saleReturnId     String                  @map("sale_return_id") @db.Uuid
+  saleItemId       String                  @map("sale_item_id") @db.Uuid
+  productVariantId String                  @map("product_variant_id") @db.Uuid
+  quantity         Decimal                 @db.Decimal(14, 3)
+  condition        SaleReturnItemCondition
+  createdAt        DateTime                @default(now()) @map("created_at")
+  createdBy        String?                 @map("created_by") @db.Uuid
+  deletedAt        DateTime?               @map("deleted_at")
+
+  company        Company        @relation(fields: [companyId], references: [id])
+  saleReturn     SaleReturn     @relation(fields: [saleReturnId], references: [id])
+  saleItem       SaleItem       @relation(fields: [saleItemId], references: [id])
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id])
+  createdByUser  User?          @relation("SaleReturnItemCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([companyId, saleReturnId])
+  @@map("sale_return_items")
 }

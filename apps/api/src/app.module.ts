@@ -8,6 +8,9 @@ import { TenancyModule } from './modules/tenancy/tenancy.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { PurchasingModule } from './modules/purchasing/purchasing.module';
+import { CustomersModule } from './modules/customers/customers.module';
+import { PaymentsModule } from './modules/payments/payments.module';
+import { SalesModule } from './modules/sales/sales.module';
 
 @Module({
   imports: [
@@ -18,6 +21,9 @@ import { PurchasingModule } from './modules/purchasing/purchasing.module';
     CatalogModule,
     InventoryModule,
     PurchasingModule,
+    CustomersModule,
+    PaymentsModule,
+    SalesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

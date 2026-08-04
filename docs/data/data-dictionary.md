@@ -22,9 +22,13 @@
 - [x] Purchasing — compras/recebimento implementados, ver abaixo
       (migration `20260804175603_add_inventory_purchasing`). Cancelar uma compra já recebida
       (estorno, RN 10.6.6) ainda não implementado — `cancel()` só funciona em `draft`/`ordered`.
-- [ ] Sales
-- [ ] Customers / Suppliers
-- [ ] Payments / Receivables / Payables / CashFlow
+- [x] Sales — só venda à vista implementada, ver abaixo
+      (migration `20260804183648_add_sales_customers_payments`). Venda a prazo/parcelamento e
+      conta a receber ainda não existem — decisão explícita, Receivables é Fase 4.
+- [x] Customers — CRUD básico implementado, ver abaixo (mesma migration).
+- [x] Payments — só cadastro de formas de pagamento (com taxa) implementado, ver abaixo (mesma
+      migration). Receivables/Payables/CashFlow ainda não existem — Fase 4.
+- [ ] Suppliers — ver seção Purchasing (já implementado)
 - [ ] Reporting / Notifications / Imports / Audit
 
 ---
@@ -233,8 +237,8 @@ ser append-only, sem `updated_at`/`deleted_at` (mesma exceção de `stock_balanc
 | type | enum(in, out, adjustment, return) | |
 | quantity | numeric(14,3) | com sinal |
 | unit_cost | numeric(14,4)? | |
-| origin_type | enum(purchase, adjustment, return) | |
-| origin_id | uuid | referência polimórfica (compra, ajuste, devolução) |
+| origin_type | enum(purchase, adjustment, return, sale) | `sale` adicionado na migration `20260804183648_add_sales_customers_payments` |
+| origin_id | uuid | referência polimórfica (compra, ajuste, devolução, venda) |
 | created_at / created_by | — | sem `updated_at`/`deleted_at` — imutável |
 
 Índice: `(company_id, product_variant_id)`.
@@ -374,3 +378,129 @@ proporcional ao valor dos itens (RN 10.6, exemplo de cálculo §10.6: 10un × R$
 | created_at / created_by / deleted_at | — | sem `updated_at` |
 
 Índice: `(company_id, purchase_receipt_id)`.
+
+---
+
+## Customers, Payments, Sales
+
+Fonte: `apps/api/prisma/schema.prisma`, migration `20260804183648_add_sales_customers_payments`.
+Escopo desta fase: **só venda à vista** — sem parcelamento, sem conta a receber (Receivables é
+Fase 4). Ver decisão registrada no histórico de commits (Fase 3).
+
+### `customers`
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| name | text | |
+| whatsapp / phone / email / instagram | text? | duplicidade não é bloqueada — RN 10.9.3 diz que gera alerta (UX de frontend), não erro de backend |
+| birth_date | date? | |
+| status | enum(active, inactive) | |
+| created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
+
+Índice: `(company_id, status)`.
+
+### `payment_methods`
+Sem prazo de recebimento nem configuração de parcelas ainda (venda só à vista nesta fase).
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| type | enum(cash, pix, debit_card, credit_card, bank_transfer, store_credit, other) | |
+| name | text | |
+| fee_rate | numeric(7,4)? | percentual |
+| fee_fixed | numeric(14,2)? | |
+| status | enum(active, inactive) | |
+| created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
+
+Índice: `(company_id, status)`.
+
+### `sales`
+`cmv_calculated`/`gross_profit_calculated` são recalculados tanto na confirmação quanto numa
+devolução (RN 10.11.8: "CMV deverá ser revertido proporcionalmente aos itens devolvidos") — sem
+precisar de um módulo de Reporting.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| customer_id | uuid? FK → customers | opcional (RN 10.9.1) |
+| channel | enum(presencial, whatsapp, instagram, catalogo, outro) | simplificado — sem `marketplace` (futuro) |
+| status | enum(draft, confirmed, cancelled, partially_returned, returned) | simplificado (doc autoriza — "poderá simplificar os status no MVP") — sem `reservada`/`paga`/`entregue` separados |
+| subtotal | numeric(14,2) | soma de quantidade × preço unitário |
+| discount | numeric(14,2) | só o desconto geral da venda (desconto por item fica em `sale_items.discount`) |
+| total | numeric(14,2) | receita líquida |
+| cmv_calculated | numeric(14,2)? | |
+| gross_profit_calculated | numeric(14,2)? | |
+| created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
+
+Índice: `(company_id, status)`.
+
+### `sale_items`
+`quantity_returned` é materializado (somatório de `sale_return_items` deste item), mesmo
+padrão de `purchase_items.quantity_received`.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| sale_id | uuid FK → sales | |
+| product_variant_id | uuid FK → product_variants | |
+| quantity | numeric(14,3) | |
+| unit_price | numeric(14,2) | |
+| discount | numeric(14,2) | desconto deste item |
+| unit_cost_at_sale | numeric(14,4)? | congelado na confirmação (RN 10.10.9/10.10.10) — o CMV histórico nunca muda quando o custo atual do produto muda |
+| quantity_returned | numeric(14,3) | materializado, default 0 |
+| created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
+
+Índice: `(company_id, sale_id)`.
+
+### `sale_payments`
+Criado só na confirmação — imutável dali em diante (sem `updated_at`, mesma lógica de
+`purchase_receipts`). Sem `financial_transaction`/livro-caixa ainda (CashFlow é Fase 4).
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| sale_id | uuid FK → sales | |
+| payment_method_id | uuid FK → payment_methods | |
+| amount | numeric(14,2) | valor bruto pago pelo cliente |
+| fee_amount | numeric(14,2) | calculado a partir de `payment_methods.fee_rate`/`fee_fixed` |
+| net_amount | numeric(14,2) | `amount - fee_amount` |
+| created_at / created_by / deleted_at | — | sem `updated_at` |
+
+Índice: `(company_id, sale_id)`.
+
+### `sale_returns`
+Evento de devolução (imutável, sem `updated_at` — mesma lógica de `purchase_receipts`).
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| sale_id | uuid FK → sales | |
+| reason | text | |
+| created_at / created_by / deleted_at | — | sem `updated_at` |
+
+Índice: `(company_id, sale_id)`.
+
+### `sale_return_items`
+`condition=damaged` **nunca** volta ao estoque disponível nesta fase — não existe bucket de
+"estoque indisponível" no modelo atual (decisão explícita da Fase 3, mesmo espírito da decisão
+sobre compra já recebida na Fase 2).
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| sale_return_id | uuid FK → sale_returns | |
+| sale_item_id | uuid FK → sale_items | |
+| product_variant_id | uuid FK → product_variants | |
+| quantity | numeric(14,3) | |
+| condition | enum(apt, damaged) | |
+| created_at / created_by / deleted_at | — | sem `updated_at` |
+
+Índice: `(company_id, sale_return_id)`.
