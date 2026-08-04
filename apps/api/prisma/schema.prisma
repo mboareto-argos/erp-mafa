@@ -33,27 +33,37 @@ enum CompanyStatus {
 }
 
 model Company {
-  id                String        @id @default(uuid()) @db.Uuid
-  name              String
-  document          String?
-  segment           String?
-  plan              String?
-  brandAccentColor  String        @default("#C49A28") @map("brand_accent_color")
-  status            CompanyStatus @default(active)
-  createdAt         DateTime      @default(now()) @map("created_at")
-  updatedAt         DateTime      @updatedAt @map("updated_at")
-  deletedAt         DateTime?     @map("deleted_at")
+  id               String        @id @default(uuid()) @db.Uuid
+  name             String
+  document         String?
+  segment          String?
+  plan             String?
+  brandAccentColor String        @default("#C49A28") @map("brand_accent_color")
+  status           CompanyStatus @default(active)
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+  deletedAt        DateTime?     @map("deleted_at")
 
-  memberships    Membership[]
-  invitations    Invitation[]
-  refreshTokens  RefreshToken[]
-  categories     Category[]
-  brands         Brand[]
-  tags           Tag[]
-  products       Product[]
-  productVariants ProductVariant[]
-  productPrices  ProductPrice[]
-  productTags    ProductTag[]
+  memberships             Membership[]
+  invitations             Invitation[]
+  refreshTokens           RefreshToken[]
+  categories              Category[]
+  brands                  Brand[]
+  tags                    Tag[]
+  products                Product[]
+  productVariants         ProductVariant[]
+  productPrices           ProductPrice[]
+  productTags             ProductTag[]
+  stockBalances           StockBalance[]
+  stockMovements          StockMovement[]
+  stockAdjustments        StockAdjustment[]
+  stockReservations       StockReservation[]
+  suppliers               Supplier[]
+  purchases               Purchase[]
+  purchaseItems           PurchaseItem[]
+  purchaseReceipts        PurchaseReceipt[]
+  purchaseReceiptItems    PurchaseReceiptItem[]
+  purchaseCostAllocations PurchaseCostAllocation[]
 
   @@map("companies")
 }
@@ -76,17 +86,27 @@ model User {
   updatedAt    DateTime   @updatedAt @map("updated_at")
   deletedAt    DateTime?  @map("deleted_at")
 
-  memberships       Membership[]
-  refreshTokens     RefreshToken[]
-  createdMemberships Membership[] @relation("MembershipCreatedBy")
-  createdInvitations Invitation[] @relation("InvitationCreatedBy")
-  createdCategories  Category[]   @relation("CategoryCreatedBy")
-  createdBrands      Brand[]      @relation("BrandCreatedBy")
-  createdTags        Tag[]        @relation("TagCreatedBy")
-  createdProducts    Product[]    @relation("ProductCreatedBy")
-  createdProductVariants ProductVariant[] @relation("ProductVariantCreatedBy")
-  createdProductPrices   ProductPrice[]   @relation("ProductPriceCreatedBy")
-  createdProductTags     ProductTag[]     @relation("ProductTagCreatedBy")
+  memberships                    Membership[]
+  refreshTokens                  RefreshToken[]
+  createdMemberships             Membership[]             @relation("MembershipCreatedBy")
+  createdInvitations             Invitation[]             @relation("InvitationCreatedBy")
+  createdCategories              Category[]               @relation("CategoryCreatedBy")
+  createdBrands                  Brand[]                  @relation("BrandCreatedBy")
+  createdTags                    Tag[]                    @relation("TagCreatedBy")
+  createdProducts                Product[]                @relation("ProductCreatedBy")
+  createdProductVariants         ProductVariant[]         @relation("ProductVariantCreatedBy")
+  createdProductPrices           ProductPrice[]           @relation("ProductPriceCreatedBy")
+  createdProductTags             ProductTag[]             @relation("ProductTagCreatedBy")
+  createdStockMovements          StockMovement[]          @relation("StockMovementCreatedBy")
+  createdStockAdjustments        StockAdjustment[]        @relation("StockAdjustmentCreatedBy")
+  approvedStockAdjustments       StockAdjustment[]        @relation("StockAdjustmentApprovedBy")
+  createdStockReservations       StockReservation[]       @relation("StockReservationCreatedBy")
+  createdSuppliers               Supplier[]               @relation("SupplierCreatedBy")
+  createdPurchases               Purchase[]               @relation("PurchaseCreatedBy")
+  createdPurchaseItems           PurchaseItem[]           @relation("PurchaseItemCreatedBy")
+  createdPurchaseReceipts        PurchaseReceipt[]        @relation("PurchaseReceiptCreatedBy")
+  createdPurchaseReceiptItems    PurchaseReceiptItem[]    @relation("PurchaseReceiptItemCreatedBy")
+  createdPurchaseCostAllocations PurchaseCostAllocation[] @relation("PurchaseCostAllocationCreatedBy")
 
   @@map("users")
 }
@@ -133,10 +153,10 @@ model Membership {
   createdBy String?          @map("created_by") @db.Uuid
   deletedAt DateTime?        @map("deleted_at")
 
-  company        Company @relation(fields: [companyId], references: [id])
-  user           User    @relation(fields: [userId], references: [id])
-  role           Role    @relation(fields: [roleId], references: [id])
-  createdByUser  User?   @relation("MembershipCreatedBy", fields: [createdBy], references: [id])
+  company       Company @relation(fields: [companyId], references: [id])
+  user          User    @relation(fields: [userId], references: [id])
+  role          Role    @relation(fields: [roleId], references: [id])
+  createdByUser User?   @relation("MembershipCreatedBy", fields: [createdBy], references: [id])
 
   @@unique([companyId, userId])
   @@index([companyId, status])
@@ -167,13 +187,13 @@ model Invitation {
 // Global como User (TA-DATA-003) — a empresa ativa da sessao e' um dado da
 // sessao, nao faz da tabela "operacional" no sentido de TA-DATA-001.
 model RefreshToken {
-  id         String    @id @default(uuid()) @db.Uuid
-  userId     String    @map("user_id") @db.Uuid
-  companyId  String    @map("company_id") @db.Uuid
-  tokenHash  String    @unique @map("token_hash")
-  expiresAt  DateTime  @map("expires_at")
-  revokedAt  DateTime? @map("revoked_at")
-  createdAt  DateTime  @default(now()) @map("created_at")
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  companyId String    @map("company_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
 
   user    User    @relation(fields: [userId], references: [id])
   company Company @relation(fields: [companyId], references: [id])
@@ -267,6 +287,10 @@ model Product {
   unit       String
   status     ProductStatus @default(active)
   aliases    String[]      @default([])
+  // Estoque minimo (doc §10.3) — usado pelo alerta de estoque baixo do
+  // Inventory (RN 10.7.8). Opcional: sem valor, o produto nunca aparece
+  // no relatorio de estoque baixo.
+  minStock   Decimal?      @map("min_stock") @db.Decimal(14, 3)
   createdAt  DateTime      @default(now()) @map("created_at")
   updatedAt  DateTime      @updatedAt @map("updated_at")
   createdBy  String?       @map("created_by") @db.Uuid
@@ -296,10 +320,16 @@ model ProductVariant {
   createdBy  String?   @map("created_by") @db.Uuid
   deletedAt  DateTime? @map("deleted_at")
 
-  company       Company        @relation(fields: [companyId], references: [id])
-  product       Product        @relation(fields: [productId], references: [id])
-  createdByUser User?          @relation("ProductVariantCreatedBy", fields: [createdBy], references: [id])
-  prices        ProductPrice[]
+  company              Company               @relation(fields: [companyId], references: [id])
+  product              Product               @relation(fields: [productId], references: [id])
+  createdByUser        User?                 @relation("ProductVariantCreatedBy", fields: [createdBy], references: [id])
+  prices               ProductPrice[]
+  stockBalances        StockBalance[]
+  stockMovements       StockMovement[]
+  stockAdjustments     StockAdjustment[]
+  stockReservations    StockReservation[]
+  purchaseItems        PurchaseItem[]
+  purchaseReceiptItems PurchaseReceiptItem[]
 
   @@unique([companyId, skuVariant])
   @@index([companyId, productId])
@@ -352,4 +382,283 @@ model ProductTag {
   @@unique([productId, tagId])
   @@index([companyId])
   @@map("product_tags")
+}
+
+// ---------------------------------------------------------------------------
+// Inventory (docs/architecture/overview.md, secao 6.3) — Fase 2 do roadmap
+// ---------------------------------------------------------------------------
+
+// Saldo materializado por variante — exceção documentada a TA-DATA-001
+// (mesmo espírito de RefreshToken): não é um registro de negócio próprio,
+// é a projeção reconciliável do somatório de StockMovement (RN 10.7.4/10.7.5
+// do Documento de Negócio), por isso sem created_by/deleted_at.
+model StockBalance {
+  id                String   @id @default(uuid()) @db.Uuid
+  companyId         String   @map("company_id") @db.Uuid
+  productVariantId  String   @map("product_variant_id") @db.Uuid
+  quantityAvailable Decimal  @default(0) @map("quantity_available") @db.Decimal(14, 3)
+  quantityReserved  Decimal  @default(0) @map("quantity_reserved") @db.Decimal(14, 3)
+  quantityInTransit Decimal  @default(0) @map("quantity_in_transit") @db.Decimal(14, 3)
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  company        Company        @relation(fields: [companyId], references: [id])
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id])
+
+  @@unique([companyId, productVariantId])
+  @@map("stock_balances")
+}
+
+enum StockMovementType {
+  in
+  out
+  adjustment
+  return
+}
+
+// origin_type: 'purchase' | 'adjustment' | 'return' (futuro: 'sale')
+enum StockMovementOriginType {
+  purchase
+  adjustment
+  return
+}
+
+// Registro imutavel (RN 10.7.1/10.7.2/10.7.3 do Documento de Negocio) — toda
+// alteracao de estoque gera uma movimentacao, nunca e apagada ou editada,
+// correcoes sao movimentacoes compensatorias. Por ser append-only, nao tem
+// updated_at/deleted_at (mesma logica de excecao documentada de StockBalance).
+model StockMovement {
+  id               String                  @id @default(uuid()) @db.Uuid
+  companyId        String                  @map("company_id") @db.Uuid
+  productVariantId String                  @map("product_variant_id") @db.Uuid
+  type             StockMovementType
+  quantity         Decimal                 @db.Decimal(14, 3)
+  unitCost         Decimal?                @map("unit_cost") @db.Decimal(14, 4)
+  originType       StockMovementOriginType @map("origin_type")
+  originId         String                  @map("origin_id") @db.Uuid
+  createdAt        DateTime                @default(now()) @map("created_at")
+  createdBy        String?                 @map("created_by") @db.Uuid
+
+  company        Company          @relation(fields: [companyId], references: [id])
+  productVariant ProductVariant   @relation(fields: [productVariantId], references: [id])
+  createdByUser  User?            @relation("StockMovementCreatedBy", fields: [createdBy], references: [id])
+  adjustment     StockAdjustment?
+
+  @@index([companyId, productVariantId])
+  @@map("stock_movements")
+}
+
+// Complementa uma StockMovement(type=adjustment) com o motivo (RN 10.7.9) e
+// a aprovacao (RN 10.7.10). requiresApproval e' calculado por um limiar
+// simples no service; nao ha fila de aprovacao real ainda — approvedBy e'
+// preenchido com o proprio ator no MVP (sinalizado no InventoryService).
+model StockAdjustment {
+  id               String    @id @default(uuid()) @db.Uuid
+  companyId        String    @map("company_id") @db.Uuid
+  productVariantId String    @map("product_variant_id") @db.Uuid
+  stockMovementId  String    @unique @map("stock_movement_id") @db.Uuid
+  reason           String
+  requiresApproval Boolean   @default(false) @map("requires_approval")
+  approvedBy       String?   @map("approved_by") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at")
+  createdBy        String?   @map("created_by") @db.Uuid
+  deletedAt        DateTime? @map("deleted_at")
+
+  company        Company        @relation(fields: [companyId], references: [id])
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id])
+  stockMovement  StockMovement  @relation(fields: [stockMovementId], references: [id])
+  createdByUser  User?          @relation("StockAdjustmentCreatedBy", fields: [createdBy], references: [id])
+  approvedByUser User?          @relation("StockAdjustmentApprovedBy", fields: [approvedBy], references: [id])
+
+  @@index([companyId, productVariantId])
+  @@map("stock_adjustments")
+}
+
+enum StockReservationStatus {
+  active
+  released
+  consumed
+}
+
+// Modelo completo desde ja (TA-DATA-004), mas SEM service/endpoint nesta
+// fase — quem cria uma reserva e' o Sales (Fase 3), que ainda nao existe.
+// saleId fica sem FK por enquanto (referencia futura), como origin_id em
+// StockMovement.
+model StockReservation {
+  id               String                 @id @default(uuid()) @db.Uuid
+  companyId        String                 @map("company_id") @db.Uuid
+  saleId           String                 @map("sale_id") @db.Uuid
+  productVariantId String                 @map("product_variant_id") @db.Uuid
+  quantity         Decimal                @db.Decimal(14, 3)
+  status           StockReservationStatus @default(active)
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
+  createdBy        String?                @map("created_by") @db.Uuid
+  deletedAt        DateTime?              @map("deleted_at")
+
+  company        Company        @relation(fields: [companyId], references: [id])
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id])
+  createdByUser  User?          @relation("StockReservationCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([companyId, productVariantId])
+  @@map("stock_reservations")
+}
+
+// ---------------------------------------------------------------------------
+// Purchasing (docs/architecture/overview.md, secao 6.4) — Fase 2 do roadmap
+// ---------------------------------------------------------------------------
+
+enum SupplierStatus {
+  active
+  inactive
+}
+
+model Supplier {
+  id          String         @id @default(uuid()) @db.Uuid
+  companyId   String         @map("company_id") @db.Uuid
+  name        String
+  document    String?
+  contactName String?        @map("contact_name")
+  phone       String?
+  whatsapp    String?
+  email       String?
+  status      SupplierStatus @default(active)
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  createdBy   String?        @map("created_by") @db.Uuid
+  deletedAt   DateTime?      @map("deleted_at")
+
+  company       Company    @relation(fields: [companyId], references: [id])
+  createdByUser User?      @relation("SupplierCreatedBy", fields: [createdBy], references: [id])
+  purchases     Purchase[]
+
+  @@index([companyId, status])
+  @@map("suppliers")
+}
+
+// Status simplificado do MVP (doc §10.6 ja lista estes 5 como o conjunto
+// minimo). Sem status financeiro ainda — Payables e' Fase 4, fora de escopo.
+enum PurchaseStatus {
+  draft
+  ordered
+  partially_received
+  received
+  cancelled
+}
+
+model Purchase {
+  id               String         @id @default(uuid()) @db.Uuid
+  companyId        String         @map("company_id") @db.Uuid
+  supplierId       String?        @map("supplier_id") @db.Uuid
+  status           PurchaseStatus @default(draft)
+  currency         String         @default("BRL")
+  exchangeRate     Decimal?       @map("exchange_rate") @db.Decimal(14, 6)
+  exchangeRateDate DateTime?      @map("exchange_rate_date")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  createdBy        String?        @map("created_by") @db.Uuid
+  deletedAt        DateTime?      @map("deleted_at")
+
+  company       Company           @relation(fields: [companyId], references: [id])
+  supplier      Supplier?         @relation(fields: [supplierId], references: [id])
+  createdByUser User?             @relation("PurchaseCreatedBy", fields: [createdBy], references: [id])
+  items         PurchaseItem[]
+  receipts      PurchaseReceipt[]
+
+  @@index([companyId, status])
+  @@map("purchases")
+}
+
+// quantityReceived e' materializado (somatorio de PurchaseReceiptItem para
+// este item), atualizado transacionalmente pelo receive() — mesmo padrao de
+// "saldo materializado, desde que reconciliavel" ja usado em StockBalance.
+model PurchaseItem {
+  id                     String    @id @default(uuid()) @db.Uuid
+  companyId              String    @map("company_id") @db.Uuid
+  purchaseId             String    @map("purchase_id") @db.Uuid
+  productVariantId       String    @map("product_variant_id") @db.Uuid
+  quantity               Decimal   @db.Decimal(14, 3)
+  unitCostOriginCurrency Decimal   @map("unit_cost_origin_currency") @db.Decimal(14, 4)
+  quantityReceived       Decimal   @default(0) @map("quantity_received") @db.Decimal(14, 3)
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+  createdBy              String?   @map("created_by") @db.Uuid
+  deletedAt              DateTime? @map("deleted_at")
+
+  company        Company               @relation(fields: [companyId], references: [id])
+  purchase       Purchase              @relation(fields: [purchaseId], references: [id])
+  productVariant ProductVariant        @relation(fields: [productVariantId], references: [id])
+  createdByUser  User?                 @relation("PurchaseItemCreatedBy", fields: [createdBy], references: [id])
+  receiptItems   PurchaseReceiptItem[]
+
+  @@index([companyId, purchaseId])
+  @@map("purchase_items")
+}
+
+// Um recebimento (total ou parcial, RN 10.6.4/10.6.5/10.6.14). Evento
+// concluido — nunca editado depois de criado, so tem created_at (mesma
+// logica de imutabilidade de StockMovement).
+model PurchaseReceipt {
+  id         String    @id @default(uuid()) @db.Uuid
+  companyId  String    @map("company_id") @db.Uuid
+  purchaseId String    @map("purchase_id") @db.Uuid
+  receivedAt DateTime  @default(now()) @map("received_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  createdBy  String?   @map("created_by") @db.Uuid
+  deletedAt  DateTime? @map("deleted_at")
+
+  company         Company                  @relation(fields: [companyId], references: [id])
+  purchase        Purchase                 @relation(fields: [purchaseId], references: [id])
+  createdByUser   User?                    @relation("PurchaseReceiptCreatedBy", fields: [createdBy], references: [id])
+  items           PurchaseReceiptItem[]
+  costAllocations PurchaseCostAllocation[]
+
+  @@index([companyId, purchaseId])
+  @@map("purchase_receipts")
+}
+
+// unitCostFinal ja inclui o rateio de custos adicionais (frete etc.) —
+// e' o valor que alimenta o calculo de custo medio movel (RN 11.4).
+model PurchaseReceiptItem {
+  id                String    @id @default(uuid()) @db.Uuid
+  companyId         String    @map("company_id") @db.Uuid
+  purchaseReceiptId String    @map("purchase_receipt_id") @db.Uuid
+  purchaseItemId    String    @map("purchase_item_id") @db.Uuid
+  productVariantId  String    @map("product_variant_id") @db.Uuid
+  quantityReceived  Decimal   @map("quantity_received") @db.Decimal(14, 3)
+  unitCostFinal     Decimal   @map("unit_cost_final") @db.Decimal(14, 4)
+  createdAt         DateTime  @default(now()) @map("created_at")
+  createdBy         String?   @map("created_by") @db.Uuid
+  deletedAt         DateTime? @map("deleted_at")
+
+  company         Company                  @relation(fields: [companyId], references: [id])
+  purchaseReceipt PurchaseReceipt          @relation(fields: [purchaseReceiptId], references: [id])
+  purchaseItem    PurchaseItem             @relation(fields: [purchaseItemId], references: [id])
+  productVariant  ProductVariant           @relation(fields: [productVariantId], references: [id])
+  createdByUser   User?                    @relation("PurchaseReceiptItemCreatedBy", fields: [createdBy], references: [id])
+  costAllocations PurchaseCostAllocation[]
+
+  @@index([companyId, purchaseReceiptId])
+  @@map("purchase_receipt_items")
+}
+
+// Rateio de custos adicionais (frete etc.) por item do recebimento — metodo
+// inicial proporcional ao valor dos itens (RN 10.6, exemplo de calculo §10.6).
+model PurchaseCostAllocation {
+  id                    String    @id @default(uuid()) @db.Uuid
+  companyId             String    @map("company_id") @db.Uuid
+  purchaseReceiptId     String    @map("purchase_receipt_id") @db.Uuid
+  purchaseReceiptItemId String    @map("purchase_receipt_item_id") @db.Uuid
+  type                  String
+  amount                Decimal   @db.Decimal(14, 2)
+  createdAt             DateTime  @default(now()) @map("created_at")
+  createdBy             String?   @map("created_by") @db.Uuid
+  deletedAt             DateTime? @map("deleted_at")
+
+  company             Company             @relation(fields: [companyId], references: [id])
+  purchaseReceipt     PurchaseReceipt     @relation(fields: [purchaseReceiptId], references: [id])
+  purchaseReceiptItem PurchaseReceiptItem @relation(fields: [purchaseReceiptItemId], references: [id])
+  createdByUser       User?               @relation("PurchaseCostAllocationCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([companyId, purchaseReceiptId])
+  @@map("purchase_cost_allocations")
 }

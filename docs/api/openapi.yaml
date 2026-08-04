@@ -12,6 +12,10 @@ tags:
     description: Identity — autenticação e sessão (docs/architecture/overview.md §5, §9.1)
   - name: catalog
     description: Catalog — categorias, marcas e produtos (docs/architecture/overview.md §6.2)
+  - name: inventory
+    description: Inventory — saldo, movimentações e ajustes de estoque (docs/architecture/overview.md §6.3)
+  - name: purchasing
+    description: Purchasing — fornecedores, compras e recebimento (docs/architecture/overview.md §6.4)
 paths:
   /auth/register:
     post:
@@ -351,6 +355,314 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Product" }
 
+  /inventory/balances:
+    get:
+      tags: [inventory]
+      summary: Lista o saldo materializado por variante (requer permission:view_inventory)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/StockBalance" }
+  /inventory/movements:
+    get:
+      tags: [inventory]
+      summary: Histórico de movimentações (requer permission:view_inventory)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: productVariantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/StockMovement" }
+  /inventory/low-stock:
+    get:
+      tags: [inventory]
+      summary: Produtos com saldo disponível <= estoque mínimo (RN 10.7.8)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    productId: { type: string, format: uuid }
+                    sku: { type: string }
+                    name: { type: string }
+                    minStock: { type: string }
+                    quantityAvailable: { type: string }
+  /inventory/adjustments:
+    post:
+      tags: [inventory]
+      summary: >
+        Ajuste manual de estoque (requer permission:adjust_stock). Nunca deixa o
+        disponível ficar negativo (RN 10.7.6). Acima de 50 unidades marca
+        requiresApproval=true (sem fila de aprovação real ainda).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productVariantId, quantity, reason]
+              properties:
+                productVariantId: { type: string, format: uuid }
+                quantity:
+                  type: number
+                  description: Com sinal — positivo (entrada) ou negativo (saída).
+                reason: { type: string }
+      responses:
+        "201":
+          description: Criado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  movement: { $ref: "#/components/schemas/StockMovement" }
+                  adjustment: { $ref: "#/components/schemas/StockAdjustment" }
+        "400":
+          description: Ajuste deixaria o saldo disponível negativo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /purchasing/suppliers:
+    post:
+      tags: [purchasing]
+      summary: Cria fornecedor (requer permission:manage_purchasing)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                document: { type: string }
+                contactName: { type: string }
+                phone: { type: string }
+                whatsapp: { type: string }
+                email: { type: string, format: email }
+      responses:
+        "201":
+          description: Criado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Supplier" }
+    get:
+      tags: [purchasing]
+      summary: Lista fornecedores (requer permission:view_purchasing)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Supplier" }
+  /purchasing/suppliers/{id}/deactivate:
+    patch:
+      tags: [purchasing]
+      summary: Inativa o fornecedor (nunca deleta)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Supplier" }
+
+  /purchasing/purchases:
+    post:
+      tags: [purchasing]
+      summary: Cria uma compra em rascunho com itens (requer permission:manage_purchasing) — RN 10.6.1, não altera estoque
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                supplierId: { type: string, format: uuid }
+                currency: { type: string, default: BRL }
+                exchangeRate: { type: number }
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [productVariantId, quantity, unitCostOriginCurrency]
+                    properties:
+                      productVariantId: { type: string, format: uuid }
+                      quantity: { type: number }
+                      unitCostOriginCurrency: { type: number }
+      responses:
+        "201":
+          description: Criada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Purchase" }
+    get:
+      tags: [purchasing]
+      summary: Lista compras (requer permission:view_purchasing)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Purchase" }
+  /purchasing/purchases/{id}:
+    get:
+      tags: [purchasing]
+      summary: Detalhe da compra, com itens e recebimentos (requer permission:view_purchasing)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Purchase" }
+        "404":
+          description: Compra não encontrada nesta empresa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /purchasing/purchases/{id}/order:
+    post:
+      tags: [purchasing]
+      summary: draft → ordered (RN 10.6.2, ainda não altera estoque)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Purchase" }
+        "409":
+          description: Compra não está em rascunho
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /purchasing/purchases/{id}/receive:
+    post:
+      tags: [purchasing]
+      summary: >
+        Recebimento total ou parcial (RN 10.6.3/10.6.4/10.6.5). Rateia custos
+        adicionais proporcionalmente ao valor dos itens e delega a baixa/entrada
+        de estoque ao InventoryService.receiveGoods() na mesma transação
+        (TA-ARCH-003) — recalcula o custo médio móvel do produto (RN 11.4).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [purchaseItemId, quantityReceived]
+                    properties:
+                      purchaseItemId: { type: string, format: uuid }
+                      quantityReceived: { type: number }
+                additionalCosts:
+                  type: array
+                  items:
+                    type: object
+                    required: [type, amount]
+                    properties:
+                      type: { type: string, example: freight }
+                      amount: { type: number }
+      responses:
+        "201":
+          description: Recebido (compra atualizada, com status partially_received ou received)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Purchase" }
+        "400":
+          description: Item inválido ou quantidade recebida maior que a comprada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: Compra não está pedida/parcialmente recebida
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /purchasing/purchases/{id}/cancel:
+    post:
+      tags: [purchasing]
+      summary: >
+        Cancela a compra — só permitido em draft/ordered. Cancelar uma compra
+        já recebida exige estorno de estoque/custo (RN 10.6.6), não
+        implementado nesta fase — retorna 409 explícito.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "201":
+          description: Cancelada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Purchase" }
+        "409":
+          description: Compra já recebida ou já cancelada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -410,6 +722,76 @@ components:
         status: { type: string, enum: [active, inactive] }
         categoryId: { type: string, format: uuid, nullable: true }
         brandId: { type: string, format: uuid, nullable: true }
+    StockBalance:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        productVariantId: { type: string, format: uuid }
+        quantityAvailable: { type: string }
+        quantityReserved: { type: string }
+        quantityInTransit: { type: string }
+    StockMovement:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        productVariantId: { type: string, format: uuid }
+        type: { type: string, enum: [in, out, adjustment, return] }
+        quantity: { type: string }
+        unitCost: { type: string, nullable: true }
+        originType: { type: string, enum: [purchase, adjustment, return] }
+        originId: { type: string, format: uuid }
+    StockAdjustment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        productVariantId: { type: string, format: uuid }
+        stockMovementId: { type: string, format: uuid }
+        reason: { type: string }
+        requiresApproval: { type: boolean }
+        approvedBy: { type: string, format: uuid, nullable: true }
+    Supplier:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        name: { type: string }
+        document: { type: string, nullable: true }
+        status: { type: string, enum: [active, inactive] }
+    Purchase:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        supplierId: { type: string, format: uuid, nullable: true }
+        status: { type: string, enum: [draft, ordered, partially_received, received, cancelled] }
+        currency: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              productVariantId: { type: string, format: uuid }
+              quantity: { type: string }
+              unitCostOriginCurrency: { type: string }
+              quantityReceived: { type: string }
+        receipts:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              receivedAt: { type: string, format: date-time }
+              items:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    purchaseItemId: { type: string, format: uuid }
+                    quantityReceived: { type: string }
+                    unitCostFinal: { type: string }
     ErrorResponse:
       type: object
       description: Formato padrão TA-API-001 (docs/architecture/overview.md, secao 10.2)

@@ -11,5 +11,6 @@ import { ProductsService } from './products/products.service';
   imports: [TenancyModule],
   controllers: [CategoriesController, BrandsController, ProductsController],
   providers: [CategoriesService, BrandsService, ProductsService],
+  exports: [ProductsService],
 })
 export class CatalogModule {}

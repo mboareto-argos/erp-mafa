@@ -27,6 +27,7 @@ export class ProductsService {
             unit: dto.unit,
             categoryId: dto.categoryId,
             brandId: dto.brandId,
+            minStock: dto.minStock,
             createdBy: tenant.userId,
           },
         });
@@ -111,6 +112,45 @@ export class ProductsService {
     return this.prisma.product.update({
       where: { id },
       data: { status: 'inactive' },
+    });
+  }
+
+  // Servico publico chamado pelo InventoryService quando uma compra e'
+  // recebida (custo medio movel recalculado — RN 11.4 do Documento de
+  // Negocio). Nunca edita uma linha existente de ProductPrice — insere uma
+  // nova, carregando adiante o ultimo salePrice conhecido (DS-FORM-004:
+  // custo e' sempre calculado, nunca digitado depois da criacao do produto).
+  // Recebe o `tx` da transacao do chamador para manter atomicidade com o
+  // recebimento (TA-ARCH-003) — nunca abre uma transacao própria aqui.
+  async appendCostHistory(
+    tx: Prisma.TransactionClient,
+    params: {
+      companyId: string;
+      productId: string;
+      productVariantId: string;
+      costPrice: Prisma.Decimal.Value;
+      createdBy?: string;
+    },
+  ) {
+    const lastPrice = await tx.productPrice.findFirst({
+      where: {
+        companyId: params.companyId,
+        productId: params.productId,
+        deletedAt: null,
+      },
+      orderBy: { effectiveFrom: 'desc' },
+    });
+
+    return tx.productPrice.create({
+      data: {
+        companyId: params.companyId,
+        productId: params.productId,
+        productVariantId: params.productVariantId,
+        costPrice: params.costPrice,
+        salePrice: lastPrice?.salePrice ?? 0,
+        effectiveFrom: new Date(),
+        createdBy: params.createdBy,
+      },
     });
   }
 

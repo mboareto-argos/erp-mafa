@@ -14,9 +14,14 @@
 ## Módulos já documentados no nível conceitual (aguardando DDL completo)
 - [x] Identity / Tenancy — schema + auth/RBAC implementados, ver abaixo
       (migrations `20260804140629_init`, `20260804143518_add_refresh_token`)
-- [x] Catalog — schema + CRUD básico implementados, ver abaixo (migration `20260804140629_init`)
-- [ ] Inventory
-- [ ] Purchasing
+- [x] Catalog — schema + CRUD básico implementados, ver abaixo
+      (migrations `20260804140629_init`, `20260804175603_add_inventory_purchasing` — `min_stock`)
+- [x] Inventory — saldo/movimentação/ajuste implementados, ver abaixo
+      (migration `20260804175603_add_inventory_purchasing`). Inventário físico (contagem,
+      §10.8) ainda não implementado — decisão explícita, não bloqueia Sales.
+- [x] Purchasing — compras/recebimento implementados, ver abaixo
+      (migration `20260804175603_add_inventory_purchasing`). Cancelar uma compra já recebida
+      (estorno, RN 10.6.6) ainda não implementado — `cancel()` só funciona em `draft`/`ordered`.
 - [ ] Sales
 - [ ] Customers / Suppliers
 - [ ] Payments / Receivables / Payables / CashFlow
@@ -140,6 +145,7 @@ auditoria TA-DATA-001. `UNIQUE(company_id, name)` · índice `(company_id, statu
 | unit | text | unidade de medida |
 | status | enum(active, inactive) | |
 | aliases | text[] | RN-IMP-001 |
+| min_stock | numeric(14,3)? | estoque mínimo (§10.3) — alimenta o alerta de estoque baixo do Inventory (RN 10.7.8); adicionado na migration `20260804175603_add_inventory_purchasing` |
 | created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
 
 Constraints: `UNIQUE(company_id, sku)` · índice `(company_id, status)`.
@@ -188,3 +194,183 @@ cumprir TA-DATA-001/002 também no vínculo.
 | created_at / created_by / deleted_at | — | TA-DATA-001 (sem `updated_at`: associação não é editada, só criada/removida) |
 
 Constraints: `UNIQUE(product_id, tag_id)` · índice `(company_id)`.
+
+---
+
+## Inventory
+
+Fonte: `apps/api/prisma/schema.prisma`, migration `20260804175603_add_inventory_purchasing`.
+
+### `stock_balances`
+Saldo materializado por variante — **exceção documentada a TA-DATA-001** (mesmo espírito de
+`refresh_tokens`): é uma projeção reconciliável do somatório de `stock_movements` (RN
+10.7.4/10.7.5), não um registro de negócio próprio — por isso sem `created_by`/`deleted_at`.
+`disponível = físico - reservado`; físico não é armazenado, é `quantity_available +
+quantity_reserved`.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| product_variant_id | uuid FK → product_variants | |
+| quantity_available | numeric(14,3) | |
+| quantity_reserved | numeric(14,3) | |
+| quantity_in_transit | numeric(14,3) | ainda não usado (sem Sales/transferências) |
+| updated_at | timestamptz | |
+
+Constraints: `UNIQUE(company_id, product_variant_id)`.
+
+### `stock_movements`
+Registro **imutável** (RN 10.7.1/10.7.2/10.7.3) — toda alteração de estoque gera uma
+movimentação, nunca é editada nem apagada; correções são movimentações compensatórias. Por
+ser append-only, sem `updated_at`/`deleted_at` (mesma exceção de `stock_balances`).
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| product_variant_id | uuid FK → product_variants | |
+| type | enum(in, out, adjustment, return) | |
+| quantity | numeric(14,3) | com sinal |
+| unit_cost | numeric(14,4)? | |
+| origin_type | enum(purchase, adjustment, return) | |
+| origin_id | uuid | referência polimórfica (compra, ajuste, devolução) |
+| created_at / created_by | — | sem `updated_at`/`deleted_at` — imutável |
+
+Índice: `(company_id, product_variant_id)`.
+
+### `stock_adjustments`
+Complementa uma `stock_movement(type=adjustment)` com motivo (RN 10.7.9) e aprovação (RN
+10.7.10). `requires_approval` calculado por um limiar fixo no `InventoryService` (50 unidades)
+— sem fila de aprovação real ainda; `approved_by` é preenchido com o próprio ator no MVP.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| product_variant_id | uuid FK → product_variants | |
+| stock_movement_id | uuid UNIQUE FK → stock_movements | |
+| reason | text | |
+| requires_approval | boolean | |
+| approved_by | uuid? FK → users | |
+| created_at / created_by / deleted_at | — | TA-DATA-001 (sem `updated_at`) |
+
+Índice: `(company_id, product_variant_id)`.
+
+### `stock_reservations`
+Modelo completo desde já (TA-DATA-004), **sem service/endpoint ainda** — quem cria uma reserva
+é o Sales (Fase 3), que ainda não existe. `sale_id` sem FK por enquanto (referência futura,
+mesmo padrão de `origin_id` em `stock_movements`).
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| sale_id | uuid | sem FK (Sale não existe ainda) |
+| product_variant_id | uuid FK → product_variants | |
+| quantity | numeric(14,3) | |
+| status | enum(active, released, consumed) | |
+| created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
+
+Índice: `(company_id, product_variant_id)`.
+
+---
+
+## Purchasing
+
+Fonte: `apps/api/prisma/schema.prisma`, migration `20260804175603_add_inventory_purchasing`.
+
+### `suppliers`
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| name | text | |
+| document / contact_name / phone / whatsapp / email | text? | |
+| status | enum(active, inactive) | |
+| created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
+
+Índice: `(company_id, status)`.
+
+### `purchases`
+Sem status financeiro ainda (Payables é Fase 4, fora de escopo — sinalizado explicitamente).
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| supplier_id | uuid? FK → suppliers | |
+| status | enum(draft, ordered, partially_received, received, cancelled) | |
+| currency | text | default `BRL` |
+| exchange_rate | numeric(14,6)? | |
+| exchange_rate_date | timestamptz? | |
+| created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
+
+Índice: `(company_id, status)`.
+
+### `purchase_items`
+`quantity_received` é materializado (somatório de `purchase_receipt_items` deste item),
+atualizado transacionalmente pelo recebimento — mesmo padrão de "saldo materializado,
+reconciliável" de `stock_balances`.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| purchase_id | uuid FK → purchases | |
+| product_variant_id | uuid FK → product_variants | |
+| quantity | numeric(14,3) | |
+| unit_cost_origin_currency | numeric(14,4) | |
+| quantity_received | numeric(14,3) | materializado, default 0 |
+| created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
+
+Índice: `(company_id, purchase_id)`.
+
+### `purchase_receipts`
+Um recebimento (total ou parcial, RN 10.6.4/10.6.5/10.6.14) — evento concluído, nunca editado
+depois de criado (sem `updated_at`, mesma lógica de `stock_movements`).
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| purchase_id | uuid FK → purchases | |
+| received_at | timestamptz | |
+| created_at / created_by / deleted_at | — | sem `updated_at` |
+
+Índice: `(company_id, purchase_id)`.
+
+### `purchase_receipt_items`
+`unit_cost_final` já inclui o rateio de custos adicionais (frete etc.) — é o valor que
+alimenta o cálculo de custo médio móvel (RN 11.4), via `InventoryService.receiveGoods()`.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| purchase_receipt_id | uuid FK → purchase_receipts | |
+| purchase_item_id | uuid FK → purchase_items | |
+| product_variant_id | uuid FK → product_variants | |
+| quantity_received | numeric(14,3) | |
+| unit_cost_final | numeric(14,4) | |
+| created_at / created_by / deleted_at | — | sem `updated_at` |
+
+Índice: `(company_id, purchase_receipt_id)`.
+
+### `purchase_cost_allocations`
+Rateio de custos adicionais (frete etc.) por item do recebimento — método inicial
+proporcional ao valor dos itens (RN 10.6, exemplo de cálculo §10.6: 10un × R$100 + frete R$100
+→ custo unitário final R$110, coberto pelo teste de integração de Purchasing).
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| purchase_receipt_id | uuid FK → purchase_receipts | |
+| purchase_receipt_item_id | uuid FK → purchase_receipt_items | |
+| type | text | ex.: `freight` |
+| amount | numeric(14,2) | valor já rateado para este item |
+| created_at / created_by / deleted_at | — | sem `updated_at` |
+
+Índice: `(company_id, purchase_receipt_id)`.

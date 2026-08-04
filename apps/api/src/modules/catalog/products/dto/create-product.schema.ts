@@ -7,6 +7,9 @@ export const createProductSchema = z
     unit: z.string().min(1, 'Informe a unidade de medida.').max(20),
     categoryId: z.string().uuid().optional(),
     brandId: z.string().uuid().optional(),
+    // Estoque minimo (§10.3) — usado pelo alerta de estoque baixo do
+    // Inventory (RN 10.7.8).
+    minStock: z.number().nonnegative().optional(),
     // Custo de referencia inicial (§10.3 do Documento de Negocio) — distinto
     // do custo operacional calculado por Purchasing/Inventory (DS-FORM-004).
     // So pode ser informado na criacao; nao existe endpoint de update.

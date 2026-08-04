@@ -6,6 +6,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { TenancyModule } from './modules/tenancy/tenancy.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
+import { PurchasingModule } from './modules/purchasing/purchasing.module';
 
 @Module({
   imports: [
@@ -14,6 +16,8 @@ import { CatalogModule } from './modules/catalog/catalog.module';
     IdentityModule,
     TenancyModule,
     CatalogModule,
+    InventoryModule,
+    PurchasingModule,
   ],
   controllers: [AppController],
   providers: [AppService],
