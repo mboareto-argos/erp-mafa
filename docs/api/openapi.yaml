@@ -3,10 +3,422 @@ info:
   title: ERP MAFA Store — API
   version: "0.1.0"
   description: >
-    Especificação de API a ser gerada a partir dos controllers do Nest.js
+    Especificação de API gerada a partir dos controllers do Nest.js
     (apps/api). Ver convenções em docs/architecture/overview.md, seção 10.
 servers:
   - url: /api/v1
-paths: {}
+tags:
+  - name: auth
+    description: Identity — autenticação e sessão (docs/architecture/overview.md §5, §9.1)
+  - name: catalog
+    description: Catalog — categorias, marcas e produtos (docs/architecture/overview.md §6.2)
+paths:
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Cria User + Company + Membership(owner) e já retorna sessão ativa
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password, companyName]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                companyName: { type: string }
+      responses:
+        "201":
+          description: Sessão criada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "409":
+          description: E-mail já em uso
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Valida credenciais e retorna as empresas vinculadas + token de pré-autenticação
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        "200":
+          description: Credenciais válidas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  preauthToken: { type: string }
+                  companies:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        companyId: { type: string, format: uuid }
+                        companyName: { type: string }
+                        roleName: { $ref: "#/components/schemas/RoleName" }
+        "401":
+          description: E-mail ou senha inválidos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: Usuário bloqueado ou sem vínculo com nenhuma empresa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /auth/select-company:
+    post:
+      tags: [auth]
+      summary: Troca o token de pré-auth por uma sessão escopada a uma empresa (TA-TENANT-002)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [preauthToken, companyId]
+              properties:
+                preauthToken: { type: string }
+                companyId: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Sessão criada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "403":
+          description: Usuário não tem Membership ativo nesta empresa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: Rotaciona o refresh token e emite uma nova sessão
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        "200":
+          description: Sessão renovada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401":
+          description: Refresh token inválido, expirado ou revogado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Revoga o refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        "204":
+          description: Sessão revogada
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: Usuário autenticado, empresa ativa, papel e permissões
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: "#/components/schemas/UserSummary" }
+                  company: { $ref: "#/components/schemas/CompanySummary" }
+                  roleName: { $ref: "#/components/schemas/RoleName" }
+                  permissions:
+                    type: array
+                    items: { type: string }
+        "401":
+          description: Não autenticado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /catalog/categories:
+    post:
+      tags: [catalog]
+      summary: Cria categoria (requer permission:manage_catalog)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        "201":
+          description: Criada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Category" }
+        "409":
+          description: Nome já em uso nesta empresa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    get:
+      tags: [catalog]
+      summary: Lista categorias da empresa ativa (requer permission:view_catalog)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Category" }
+  /catalog/categories/{id}/deactivate:
+    patch:
+      tags: [catalog]
+      summary: Inativa a categoria (nunca deleta — RN 10.4.2)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Category" }
+        "404":
+          description: Não encontrada nesta empresa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /catalog/brands:
+    post:
+      tags: [catalog]
+      summary: Cria marca (requer permission:manage_catalog)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        "201":
+          description: Criada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Brand" }
+    get:
+      tags: [catalog]
+      summary: Lista marcas da empresa ativa (requer permission:view_catalog)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Brand" }
+  /catalog/brands/{id}/deactivate:
+    patch:
+      tags: [catalog]
+      summary: Inativa a marca (nunca deleta)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Brand" }
+
+  /catalog/products:
+    post:
+      tags: [catalog]
+      summary: >
+        Cria produto (requer permission:manage_catalog). Cria automaticamente
+        uma ProductVariant padrão e, se referenceCost e salePrice forem
+        informados juntos, a primeira linha de ProductPrice (DS-FORM-004).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sku, name, unit]
+              properties:
+                sku: { type: string }
+                name: { type: string }
+                unit: { type: string }
+                categoryId: { type: string, format: uuid }
+                brandId: { type: string, format: uuid }
+                referenceCost:
+                  type: number
+                  description: Exige salePrice junto, ou nenhum dos dois.
+                salePrice:
+                  type: number
+                  description: Exige referenceCost junto, ou nenhum dos dois.
+      responses:
+        "201":
+          description: Criado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "400":
+          description: categoryId/brandId inválido para esta empresa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: SKU já em uso nesta empresa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    get:
+      tags: [catalog]
+      summary: Lista produtos da empresa ativa, com preço vigente (requer permission:view_catalog)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Product" }
+  /catalog/products/{id}/deactivate:
+    patch:
+      tags: [catalog]
+      summary: Inativa o produto (nunca deleta — RN 10.3.3/10.3.4)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+
 components:
-  schemas: {}
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    RoleName:
+      type: string
+      enum: [owner, admin, sales, inventory, finance, viewer]
+    UserSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string, format: email }
+    CompanySummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+    Session:
+      type: object
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        user: { $ref: "#/components/schemas/UserSummary" }
+        company: { $ref: "#/components/schemas/CompanySummary" }
+        roleName: { $ref: "#/components/schemas/RoleName" }
+        permissions:
+          type: array
+          items: { type: string }
+    Category:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string, enum: [active, inactive] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Brand:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string, enum: [active, inactive] }
+    Product:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        sku: { type: string }
+        name: { type: string }
+        unit: { type: string }
+        status: { type: string, enum: [active, inactive] }
+        categoryId: { type: string, format: uuid, nullable: true }
+        brandId: { type: string, format: uuid, nullable: true }
+    ErrorResponse:
+      type: object
+      description: Formato padrão TA-API-001 (docs/architecture/overview.md, secao 10.2)
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            field: { type: string }
+            details: { type: object }

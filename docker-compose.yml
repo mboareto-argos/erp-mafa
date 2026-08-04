@@ -9,6 +9,7 @@ services:
       - "5432:5432"
     volumes:
       - erp_mafa_postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-postgres-dbs.sql:/docker-entrypoint-initdb.d/init-postgres-dbs.sql:ro
 
 volumes:
   erp_mafa_postgres_data:

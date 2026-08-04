@@ -12,8 +12,9 @@
   obrigatórios) — não repetir isso em cada entrada, só referenciar a regra.
 
 ## Módulos já documentados no nível conceitual (aguardando DDL completo)
-- [x] Identity / Tenancy — schema inicial aplicado, ver abaixo (migration `20260804140629_init`)
-- [x] Catalog — schema inicial aplicado, ver abaixo (migration `20260804140629_init`)
+- [x] Identity / Tenancy — schema + auth/RBAC implementados, ver abaixo
+      (migrations `20260804140629_init`, `20260804143518_add_refresh_token`)
+- [x] Catalog — schema + CRUD básico implementados, ver abaixo (migration `20260804140629_init`)
 - [ ] Inventory
 - [ ] Purchasing
 - [ ] Sales
@@ -94,6 +95,25 @@ Constraints: `UNIQUE(company_id, user_id)` · índice `(company_id, status)` (TA
 | created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
 
 Índice: `(company_id, email)` (TA-DATA-002).
+
+### `refresh_tokens`
+Fonte: migration `20260804143518_add_refresh_token`. Sessão de refresh token (§9.1: access
+curto ~15min + refresh rotativo revogável). Global como `users` (TA-DATA-003) — a empresa da
+sessão é um dado da própria sessão, não faz da tabela "operacional" no sentido de TA-DATA-001
+(por isso não segue o conjunto completo de campos de auditoria — sem `updated_at`/`deleted_at`,
+já que o ciclo de vida é criar → revogar, nunca editar).
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| user_id | uuid FK → users | |
+| company_id | uuid FK → companies | empresa escopada nesta sessão |
+| token_hash | text UNIQUE | SHA-256 do token bruto (nunca o token em claro) |
+| expires_at | timestamptz | |
+| revoked_at | timestamptz? | setado no logout ou na rotação (refresh) |
+| created_at | timestamptz | |
+
+Índice: `(user_id)`.
 
 ---
 

@@ -4,6 +4,8 @@
     "dev": { "cache": false, "persistent": true },
     "build": { "dependsOn": ["^build"], "outputs": ["dist/**", ".next/**"] },
     "test": { "dependsOn": ["^build"] },
+    "test:integration": { "cache": false },
+    "test:tenant": { "cache": false },
     "lint": {},
     "db:migrate": { "cache": false },
     "db:generate": { "cache": false }
