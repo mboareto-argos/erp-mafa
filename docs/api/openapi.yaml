@@ -23,7 +23,17 @@ tags:
   - name: sales
     description: >
       Sales — vendas só à vista nesta fase (docs/architecture/overview.md §6.5).
-      Venda a prazo/conta a receber ainda não existem (Receivables é Fase 4).
+      Venda a prazo/conta a receber ainda não existem.
+  - name: financial-accounts
+    description: Contas financeiras — saldo calculado por agregação (docs/architecture/overview.md §6.6)
+  - name: cash-flow
+    description: Fluxo de caixa — transações e transferências entre contas
+  - name: receivables
+    description: Contas a receber
+  - name: payables
+    description: Contas a pagar
+  - name: expenses
+    description: Despesas
 paths:
   /auth/register:
     post:
@@ -965,6 +975,445 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
 
+  /financial-accounts:
+    post:
+      tags: [financial-accounts]
+      summary: Cria conta financeira (requer permission:manage_financial_accounts)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        "201":
+          description: Criada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FinancialAccount" }
+    get:
+      tags: [financial-accounts]
+      summary: Lista contas financeiras (requer permission:view_financial_accounts)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/FinancialAccount" }
+  /financial-accounts/{id}/deactivate:
+    patch:
+      tags: [financial-accounts]
+      summary: Inativa a conta (nunca deleta — RN 10.13.5)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FinancialAccount" }
+  /financial-accounts/{id}/balance:
+    get:
+      tags: [financial-accounts]
+      summary: Saldo calculado por agregação de financial_transactions (RN 10.13.3, nunca materializado)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  financialAccountId: { type: string, format: uuid }
+                  balance: { type: string }
+
+  /cash-flow/transactions:
+    get:
+      tags: [cash-flow]
+      summary: Lista transações realizadas (requer permission:view_cash_flow)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: financialAccountId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: type
+          in: query
+          schema: { type: string, enum: [in, out, transfer, adjustment] }
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/FinancialTransaction" }
+  /cash-flow/transfers:
+    post:
+      tags: [cash-flow]
+      summary: >
+        Transferência entre contas próprias (requer permission:manage_financial_accounts) —
+        nunca é receita/despesa (RN 10.13.2/10.16.5), gera duas FinancialTransaction.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fromAccountId, toAccountId, amount]
+              properties:
+                fromAccountId: { type: string, format: uuid }
+                toAccountId: { type: string, format: uuid }
+                amount: { type: number }
+                reason: { type: string }
+      responses:
+        "201":
+          description: Criada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Transfer" }
+    get:
+      tags: [cash-flow]
+      summary: Lista transferências (requer permission:view_cash_flow)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Transfer" }
+
+  /receivables:
+    post:
+      tags: [receivables]
+      summary: Cria conta a receber (requer permission:manage_receivables)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [description, amountOriginal, dueDate]
+              properties:
+                customerId: { type: string, format: uuid }
+                saleId: { type: string, format: uuid }
+                description: { type: string }
+                amountOriginal: { type: number }
+                dueDate: { type: string, format: date }
+      responses:
+        "201":
+          description: Criada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Receivable" }
+    get:
+      tags: [receivables]
+      summary: Lista contas a receber, com isOverdue calculado na leitura (requer permission:view_receivables)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Receivable" }
+  /receivables/{id}:
+    get:
+      tags: [receivables]
+      summary: Detalhe da conta a receber (requer permission:view_receivables)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Receivable" }
+  /receivables/{id}/pay:
+    post:
+      tags: [receivables]
+      summary: >
+        Registra um recebimento (requer permission:manage_receivables) — nunca supera o saldo
+        em aberto (RN 10.14.2), gera FinancialTransaction de entrada.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [financialAccountId, amount]
+              properties:
+                financialAccountId: { type: string, format: uuid }
+                amount: { type: number }
+                interest: { type: number }
+                discount: { type: number }
+      responses:
+        "201":
+          description: Recebimento registrado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Receivable" }
+        "400":
+          description: Valor recebido supera o saldo em aberto
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /receivables/{id}/cancel:
+    post:
+      tags: [receivables]
+      summary: Cancela a conta a receber — exige motivo (RN 10.14.5)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        "201":
+          description: Cancelada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Receivable" }
+
+  /payables:
+    post:
+      tags: [payables]
+      summary: Cria conta a pagar (requer permission:manage_payables)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [description, amountOriginal, dueDate]
+              properties:
+                supplierId: { type: string, format: uuid }
+                description: { type: string }
+                amountOriginal: { type: number }
+                dueDate: { type: string, format: date }
+      responses:
+        "201":
+          description: Criada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payable" }
+    get:
+      tags: [payables]
+      summary: Lista contas a pagar, com isOverdue calculado na leitura (requer permission:view_payables)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Payable" }
+  /payables/{id}:
+    get:
+      tags: [payables]
+      summary: Detalhe da conta a pagar (requer permission:view_payables)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payable" }
+  /payables/{id}/pay:
+    post:
+      tags: [payables]
+      summary: Registra um pagamento (requer permission:manage_payables) — nunca supera o saldo em aberto
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [financialAccountId, amount]
+              properties:
+                financialAccountId: { type: string, format: uuid }
+                amount: { type: number }
+                interest: { type: number }
+                discount: { type: number }
+      responses:
+        "201":
+          description: Pagamento registrado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payable" }
+        "400":
+          description: Valor pago supera o saldo em aberto
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /payables/{id}/cancel:
+    post:
+      tags: [payables]
+      summary: Cancela a conta a pagar — exige motivo
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        "201":
+          description: Cancelada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payable" }
+
+  /expenses:
+    post:
+      tags: [expenses]
+      summary: >
+        Cria despesa (requer permission:manage_expenses). paidNow=true gera uma
+        FinancialTransaction de saída direto; paidNow=false exige dueDate e gera
+        automaticamente um Payable vinculado (RN 10.15.3).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [description, category, amount, competenceDate, paidNow]
+              properties:
+                description: { type: string }
+                category:
+                  type: string
+                  enum: [mercadorias, frete, embalagem, publicidade, plataforma, telefone, internet, aluguel, energia, transporte, combustivel, taxa, imposto, manutencao, pro_labore, retirada, despesa_administrativa, perda, outra]
+                amount: { type: number }
+                competenceDate: { type: string, format: date }
+                paidNow: { type: boolean }
+                financialAccountId: { type: string, format: uuid, description: "Obrigatório quando paidNow=true" }
+                dueDate: { type: string, format: date, description: "Obrigatório quando paidNow=false" }
+      responses:
+        "201":
+          description: Criada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Expense" }
+    get:
+      tags: [expenses]
+      summary: Lista despesas (requer permission:view_expenses)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Expense" }
+  /expenses/{id}:
+    get:
+      tags: [expenses]
+      summary: Detalhe da despesa, com o payable vinculado quando futura (requer permission:view_expenses)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Expense" }
+  /expenses/{id}/cancel:
+    post:
+      tags: [expenses]
+      summary: >
+        Cancela a despesa — só permitido antes de paga (RN 10.15.9); cancela também o
+        Payable vinculado, se houver.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "201":
+          description: Cancelada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Expense" }
+        "409":
+          description: Despesa já paga ou já cancelada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1164,6 +1613,72 @@ components:
                     saleItemId: { type: string, format: uuid }
                     quantity: { type: string }
                     condition: { type: string, enum: [apt, damaged] }
+    FinancialAccount:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string, enum: [active, inactive] }
+    FinancialTransaction:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        financialAccountId: { type: string, format: uuid }
+        type: { type: string, enum: [in, out, transfer, adjustment] }
+        amount: { type: string, description: "Com sinal — positivo em entradas, negativo em saídas." }
+        originType: { type: string, enum: [sale_payment, receivable_payment, payable_payment, expense, transfer, adjustment] }
+        originId: { type: string, format: uuid }
+        occurredAt: { type: string, format: date-time }
+    Transfer:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        fromAccountId: { type: string, format: uuid }
+        toAccountId: { type: string, format: uuid }
+        amount: { type: string }
+        reason: { type: string, nullable: true }
+    Receivable:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        customerId: { type: string, format: uuid, nullable: true }
+        saleId: { type: string, format: uuid, nullable: true }
+        description: { type: string }
+        amountOriginal: { type: string }
+        amountReceived: { type: string }
+        dueDate: { type: string, format: date }
+        status: { type: string, enum: [pending, partially_received, received, cancelled] }
+        isOverdue: { type: boolean, description: "Calculado na leitura — não é uma coluna." }
+        cancelReason: { type: string, nullable: true }
+    Payable:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        supplierId: { type: string, format: uuid, nullable: true }
+        description: { type: string }
+        amountOriginal: { type: string }
+        amountPaid: { type: string }
+        dueDate: { type: string, format: date }
+        status: { type: string, enum: [pending, partially_paid, paid, cancelled] }
+        isOverdue: { type: boolean, description: "Calculado na leitura — não é uma coluna." }
+        cancelReason: { type: string, nullable: true }
+    Expense:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        description: { type: string }
+        category: { type: string }
+        amount: { type: string }
+        competenceDate: { type: string, format: date }
+        dueDate: { type: string, format: date, nullable: true }
+        paidAt: { type: string, format: date-time, nullable: true }
+        financialAccountId: { type: string, format: uuid, nullable: true }
+        payableId: { type: string, format: uuid, nullable: true }
+        status: { type: string, enum: [pending, paid, cancelled] }
     ErrorResponse:
       type: object
       description: Formato padrão TA-API-001 (docs/architecture/overview.md, secao 10.2)

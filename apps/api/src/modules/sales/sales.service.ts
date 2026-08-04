@@ -3,6 +3,7 @@ import { Prisma, SaleStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AppError } from '../../common/errors/app-error';
 import { InventoryService } from '../inventory/inventory.service';
+import { CashFlowService } from '../cash-flow/cash-flow.service';
 import { CurrentTenantContext } from '../tenancy/jwt-payload.interface';
 import { CreateSaleDto } from './dto/create-sale.schema';
 import { ConfirmSaleDto } from './dto/confirm-sale.schema';
@@ -24,6 +25,7 @@ export class SalesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly inventory: InventoryService,
+    private readonly cashFlow: CashFlowService,
   ) {}
 
   // Rascunho — RN 10.10.1: nao altera estoque nem custo.
@@ -198,17 +200,33 @@ export class SalesService {
           .mul(method.feeRate ?? 0)
           .div(100)
           .add(method.feeFixed ?? 0);
-        await tx.salePayment.create({
+        const netAmount = amount.sub(feeAmount);
+        const salePayment = await tx.salePayment.create({
           data: {
             companyId: tenant.companyId,
             saleId,
             paymentMethodId: payment.paymentMethodId,
             amount,
             feeAmount,
-            netAmount: amount.sub(feeAmount),
+            netAmount,
             createdBy: tenant.userId,
           },
         });
+
+        // Retrofit Fase 4: só gera FinancialTransaction se a forma de
+        // pagamento tiver uma conta financeira vinculada — venda à vista
+        // continua funcionando sem financeiro totalmente configurado.
+        if (method.financialAccountId) {
+          await this.cashFlow.recordTransaction(tx, {
+            companyId: tenant.companyId,
+            financialAccountId: method.financialAccountId,
+            type: 'in',
+            amount: netAmount,
+            originType: 'sale_payment',
+            originId: salePayment.id,
+            createdBy: tenant.userId,
+          });
+        }
       }
 
       const { cmv, grossProfit } = calculateCmvAndProfit(costItems, sale.total);

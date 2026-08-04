@@ -8,7 +8,21 @@ import { CreatePaymentMethodDto } from './dto/create-payment-method.schema';
 export class PaymentMethodsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(tenant: CurrentTenantContext, dto: CreatePaymentMethodDto) {
+  async create(tenant: CurrentTenantContext, dto: CreatePaymentMethodDto) {
+    if (dto.financialAccountId) {
+      const account = await this.prisma.financialAccount.findFirst({
+        where: { id: dto.financialAccountId, companyId: tenant.companyId },
+      });
+      if (!account) {
+        throw new AppError(
+          'INVALID_FINANCIAL_ACCOUNT',
+          'Conta financeira inválida.',
+          HttpStatus.BAD_REQUEST,
+          'financialAccountId',
+        );
+      }
+    }
+
     return this.prisma.paymentMethod.create({
       data: { companyId: tenant.companyId, createdBy: tenant.userId, ...dto },
     });

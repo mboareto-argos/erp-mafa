@@ -11,6 +11,11 @@ import { PurchasingModule } from './modules/purchasing/purchasing.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { SalesModule } from './modules/sales/sales.module';
+import { CashFlowModule } from './modules/cash-flow/cash-flow.module';
+import { FinancialAccountsModule } from './modules/financial-accounts/financial-accounts.module';
+import { ReceivablesModule } from './modules/receivables/receivables.module';
+import { PayablesModule } from './modules/payables/payables.module';
+import { ExpensesModule } from './modules/expenses/expenses.module';
 
 @Module({
   imports: [
@@ -24,6 +29,11 @@ import { SalesModule } from './modules/sales/sales.module';
     CustomersModule,
     PaymentsModule,
     SalesModule,
+    CashFlowModule,
+    FinancialAccountsModule,
+    ReceivablesModule,
+    PayablesModule,
+    ExpensesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -71,6 +71,14 @@ model Company {
   salePayments            SalePayment[]
   saleReturns             SaleReturn[]
   saleReturnItems         SaleReturnItem[]
+  financialAccounts       FinancialAccount[]
+  financialTransactions   FinancialTransaction[]
+  transfers               Transfer[]
+  receivables             Receivable[]
+  receivablePayments      ReceivablePayment[]
+  payables                Payable[]
+  payablePayments         PayablePayment[]
+  expenses                Expense[]
 
   @@map("companies")
 }
@@ -121,6 +129,14 @@ model User {
   createdSalePayments            SalePayment[]            @relation("SalePaymentCreatedBy")
   createdSaleReturns             SaleReturn[]             @relation("SaleReturnCreatedBy")
   createdSaleReturnItems         SaleReturnItem[]         @relation("SaleReturnItemCreatedBy")
+  createdFinancialAccounts       FinancialAccount[]       @relation("FinancialAccountCreatedBy")
+  createdFinancialTransactions   FinancialTransaction[]   @relation("FinancialTransactionCreatedBy")
+  createdTransfers               Transfer[]               @relation("TransferCreatedBy")
+  createdReceivables             Receivable[]             @relation("ReceivableCreatedBy")
+  createdReceivablePayments      ReceivablePayment[]      @relation("ReceivablePaymentCreatedBy")
+  createdPayables                Payable[]                @relation("PayableCreatedBy")
+  createdPayablePayments         PayablePayment[]         @relation("PayablePaymentCreatedBy")
+  createdExpenses                Expense[]                @relation("ExpenseCreatedBy")
 
   @@map("users")
 }
@@ -547,6 +563,7 @@ model Supplier {
   company       Company    @relation(fields: [companyId], references: [id])
   createdByUser User?      @relation("SupplierCreatedBy", fields: [createdBy], references: [id])
   purchases     Purchase[]
+  payables      Payable[]
 
   @@index([companyId, status])
   @@map("suppliers")
@@ -706,9 +723,10 @@ model Customer {
   createdBy String?        @map("created_by") @db.Uuid
   deletedAt DateTime?      @map("deleted_at")
 
-  company       Company @relation(fields: [companyId], references: [id])
-  createdByUser User?   @relation("CustomerCreatedBy", fields: [createdBy], references: [id])
+  company       Company      @relation(fields: [companyId], references: [id])
+  createdByUser User?        @relation("CustomerCreatedBy", fields: [createdBy], references: [id])
   sales         Sale[]
+  receivables   Receivable[]
 
   @@index([companyId, status])
   @@map("customers")
@@ -732,21 +750,26 @@ enum PaymentMethodStatus {
 // Sem prazo de recebimento/parcelas ainda (venda so' a vista nesta fase —
 // ver contexto do plano da Fase 3).
 model PaymentMethod {
-  id        String              @id @default(uuid()) @db.Uuid
-  companyId String              @map("company_id") @db.Uuid
-  type      PaymentMethodType
-  name      String
-  feeRate   Decimal?            @map("fee_rate") @db.Decimal(7, 4)
-  feeFixed  Decimal?            @map("fee_fixed") @db.Decimal(14, 2)
-  status    PaymentMethodStatus @default(active)
-  createdAt DateTime            @default(now()) @map("created_at")
-  updatedAt DateTime            @updatedAt @map("updated_at")
-  createdBy String?             @map("created_by") @db.Uuid
-  deletedAt DateTime?           @map("deleted_at")
+  id                 String              @id @default(uuid()) @db.Uuid
+  companyId          String              @map("company_id") @db.Uuid
+  type               PaymentMethodType
+  name               String
+  feeRate            Decimal?            @map("fee_rate") @db.Decimal(7, 4)
+  feeFixed           Decimal?            @map("fee_fixed") @db.Decimal(14, 2)
+  // Conta financeira de destino (§10.12) — opcional; quando presente, uma
+  // venda a vista confirmada com esta forma de pagamento gera uma
+  // FinancialTransaction real (ver Fase 4, SalesService.confirm()).
+  financialAccountId String?             @map("financial_account_id") @db.Uuid
+  status             PaymentMethodStatus @default(active)
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  createdBy          String?             @map("created_by") @db.Uuid
+  deletedAt          DateTime?           @map("deleted_at")
 
-  company       Company       @relation(fields: [companyId], references: [id])
-  createdByUser User?         @relation("PaymentMethodCreatedBy", fields: [createdBy], references: [id])
-  salePayments  SalePayment[]
+  company          Company           @relation(fields: [companyId], references: [id])
+  financialAccount FinancialAccount? @relation(fields: [financialAccountId], references: [id])
+  createdByUser    User?             @relation("PaymentMethodCreatedBy", fields: [createdBy], references: [id])
+  salePayments     SalePayment[]
 
   @@index([companyId, status])
   @@map("payment_methods")
@@ -790,6 +813,7 @@ model Sale {
   items         SaleItem[]
   payments      SalePayment[]
   returns       SaleReturn[]
+  receivables   Receivable[]
 
   @@index([companyId, status])
   @@map("sales")
@@ -895,4 +919,279 @@ model SaleReturnItem {
 
   @@index([companyId, saleReturnId])
   @@map("sale_return_items")
+}
+
+// ---------------------------------------------------------------------------
+// Financeiro: FinancialAccount, CashFlow, Receivables, Payables, Expenses
+// (docs/architecture/overview.md, secao 6.6) — Fase 4 do roadmap. Escopo
+// desta fase: modulos financeiros standalone + retrofit pontual do Sales
+// (venda a vista gera FinancialTransaction real). Venda a prazo gerando
+// Receivable automatico e compra gerando Payable automatico ficam pra
+// depois — ver plano da Fase 4.
+// ---------------------------------------------------------------------------
+
+enum FinancialAccountStatus {
+  active
+  inactive
+}
+
+// Saldo nunca e' materializado aqui — sempre calculado por agregacao de
+// FinancialTransaction (RN 10.13.3), evitando mais uma tabela pra
+// reconciliar.
+model FinancialAccount {
+  id        String                 @id @default(uuid()) @db.Uuid
+  companyId String                 @map("company_id") @db.Uuid
+  name      String
+  status    FinancialAccountStatus @default(active)
+  createdAt DateTime               @default(now()) @map("created_at")
+  updatedAt DateTime               @updatedAt @map("updated_at")
+  createdBy String?                @map("created_by") @db.Uuid
+  deletedAt DateTime?              @map("deleted_at")
+
+  company               Company                @relation(fields: [companyId], references: [id])
+  createdByUser         User?                  @relation("FinancialAccountCreatedBy", fields: [createdBy], references: [id])
+  paymentMethods        PaymentMethod[]
+  financialTransactions FinancialTransaction[]
+  transfersFrom         Transfer[]             @relation("TransferFromAccount")
+  transfersTo           Transfer[]             @relation("TransferToAccount")
+  receivablePayments    ReceivablePayment[]
+  payablePayments       PayablePayment[]
+  expenses              Expense[]
+
+  @@index([companyId, status])
+  @@map("financial_accounts")
+}
+
+enum FinancialTransactionType {
+  in
+  out
+  transfer
+  adjustment
+}
+
+enum FinancialTransactionOriginType {
+  sale_payment
+  receivable_payment
+  payable_payment
+  expense
+  transfer
+  adjustment
+}
+
+// Lancamento realizado de caixa — IMUTAVEL apos criado (regra de
+// integridade no 10 do Documento de Negocio). Sem updated_at/deleted_at,
+// mesma logica de stock_movements.
+model FinancialTransaction {
+  id                 String                         @id @default(uuid()) @db.Uuid
+  companyId          String                         @map("company_id") @db.Uuid
+  financialAccountId String                         @map("financial_account_id") @db.Uuid
+  type               FinancialTransactionType
+  amount             Decimal                        @db.Decimal(14, 2)
+  originType         FinancialTransactionOriginType @map("origin_type")
+  originId           String                         @map("origin_id") @db.Uuid
+  description        String?
+  occurredAt         DateTime                       @default(now()) @map("occurred_at")
+  createdAt          DateTime                       @default(now()) @map("created_at")
+  createdBy          String?                        @map("created_by") @db.Uuid
+
+  company          Company          @relation(fields: [companyId], references: [id])
+  financialAccount FinancialAccount @relation(fields: [financialAccountId], references: [id])
+  createdByUser    User?            @relation("FinancialTransactionCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([companyId, financialAccountId])
+  @@map("financial_transactions")
+}
+
+// Transferencia entre contas proprias — nunca e' receita/despesa
+// (RN 10.13.2/10.16.5). Gera duas FinancialTransaction (saida da origem,
+// entrada no destino) com originType=transfer e originId = este Transfer.
+model Transfer {
+  id            String   @id @default(uuid()) @db.Uuid
+  companyId     String   @map("company_id") @db.Uuid
+  fromAccountId String   @map("from_account_id") @db.Uuid
+  toAccountId   String   @map("to_account_id") @db.Uuid
+  amount        Decimal  @db.Decimal(14, 2)
+  reason        String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  createdBy     String?  @map("created_by") @db.Uuid
+
+  company       Company          @relation(fields: [companyId], references: [id])
+  fromAccount   FinancialAccount @relation("TransferFromAccount", fields: [fromAccountId], references: [id])
+  toAccount     FinancialAccount @relation("TransferToAccount", fields: [toAccountId], references: [id])
+  createdByUser User?            @relation("TransferCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([companyId])
+  @@map("transfers")
+}
+
+enum ReceivableStatus {
+  pending
+  partially_received
+  received
+  cancelled
+}
+
+// "Vencida" (RN 10.14.3) e' computado na leitura (dueDate < hoje e status
+// pendente/parcial) — sem job agendado no projeto ainda, sem status
+// `overdue` armazenado.
+model Receivable {
+  id             String           @id @default(uuid()) @db.Uuid
+  companyId      String           @map("company_id") @db.Uuid
+  customerId     String?          @map("customer_id") @db.Uuid
+  // Preparado para uma futura venda a prazo (nao usado ainda — Fase 3 e'
+  // so' a vista). Ver plano da Fase 4.
+  saleId         String?          @map("sale_id") @db.Uuid
+  description    String
+  amountOriginal Decimal          @map("amount_original") @db.Decimal(14, 2)
+  amountReceived Decimal          @default(0) @map("amount_received") @db.Decimal(14, 2)
+  dueDate        DateTime         @map("due_date")
+  status         ReceivableStatus @default(pending)
+  cancelReason   String?          @map("cancel_reason")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  createdBy      String?          @map("created_by") @db.Uuid
+  deletedAt      DateTime?        @map("deleted_at")
+
+  company       Company             @relation(fields: [companyId], references: [id])
+  customer      Customer?           @relation(fields: [customerId], references: [id])
+  sale          Sale?               @relation(fields: [saleId], references: [id])
+  createdByUser User?               @relation("ReceivableCreatedBy", fields: [createdBy], references: [id])
+  payments      ReceivablePayment[]
+
+  @@index([companyId, status])
+  @@map("receivables")
+}
+
+// Imutavel apos criado (mesma logica de FinancialTransaction).
+model ReceivablePayment {
+  id                 String   @id @default(uuid()) @db.Uuid
+  companyId          String   @map("company_id") @db.Uuid
+  receivableId       String   @map("receivable_id") @db.Uuid
+  financialAccountId String   @map("financial_account_id") @db.Uuid
+  amount             Decimal  @db.Decimal(14, 2)
+  interest           Decimal? @db.Decimal(14, 2)
+  discount           Decimal? @db.Decimal(14, 2)
+  paidAt             DateTime @default(now()) @map("paid_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+  createdBy          String?  @map("created_by") @db.Uuid
+
+  company          Company          @relation(fields: [companyId], references: [id])
+  receivable       Receivable       @relation(fields: [receivableId], references: [id])
+  financialAccount FinancialAccount @relation(fields: [financialAccountId], references: [id])
+  createdByUser    User?            @relation("ReceivablePaymentCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([companyId, receivableId])
+  @@map("receivable_payments")
+}
+
+enum PayableStatus {
+  pending
+  partially_paid
+  paid
+  cancelled
+}
+
+model Payable {
+  id             String        @id @default(uuid()) @db.Uuid
+  companyId      String        @map("company_id") @db.Uuid
+  supplierId     String?       @map("supplier_id") @db.Uuid
+  description    String
+  amountOriginal Decimal       @map("amount_original") @db.Decimal(14, 2)
+  amountPaid     Decimal       @default(0) @map("amount_paid") @db.Decimal(14, 2)
+  dueDate        DateTime      @map("due_date")
+  status         PayableStatus @default(pending)
+  cancelReason   String?       @map("cancel_reason")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  createdBy      String?       @map("created_by") @db.Uuid
+  deletedAt      DateTime?     @map("deleted_at")
+
+  company       Company          @relation(fields: [companyId], references: [id])
+  supplier      Supplier?        @relation(fields: [supplierId], references: [id])
+  // Lado virtual do vinculo 1:1 — o FK real (payable_id) fica em Expense.
+  expense       Expense?
+  createdByUser User?            @relation("PayableCreatedBy", fields: [createdBy], references: [id])
+  payments      PayablePayment[]
+
+  @@index([companyId, status])
+  @@map("payables")
+}
+
+model PayablePayment {
+  id                 String   @id @default(uuid()) @db.Uuid
+  companyId          String   @map("company_id") @db.Uuid
+  payableId          String   @map("payable_id") @db.Uuid
+  financialAccountId String   @map("financial_account_id") @db.Uuid
+  amount             Decimal  @db.Decimal(14, 2)
+  interest           Decimal? @db.Decimal(14, 2)
+  discount           Decimal? @db.Decimal(14, 2)
+  paidAt             DateTime @default(now()) @map("paid_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+  createdBy          String?  @map("created_by") @db.Uuid
+
+  company          Company          @relation(fields: [companyId], references: [id])
+  payable          Payable          @relation(fields: [payableId], references: [id])
+  financialAccount FinancialAccount @relation(fields: [financialAccountId], references: [id])
+  createdByUser    User?            @relation("PayablePaymentCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([companyId, payableId])
+  @@map("payable_payments")
+}
+
+enum ExpenseCategory {
+  mercadorias
+  frete
+  embalagem
+  publicidade
+  plataforma
+  telefone
+  internet
+  aluguel
+  energia
+  transporte
+  combustivel
+  taxa
+  imposto
+  manutencao
+  pro_labore
+  retirada
+  despesa_administrativa
+  perda
+  outra
+}
+
+enum ExpenseStatus {
+  pending
+  paid
+  cancelled
+}
+
+// Criada ja paga (paidNow=true no DTO) gera uma FinancialTransaction de
+// saida direto; criada como despesa futura gera automaticamente um Payable
+// vinculado (RN 10.15.3) — pagar depois e' pagar esse Payable, sem endpoint
+// de pagamento duplicado aqui.
+model Expense {
+  id                 String          @id @default(uuid()) @db.Uuid
+  companyId          String          @map("company_id") @db.Uuid
+  description        String
+  category           ExpenseCategory
+  amount             Decimal         @db.Decimal(14, 2)
+  competenceDate     DateTime        @map("competence_date")
+  dueDate            DateTime?       @map("due_date")
+  paidAt             DateTime?       @map("paid_at")
+  financialAccountId String?         @map("financial_account_id") @db.Uuid
+  status             ExpenseStatus   @default(pending)
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+  createdBy          String?         @map("created_by") @db.Uuid
+  deletedAt          DateTime?       @map("deleted_at")
+
+  company          Company           @relation(fields: [companyId], references: [id])
+  financialAccount FinancialAccount? @relation(fields: [financialAccountId], references: [id])
+  createdByUser    User?             @relation("ExpenseCreatedBy", fields: [createdBy], references: [id])
+  payable          Payable?          @relation(fields: [payableId], references: [id])
+  payableId        String?           @unique @map("payable_id") @db.Uuid
+
+  @@index([companyId, status])
+  @@map("expenses")
 }

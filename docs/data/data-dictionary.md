@@ -23,11 +23,15 @@
       (migration `20260804175603_add_inventory_purchasing`). Cancelar uma compra já recebida
       (estorno, RN 10.6.6) ainda não implementado — `cancel()` só funciona em `draft`/`ordered`.
 - [x] Sales — só venda à vista implementada, ver abaixo
-      (migration `20260804183648_add_sales_customers_payments`). Venda a prazo/parcelamento e
-      conta a receber ainda não existem — decisão explícita, Receivables é Fase 4.
+      (migration `20260804183648_add_sales_customers_payments`). Venda a prazo/parcelamento
+      automática gerando `Receivable` ainda não existe — decisão explícita da Fase 4, fica pra
+      uma etapa futura que reabra o Sales.
 - [x] Customers — CRUD básico implementado, ver abaixo (mesma migration).
-- [x] Payments — só cadastro de formas de pagamento (com taxa) implementado, ver abaixo (mesma
-      migration). Receivables/Payables/CashFlow ainda não existem — Fase 4.
+- [x] Payments — cadastro de formas de pagamento (com taxa e conta financeira de destino desde
+      a Fase 4), ver abaixo.
+- [x] Financeiro (FinancialAccount, CashFlow, Receivables, Payables, Expenses) — ver abaixo
+      (migration `20260804190647_add_finance`). Compra recebida gerando `Payable` automática
+      ainda não existe — decisão explícita, fica pra uma etapa futura que reabra o Purchasing.
 - [ ] Suppliers — ver seção Purchasing (já implementado)
 - [ ] Reporting / Notifications / Imports / Audit
 
@@ -412,6 +416,7 @@ Sem prazo de recebimento nem configuração de parcelas ainda (venda só à vist
 | name | text | |
 | fee_rate | numeric(7,4)? | percentual |
 | fee_fixed | numeric(14,2)? | |
+| financial_account_id | uuid? FK → financial_accounts | adicionado na migration `20260804190647_add_finance` — conta de destino (§10.12); quando presente, uma venda à vista confirmada gera uma `financial_transaction` real |
 | status | enum(active, inactive) | |
 | created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
 
@@ -504,3 +509,144 @@ sobre compra já recebida na Fase 2).
 | created_at / created_by / deleted_at | — | sem `updated_at` |
 
 Índice: `(company_id, sale_return_id)`.
+
+---
+
+## Financeiro (FinancialAccount, CashFlow, Receivables, Payables, Expenses)
+
+Fonte: `apps/api/prisma/schema.prisma`, migration `20260804190647_add_finance`. Escopo desta
+fase: módulos financeiros standalone + retrofit pontual do Sales (venda à vista gera uma
+`financial_transaction` real quando a forma de pagamento tem conta vinculada). Venda a prazo
+gerando `receivable` automático e compra gerando `payable` automático ficam pra depois.
+
+### `financial_accounts`
+Saldo **nunca é materializado** — sempre calculado por agregação de `financial_transactions`
+(RN 10.13.3), evitando mais uma tabela pra reconciliar.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| name | text | |
+| status | enum(active, inactive) | |
+| created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
+
+Índice: `(company_id, status)`.
+
+### `financial_transactions`
+Lançamento realizado de caixa — **imutável** após criado (regra de integridade nº 10 do
+Documento de Negócio). Convenção de sinal: `amount` positivo em `type=in`, negativo em
+`type=out`/`transfer` de saída — assim `SUM(amount)` por conta já dá o saldo direto.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| financial_account_id | uuid FK → financial_accounts | |
+| type | enum(in, out, transfer, adjustment) | |
+| amount | numeric(14,2) | com sinal |
+| origin_type | enum(sale_payment, receivable_payment, payable_payment, expense, transfer, adjustment) | |
+| origin_id | uuid | referência polimórfica |
+| description | text? | |
+| occurred_at | timestamptz | |
+| created_at / created_by | — | sem `updated_at`/`deleted_at` — imutável |
+
+Índice: `(company_id, financial_account_id)`.
+
+### `transfers`
+Transferência entre contas próprias — **nunca** é receita/despesa (RN 10.13.2/10.16.5). Gera
+duas `financial_transactions` (saída da origem, entrada no destino) com `origin_type=transfer`
+e `origin_id` = este `transfer`.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| from_account_id | uuid FK → financial_accounts | |
+| to_account_id | uuid FK → financial_accounts | |
+| amount | numeric(14,2) | |
+| reason | text? | |
+| created_at / created_by | — | sem `updated_at`/`deleted_at` |
+
+Índice: `(company_id)`.
+
+### `receivables` / `receivable_payments`
+"Vencida" (RN 10.14.3) é computado na leitura (`due_date < hoje` e status pendente/parcial) —
+sem job agendado no projeto ainda, sem status `overdue` armazenado. `amount_received` é
+materializado; `pay()` nunca deixa superar `amount_original` (RN 10.14.2). Cancelar exige
+motivo (RN 10.14.5) — `receivable_payments` é imutável (sem `updated_at`).
+
+| Coluna (`receivables`) | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| customer_id | uuid? FK → customers | |
+| sale_id | uuid? FK → sales | referência preparada para uma futura venda a prazo, sem uso ainda |
+| description | text | |
+| amount_original | numeric(14,2) | |
+| amount_received | numeric(14,2) | materializado, default 0 |
+| due_date | timestamptz | |
+| status | enum(pending, partially_received, received, cancelled) | |
+| cancel_reason | text? | |
+| created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
+
+| Coluna (`receivable_payments`) | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| receivable_id | uuid FK → receivables | |
+| financial_account_id | uuid FK → financial_accounts | |
+| amount | numeric(14,2) | aplicado ao saldo da dívida |
+| interest / discount | numeric(14,2)? | ajustam só o caixa recebido, não o saldo da dívida |
+| paid_at | timestamptz | |
+| created_at / created_by | — | sem `updated_at` |
+
+Índices: `(company_id, status)` em `receivables`; `(company_id, receivable_id)` em
+`receivable_payments`.
+
+### `payables` / `payable_payments`
+Estrutura simétrica a `receivables`/`receivable_payments`. `expense_id`? **não** existe como
+coluna própria — o vínculo com uma despesa futura é a FK inversa (`expenses.payable_id`).
+
+| Coluna (`payables`) | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| supplier_id | uuid? FK → suppliers | |
+| description | text | |
+| amount_original | numeric(14,2) | |
+| amount_paid | numeric(14,2) | materializado, default 0 |
+| due_date | timestamptz | |
+| status | enum(pending, partially_paid, paid, cancelled) | |
+| cancel_reason | text? | |
+| created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
+
+`payable_payments`: mesmas colunas de `receivable_payments`, trocando `receivable_id` por
+`payable_id`.
+
+Índices: `(company_id, status)` em `payables`; `(company_id, payable_id)` em
+`payable_payments`.
+
+### `expenses`
+RN 10.15.1/10.15.2/10.15.3: registrar uma despesa não significa pagá-la. Criada com
+`paidNow=true` (na API) gera uma `financial_transaction` de saída direto (`status=paid`);
+criada como despesa futura (`paidNow=false`) gera automaticamente um `payable` vinculado
+(`payable_id`) com `status=pending` — pagar depois é pagar esse `payable`, sem endpoint de
+pagamento duplicado em `expenses`.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| description | text | |
+| category | enum(mercadorias, frete, embalagem, publicidade, plataforma, telefone, internet, aluguel, energia, transporte, combustivel, taxa, imposto, manutencao, pro_labore, retirada, despesa_administrativa, perda, outra) | §10.15 |
+| amount | numeric(14,2) | |
+| competence_date | timestamptz | |
+| due_date | timestamptz? | obrigatório quando `paidNow=false` |
+| paid_at | timestamptz? | preenchido quando `paidNow=true` |
+| financial_account_id | uuid? FK → financial_accounts | preenchido quando `paidNow=true` |
+| payable_id | uuid? UNIQUE FK → payables | preenchido quando `paidNow=false` |
+| status | enum(pending, paid, cancelled) | |
+| created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
+
+Índice: `(company_id, status)`.

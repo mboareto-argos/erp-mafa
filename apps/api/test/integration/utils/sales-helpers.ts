@@ -23,6 +23,7 @@ export async function createPaymentMethod(
     name: string;
     feeRate: number;
     feeFixed: number;
+    financialAccountId: string;
   }> = {},
 ) {
   const response = await request(app.getHttpServer())
@@ -36,6 +37,9 @@ export async function createPaymentMethod(
         : {}),
       ...(overrides.feeFixed !== undefined
         ? { feeFixed: overrides.feeFixed }
+        : {}),
+      ...(overrides.financialAccountId !== undefined
+        ? { financialAccountId: overrides.financialAccountId }
         : {}),
     })
     .expect(201);
