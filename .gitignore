@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build
+.next/
+dist/
+build/
+.turbo/
+
+# env
+.env
+.env.local
+.env.*.local
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# os / editor
+.DS_Store
+.vscode/
+*.swp
+
+# prisma
+apps/api/prisma/*.db

@@ -1,0 +1,12 @@
+openapi: 3.0.3
+info:
+  title: ERP MAFA Store — API
+  version: "0.1.0"
+  description: >
+    Especificação de API a ser gerada a partir dos controllers do Nest.js
+    (apps/api). Ver convenções em docs/architecture/overview.md, seção 10.
+servers:
+  - url: /api/v1
+paths: {}
+components:
+  schemas: {}
