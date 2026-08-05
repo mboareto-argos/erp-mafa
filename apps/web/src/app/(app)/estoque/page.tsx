@@ -1,0 +1,13 @@
+import { backendAuthenticatedRequest } from "@/lib/session";
+import { getSession } from "@/lib/session";
+import { StockAdjustmentForm } from "@/components/inventory/stock-adjustment-form";
+
+type Balance = { id: string; quantityAvailable: string; quantityReserved: string; quantityInTransit: string; productVariant: { product: { name: string; sku: string } } };
+type LowStock = { productId: string; sku: string; name: string; minStock: string; quantityAvailable: string };
+const quantity = (value: string) => new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 3 }).format(Number(value));
+
+export default async function InventoryPage() {
+  const [balances, lowStock, products, session] = await Promise.all([backendAuthenticatedRequest("/inventory/balances") as Promise<Balance[]>, backendAuthenticatedRequest("/inventory/low-stock") as Promise<LowStock[]>, backendAuthenticatedRequest("/catalog/products") as Promise<Array<{ id: string; name: string; sku: string; variants: Array<{ id: string; skuVariant: string | null }> }>>, getSession() as Promise<{ permissions: string[] } | null>]);
+  const canAdjust = session?.permissions.includes("adjust_stock") ?? false;
+  return <main className="page-content"><div className="page-heading"><div><h1>Estoque</h1><p>A quantidade disponível é sempre calculada pelas movimentações.</p></div>{canAdjust && products.some(product => product.variants.length > 0) && <StockAdjustmentForm products={products}/>}</div>{lowStock.length > 0 && <section className="alert-card"><strong>{lowStock.length} {lowStock.length === 1 ? "produto precisa" : "produtos precisam"} de atenção</strong><span>O estoque disponível está igual ou abaixo do mínimo definido.</span></section>}{balances.length === 0 ? <section className="empty-card"><h2>Seu estoque está vazio por enquanto</h2><p>Quando você receber uma compra ou registrar um ajuste autorizado, os produtos aparecerão aqui automaticamente.</p></section> : <section className="data-card"><div className="table-wrap"><table><thead><tr><th>Produto</th><th>SKU</th><th className="number">Disponível</th><th className="number">Reservado</th><th className="number">Em trânsito</th></tr></thead><tbody>{balances.map((balance) => <tr key={balance.id}><td data-label="Produto"><strong>{balance.productVariant.product.name}</strong></td><td data-label="SKU">{balance.productVariant.product.sku}</td><td className="number" data-label="Disponível">{quantity(balance.quantityAvailable)}</td><td className="number" data-label="Reservado">{quantity(balance.quantityReserved)}</td><td className="number" data-label="Em trânsito">{quantity(balance.quantityInTransit)}</td></tr>)}</tbody></table></div></section>}</main>;
+}

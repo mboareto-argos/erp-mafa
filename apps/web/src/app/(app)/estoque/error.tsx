@@ -1,0 +1,2 @@
+"use client";
+export default function InventoryError({ reset }: { error: Error & { digest?: string }; reset: () => void }) { return <main className="page-content"><section className="empty-card"><h1>Não foi possível carregar o estoque</h1><p>Verifique sua conexão e tente novamente.</p><button className="button button-primary compact-button" onClick={reset}>Tentar novamente</button></section></main>; }

@@ -1,0 +1,1 @@
+export default function InventoryLoading() { return <main className="page-content"><div className="page-heading"><div><h1>Estoque</h1><p>Carregando seus produtos…</p></div></div><section className="data-card skeleton-table" aria-label="Carregando estoque"><span /><span /><span /><span /></section></main>; }
