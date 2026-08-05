@@ -82,6 +82,8 @@ arquiteturais permanentes, criar um ADR novo em vez de alterar ADRs existentes.
 - **Pendências / retomada:** exportação (BR §10.20) não implementada; sem tela no web ainda
   (API-first, como em todas as fases anteriores); BullMQ/Redis continua pendente para volumes
   maiores; compras/vendas históricas via import ficam para um bloco futuro se o usuário pedir.
+- **Commits:** `45da669` (schema/migration/permissão/exports de módulo/fix de lint),
+  `dc1094b` (módulo imports completo), `b012510` (testes de integração), `e5de44e` (docs).
 
 ### Bloco 7 — Revisão dos Blocos 1-6 e correção de idempotência financeira
 
@@ -123,6 +125,9 @@ arquiteturais permanentes, criar um ADR novo em vez de alterar ADRs existentes.
   Próximo passo: decidir com o usuário qual módulo de negócio ainda não
   implementado (Fase 6 do roadmap original — importação/conciliação) ou qual
   débito técnico atacar em seguida.
+- **Commits:** `f06bec6` (fix isolado do proxy financeiro); a correção do
+  ajuste de estoque e das cores de status foi incluída dentro do commit
+  `8ca6634` do próprio Bloco 6 (arquivos compartilhados).
 
 ### Bloco 6 — Interfaces dos fluxos operacionais
 
@@ -279,14 +284,29 @@ arquiteturais permanentes, criar um ADR novo em vez de alterar ADRs existentes.
 
 ## Débitos técnicos conhecidos que não devem ser esquecidos
 
-- RLS obrigatório no PostgreSQL (`TA-DATA-005`) ainda não está presente nas
-  migrations atuais; é escopo do Bloco 4.
-- Auditoria e idempotência já existem, porém não cobrem todos os eventos e comandos
-  críticos; é escopo do Bloco 5.
-- O build deve continuar em Turbopack. A estratégia de fontes deve torná-lo
-  reproduzível sem reintroduzir webpack; é escopo do Bloco 3.
-- A arquitetura exige paginação em toda lista (`TA-API-001`), mas Produtos,
-  Clientes e Fornecedores ainda retornam array sem `page` por compatibilidade
-  temporária com seletores internos de Compras, Vendas e Estoque. O modo
-  paginado é usado pelas telas. A remoção desse legado exige revisar esses três
-  consumidores conjuntamente; não deve ser feita isoladamente em uma listagem.
+*(Atualizado no Bloco 8 — os itens de RLS/auditoria/build listados nas versões anteriores
+deste documento foram concluídos nos Blocos 3, 4, 5 e 7, e removidos daqui. Ver README.md,
+seção "Débito técnico conhecido", para a lista completa e sempre mais atual — este bloco só
+resume o que é relevante para quem for continuar o trabalho.)*
+
+- **Auditoria cobre só uma parte dos eventos de BR §10.23**: ajuste de estoque, recebimento de
+  compra, confirmação de venda, pagamento/cancelamento de contas a receber/pagar,
+  transferências, reprecificação de produto e confirmação/reversão de importação. Faltam
+  login, criação/edição de usuário, mudança de permissão, edição de campos cadastrais de
+  produto, desconto, mudança de vencimento, export, mudança de configuração e estorno fora do
+  fluxo de importação. Consulta já existe (`GET /audit`, permissão `view_audit`).
+- **Edição em Financeiro não implementada** (contas, formas de pagamento, despesas) — só
+  criação. Estoque/Compras/Vendas são imutáveis por design (corrigir é lançar
+  ajuste/estorno novo, nunca editar), então não entram nesse débito.
+- **Paginação/busca só em Produtos, Clientes e Fornecedores.** `GET` desses três cadastros
+  aceita array completo sem `page` por compatibilidade temporária com os seletores usados em
+  Compras/Vendas/Estoque — remover esse modo legado exige revisar esses três consumidores
+  juntos, não isoladamente. Compras, Vendas, Estoque e Financeiro continuam sem paginação
+  (mitigado por filtro de período onde existe).
+- **Sem testes automatizados no `apps/web`** — nenhum framework de teste (vitest/playwright)
+  configurado; toda a cobertura de teste do projeto está em `apps/api`.
+- **Fase 6 (Imports, Bloco 8) cobre só cadastros + saldos em aberto**: compras/vendas
+  históricas ficam de fora (já opcionais na BR); sem UI de mapeamento de colunas livre
+  (cabeçalho fixo); casamento de duplicidade de produto é exato, sem fuzzy matching;
+  processamento síncrono, sem fila (BullMQ/Redis previsto desde o stack inicial, nunca
+  implementado); exportação (BR §10.20) não implementada; sem tela no web ainda.
