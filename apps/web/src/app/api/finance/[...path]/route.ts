@@ -12,7 +12,14 @@ async function forward(request: Request, context: RouteContext<"/api/finance/[..
   try {
     const query = new URL(request.url).search;
     const body = method === "POST" ? JSON.stringify(await request.json()) : undefined;
-    return NextResponse.json(await backendAuthenticatedRequest(`/${target}${query}`, { method, body }));
+    const idempotencyKey = request.headers.get("Idempotency-Key");
+    return NextResponse.json(
+      await backendAuthenticatedRequest(`/${target}${query}`, {
+        method,
+        body,
+        headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
+      }),
+    );
   } catch (error) {
     return NextResponse.json({ message: error instanceof Error ? error.message : "Não foi possível concluir a operação financeira." }, { status: error instanceof ApiRequestError ? error.status : 502 });
   }
