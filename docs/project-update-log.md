@@ -44,6 +44,45 @@ arquiteturais permanentes, criar um ADR novo em vez de alterar ADRs existentes.
 
 ## Estado inicial — 2026-08-05
 
+### Bloco 8 — Fase 6: Importação e conciliação (migração da MAFA Store)
+
+- **Período:** 2026-08-06
+- **Status:** concluído (só API — sem tela no web ainda)
+- **Objetivo:** implementar o escopo técnico exato de BR §10.19 (importação) e §34.8 (critérios
+  de aceite de migração/conciliação), não uma interpretação livre — dry-run obrigatório, erro
+  por linha/coluna, casamento de duplicidade de produto por alias (RN-IMP-001/002), estoque
+  inicial gerando movimentação, idempotência, reversão antes do aceite final.
+- **Modificado:** modelos `ImportJob`/`ImportRow` (schema.prisma + migration, com RLS aplicado
+  explicitamente já que a migration de RLS anterior só cobriu tabelas pré-existentes);
+  `apps/api/src/modules/imports/` (`imports.service.ts`, `imports.controller.ts`,
+  `importers/` — um por tipo de entidade: product, initial_stock, customer, supplier, expense,
+  payable, receivable — cada um reaproveitando o service/schema Zod de criação já existente do
+  módulo correspondente); permissão `manage_imports` (owner/admin) no seed; `CustomersModule`,
+  `PurchasingModule`, `ExpensesModule`, `PayablesModule`, `ReceivablesModule` passaram a
+  exportar seus services (não exportavam antes, precisavam ser injetáveis no módulo de
+  imports); correção de 4 erros de lint pré-existentes (não introduzidos por este bloco) em
+  `prisma.service.ts` (tipagem do Proxy de RLS).
+- **Motivo:** próximo item do roadmap de negócio (Fase 6) depois de fechar os cadastros-base,
+  RLS e auditoria/idempotência ampliada.
+- **Decisões de escopo tomadas com o usuário:** processamento síncrono (sem BullMQ/Redis, que
+  nunca foi implementado apesar de decidido no stack da Fase 0); escopo de entidades limitado a
+  cadastros + saldos em aberto (compras/vendas históricas ficam de fora, já opcionais na BR);
+  só CSV (sem XLSX). Simplificações adicionais documentadas no README: sem UI de mapeamento de
+  colunas livre (cabeçalho fixo por modelo baixável), casamento de duplicidade exato (sem fuzzy
+  matching), reversão soft (nunca hard-delete, consistente com TA-DATA-001).
+- **Detalhe técnico relevante:** cada linha da confirmação roda dentro de um `SAVEPOINT` da
+  transação por-requisição (RLS/`TenantTransactionInterceptor`) — sem isso, um erro de banco
+  numa linha abortaria a transação inteira do Postgres e reprovaria silenciosamente todas as
+  linhas seguintes, violando a exigência de erro isolado por linha (RN 10.19.3).
+- **Validação:** `pnpm test` (12 suítes, 44 testes, incluindo 13 novos testes unitários de
+  imports), `pnpm test:integration` (14 suítes, 79 testes, incluindo 10 novos cobrindo preview→
+  confirm, duplicidade de produto, estoque inicial, idempotência, reconciliação, revert,
+  permissão e isolamento multiempresa), `pnpm test:tenant` (5 suítes, 13 testes), lint e
+  `tsc --noEmit` limpos.
+- **Pendências / retomada:** exportação (BR §10.20) não implementada; sem tela no web ainda
+  (API-first, como em todas as fases anteriores); BullMQ/Redis continua pendente para volumes
+  maiores; compras/vendas históricas via import ficam para um bloco futuro se o usuário pedir.
+
 ### Bloco 7 — Revisão dos Blocos 1-6 e correção de idempotência financeira
 
 - **Período:** 2026-08-06

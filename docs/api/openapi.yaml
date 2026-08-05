@@ -39,6 +39,12 @@ tags:
       Dashboard, relatórios e DRE gerencial (docs/architecture/overview.md §10.17/§10.18) —
       só leitura, agrega dados já existentes. Exportação e relatórios avançados (curva ABC,
       giro de estoque etc.) ainda não implementados.
+  - name: imports
+    description: >
+      Migração das planilhas da MAFA Store (BR §10.19, Fase 6) — preview (dry-run) → confirm →
+      relatório → revert. Escopo desta rodada: produtos (com alias, RN-IMP-001/002), estoque
+      inicial, clientes, fornecedores, despesas, contas a pagar/receber. Só CSV, cabeçalho fixo
+      (sem mapeamento de colunas livre), processamento síncrono (sem fila).
 paths:
   /auth/register:
     post:
@@ -1814,6 +1820,158 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/AuditLog" }
 
+  /imports/{entityType}/template:
+    get:
+      tags: [imports]
+      summary: >
+        Modelo CSV (cabeçalho fixo) para o tipo de entidade (BR §10.19, passo "baixar modelo").
+        Requer permission:manage_imports.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: entityType
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/ImportEntityType" }
+      responses:
+        "200":
+          description: CSV com só a linha de cabeçalho
+          content:
+            text/csv:
+              schema: { type: string }
+  /imports/{entityType}/preview:
+    post:
+      tags: [imports]
+      summary: >
+        Dry-run (BR §10.19 regra 1): parseia e valida o CSV sem persistir nada. Para produtos,
+        aponta duplicateMatch quando o SKU/nome/alias já existe (RN-IMP-001/002).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: entityType
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/ImportEntityType" }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rows:
+                    type: array
+                    items: { $ref: "#/components/schemas/ImportPreviewRow" }
+                  summary:
+                    type: object
+                    properties:
+                      toCreate: { type: integer }
+                      toReview: { type: integer }
+                      toReject: { type: integer }
+  /imports/{entityType}/confirm:
+    post:
+      tags: [imports]
+      summary: >
+        Persiste as linhas revisadas (BR §10.19 regras 2-5): nenhuma linha inválida é criada,
+        duplicidade de produto exige duplicateAction, cria um ImportJob + ImportRow por linha.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: entityType
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/ImportEntityType" }
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rows]
+              properties:
+                fileName: { type: string }
+                rows:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [cells]
+                    properties:
+                      cells: { type: object, additionalProperties: { type: string } }
+                      duplicateAction:
+                        { $ref: "#/components/schemas/ImportDuplicateAction" }
+                expectedTotal:
+                  type: number
+                  description: Total da planilha original, usado na reconciliação (BR §34.8).
+      responses:
+        "201":
+          description: Criado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportJob" }
+  /imports:
+    get:
+      tags: [imports]
+      summary: Histórico de importações da empresa (BR §10.19 regra 6). Requer permission:manage_imports.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ImportJob" }
+  /imports/{id}:
+    get:
+      tags: [imports]
+      summary: Detalhe de uma importação, com contagens e linhas. Requer permission:manage_imports.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportJob" }
+  /imports/{id}/revert:
+    post:
+      tags: [imports]
+      summary: >
+        Reverte uma importação concluída (BR §34.8: "reversível antes do aceite final") —
+        inativa as entidades criadas e lança ajuste compensatório de estoque quando aplicável.
+        Nunca apaga linha (TA-DATA-001). Só permitido uma vez por importação.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportJob" }
+        "409":
+          description: Importação já revertida
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2195,6 +2353,75 @@ components:
         reason: { type: string, nullable: true }
         origin: { type: string }
         createdAt: { type: string, format: date-time }
+    ImportEntityType:
+      type: string
+      enum: [product, initial_stock, customer, supplier, expense, payable, receivable]
+    ImportDuplicateAction:
+      type: string
+      enum: [use_existing, create_new, register_alias, ignore]
+      description: RN-IMP-002 — só relevante quando a linha teve duplicateMatch no preview.
+    ImportRowStatus:
+      type: string
+      enum: [created, updated, skipped, rejected]
+    ImportPreviewRow:
+      type: object
+      properties:
+        rowNumber: { type: integer }
+        cells: { type: object, additionalProperties: { type: string } }
+        data: { type: object, nullable: true }
+        errors:
+          type: object
+          nullable: true
+          additionalProperties: { type: string }
+        duplicateMatch:
+          type: object
+          nullable: true
+          properties:
+            entityId: { type: string, format: uuid }
+            entityLabel: { type: string }
+            matchedBy: { type: string, enum: [sku, name, alias] }
+    ImportRow:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        rowNumber: { type: integer }
+        rawData: { type: object, additionalProperties: { type: string } }
+        status: { $ref: "#/components/schemas/ImportRowStatus" }
+        errors:
+          type: object
+          nullable: true
+          additionalProperties: { type: string }
+        resultEntityType: { type: string, nullable: true }
+        resultEntityId: { type: string, format: uuid, nullable: true }
+        duplicateAction:
+          type: string
+          nullable: true
+          enum: [use_existing, create_new, register_alias, ignore]
+    ImportJob:
+      type: object
+      description: >
+        BR §10.19/§34.8 — resultado de uma confirmação de importação. reconciledTotal/
+        expectedTotal/divergence só aparecem para tipos de entidade com valor por linha
+        (despesas, contas a pagar/receber).
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        entityType: { $ref: "#/components/schemas/ImportEntityType" }
+        status: { type: string, enum: [completed, reverted] }
+        fileName: { type: string, nullable: true }
+        totalRows: { type: integer }
+        createdCount: { type: integer }
+        updatedCount: { type: integer }
+        skippedCount: { type: integer }
+        rejectedCount: { type: integer }
+        expectedTotal: { type: string, nullable: true }
+        reconciledTotal: { type: string, nullable: true }
+        divergence: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        revertedAt: { type: string, format: date-time, nullable: true }
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/ImportRow" }
     ErrorResponse:
       type: object
       description: Formato padrão TA-API-001 (docs/architecture/overview.md, secao 10.2)

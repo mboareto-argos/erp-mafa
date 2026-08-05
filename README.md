@@ -52,7 +52,11 @@ e técnicas que nunca podem ser violadas.
    reproduzível). Produtos, Fornecedores e Clientes têm CRUD completo (edição, reativação,
    busca, paginação); Compras e Vendas usam um wizard multi-item (Itens → Custos/Pagamento →
    Confirmar).
-4. Fase 6: importação, conciliação e validação com a operação da MAFA Store.
+4. Fase 6: importação e conciliação (BR §10.19/§34.8) — `POST /imports/:entityType/preview`
+   (dry-run) → `confirm` → `GET /imports/:id` (relatório com contagens e reconciliação) →
+   `revert` (reversão soft, antes do aceite final). Cobre produtos (com alias, RN-IMP-001/002),
+   estoque inicial, clientes, fornecedores, despesas, contas a pagar/receber — só CSV,
+   processamento síncrono. Só API por enquanto (sem tela no web ainda).
 
 ### Débito técnico conhecido
 
@@ -60,10 +64,17 @@ Registrado deliberadamente como pendência, não implementado ainda:
 
 - **Auditoria ainda não cobre todos os eventos** (BR §10.23): cobre hoje ajuste de estoque,
   recebimento de compra, confirmação de venda, pagamento/cancelamento de contas a
-  receber/pagar, transferências e reprecificação de produto — faltam login, criação/edição de
-  usuário, mudança de permissão, criação/edição de produto (campos cadastrais), desconto,
-  mudança de vencimento, import/export, mudança de configuração e estorno. Consulta já existe
-  (`GET /audit`, permissão `view_audit`).
+  receber/pagar, transferências, reprecificação de produto e confirmação/reversão de
+  importação — faltam login, criação/edição de usuário, mudança de permissão, criação/edição
+  de produto (campos cadastrais), desconto, mudança de vencimento, export, mudança de
+  configuração e estorno fora do fluxo de importação. Consulta já existe (`GET /audit`,
+  permissão `view_audit`).
+- **Importação (Fase 6) cobre só cadastros + saldos em aberto**: compras e vendas históricas
+  ficam de fora (já opcionais na própria BR); sem UI de mapeamento de colunas livre (cabeçalho
+  fixo por modelo baixável); casamento de duplicidade de produto é exato (SKU/nome/alias), sem
+  fuzzy matching; processamento síncrono, sem fila (BullMQ/Redis previsto desde o stack
+  inicial, nunca implementado — só relevante em volumes bem maiores que uma loja pequena);
+  exportação (BR §10.20) não implementada; sem tela no web ainda.
 - **CRUD só de criação em Estoque/Compras/Vendas/Financeiro** — por design nos dois primeiros
   (movimentação e venda/compra confirmadas são imutáveis, corrigir é lançar um novo
   ajuste/estorno, nunca editar); edição em Financeiro (contas, formas de pagamento, despesas)

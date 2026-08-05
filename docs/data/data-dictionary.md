@@ -38,9 +38,11 @@
       como "futuro" em §10.18 do Documento de Negócio (curva ABC, giro de estoque etc.) não
       implementados — decisão explícita.
 - [ ] Suppliers — ver seção Purchasing (já implementado)
-- [ ] Reporting / Notifications / Imports
+- [ ] Notifications — ainda não implementado
 - [x] Audit — trilha append-only + `GET /audit` consultável (view_audit); cobertura parcial de
       eventos, ver `audit_logs` abaixo.
+- [x] Imports — preview/confirm/revert (Fase 6); ver `import_jobs`/`import_rows` abaixo.
+      Compras/vendas históricas e exportação (CSV/XLSX) ficam de fora desta rodada.
 
 ---
 
@@ -184,8 +186,74 @@ Constraints: `UNIQUE(company_id, operation, idempotency_key)` · índice `(compa
 
 Cabeçalho opcional `Idempotency-Key` (TA-API-002) aceito hoje em `POST /inventory/adjustments`,
 `POST /purchasing/purchases/:id/receive`, `POST /sales/:id/confirm`,
-`POST /receivables/:id/pay`, `POST /payables/:id/pay` e
-`POST /cash-flow/transfers`.
+`POST /receivables/:id/pay`, `POST /payables/:id/pay`,
+`POST /cash-flow/transfers`, `POST /imports/:entityType/confirm` e `POST /imports/:id/revert`.
+
+## Imports
+
+Migração das planilhas da MAFA Store (BR §10.19, Fase 6). Escopo desta rodada: produtos (com
+alias), estoque inicial, clientes, fornecedores, despesas, contas a pagar/receber — compras e
+vendas históricas ficam de fora (já marcadas como opcionais na própria BR). Só CSV, cabeçalho
+fixo por tipo (sem UI de mapeamento de colunas livre), processamento síncrono (sem fila
+BullMQ/Redis — débito documentado no README para quando o volume justificar).
+
+### `import_jobs`
+Uma linha por confirmação de importação (não por dry-run — preview nunca persiste nada).
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| entity_type | enum(product, initial_stock, customer, supplier, expense, payable, receivable) | |
+| status | enum(completed, reverted) | |
+| file_name | text? | |
+| total_rows / created_count / updated_count / skipped_count / rejected_count | integer | contagens do relatório (RN 10.19, critério de aceite) |
+| expected_total | numeric(14,2)? | total informado pelo usuário a partir da planilha original (BR §34.8) |
+| reconciled_total | numeric(14,2)? | soma das linhas efetivamente criadas — só para tipos com `amountOf()` (despesas, contas a pagar/receber) |
+| created_at / created_by | — | quem importou e quando (RN 10.19.6) |
+| reverted_at / reverted_by | timestamptz? / uuid? | preenchidos só quando revertida |
+
+Índice: `(company_id, entity_type, created_at)`. `divergence` (reconciled_total - expected_total)
+é calculado na leitura, não persistido.
+
+### `import_rows`
+Nunca apaga — TA-DATA-001. Uma linha por linha da planilha confirmada, inclusive as rejeitadas
+(RN 10.19.2/10.19.3: nenhuma linha inválida entra silenciosamente, erro fica registrado por
+linha/coluna).
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| import_job_id | uuid FK → import_jobs | |
+| company_id | uuid FK → companies | |
+| row_number | integer | linha 1 é o cabeçalho — dados começam em 2 |
+| raw_data | jsonb | células originais da linha (usadas também para reverter estoque inicial) |
+| status | enum(created, updated, skipped, rejected) | `updated` só ocorre em alias registrado num produto existente (RN-IMP-002) |
+| errors | jsonb? | `{coluna: mensagem}` |
+| result_entity_type / result_entity_id | text? / uuid? | entidade afetada por esta linha, quando houver |
+| duplicate_action | enum(use_existing, create_new, register_alias, ignore)? | RN-IMP-002, só quando o preview apontou duplicidade |
+
+Índice: `(import_job_id, row_number)`.
+
+**Casamento de duplicidade de produto** (RN-IMP-001/002): SKU exato → `matchedBy: sku`; nome
+exato (case-insensitive) ou já presente em `products.aliases` → `matchedBy: name`/`alias`. Sem
+fuzzy matching (Levenshtein etc.) nesta rodada. `register_alias` adiciona o nome da planilha ao
+array `aliases` do produto existente, nunca cria um produto novo.
+
+**Estoque inicial** (RN 10.19.8): nunca escreve saldo direto — reaproveita
+`ProductsService.appendCostHistory()` (mesma peça usada no recebimento de compra) para fixar o
+custo e `InventoryService.adjustStock()` para lançar a movimentação de entrada.
+
+**Reversão** (BR §34.8: "reversível antes do aceite final"): soft, nunca apaga — inativa as
+entidades com `status: created` (produto/cliente/fornecedor via `deactivate()`, despesa/conta via
+`cancel()`) e lança um ajuste de estoque compensatório negativo para linhas de estoque inicial.
+Linhas `updated` (alias registrado) não são desfeitas automaticamente — o produto já existia
+antes do import. Só permitida uma vez por `ImportJob` (`status` vira `reverted`).
+
+**Isolamento por linha na confirmação**: cada linha roda dentro de um `SAVEPOINT` da transação
+por-requisição (RLS/`TenantTransactionInterceptor`) — sem isso, um erro de banco numa linha
+abortaria a transação inteira do Postgres e reprovaria silenciosamente todas as linhas
+seguintes, violando RN 10.19.3.
 
 ## Catalog
 
