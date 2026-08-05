@@ -437,6 +437,8 @@ paths:
         disponível ficar negativo (RN 10.7.6). Acima de 50 unidades marca
         requiresApproval=true (sem fila de aprovação real ainda).
       security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
       requestBody:
         required: true
         content:
@@ -620,6 +622,7 @@ paths:
           in: path
           required: true
           schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
       requestBody:
         required: true
         content:
@@ -874,6 +877,7 @@ paths:
           in: path
           required: true
           schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
       requestBody:
         required: true
         content:
@@ -1576,6 +1580,40 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/DreResponse" }
+  /audit:
+    get:
+      tags: [audit]
+      summary: >
+        Trilha de auditoria da empresa, mais recentes primeiro (BR §10.23 regra 4 — requer
+        permission:view_audit, exclusiva do proprietário conforme §9.1).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: entityType
+          in: query
+          schema: { type: string }
+        - name: entityId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, maximum: 200 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AuditLog" }
 
 components:
   securitySchemes:
@@ -1583,6 +1621,17 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+  parameters:
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: >
+        TA-API-002 — chave opcional fornecida pelo cliente para evitar duplicar o efeito de um
+        comando crítico em caso de reenvio (ex.: timeout de rede). Repetir a mesma chave com o
+        mesmo payload devolve a resposta original; com payload diferente é tratado como uma nova
+        operação, não como conflito.
+      schema: { type: string, maxLength: 255 }
   schemas:
     RoleName:
       type: string
@@ -1636,6 +1685,14 @@ components:
         status: { type: string, enum: [active, inactive] }
         categoryId: { type: string, format: uuid, nullable: true }
         brandId: { type: string, format: uuid, nullable: true }
+        variants:
+          type: array
+          description: Variantes operacionais do produto; usar id em compras, estoque e vendas.
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              skuVariant: { type: string }
     StockBalance:
       type: object
       properties:
@@ -1883,6 +1940,21 @@ components:
         paymentFees: { type: string }
         expenses: { type: string }
         netProfit: { type: string }
+    AuditLog:
+      type: object
+      description: Registro de trilha de auditoria (BR §10.23) — somente leitura, append-only.
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        userId: { type: string, format: uuid, nullable: true }
+        action: { type: string }
+        entityType: { type: string }
+        entityId: { type: string, format: uuid, nullable: true }
+        beforeData: { type: object, nullable: true }
+        afterData: { type: object, nullable: true }
+        reason: { type: string, nullable: true }
+        origin: { type: string }
+        createdAt: { type: string, format: date-time }
     ErrorResponse:
       type: object
       description: Formato padrão TA-API-001 (docs/architecture/overview.md, secao 10.2)

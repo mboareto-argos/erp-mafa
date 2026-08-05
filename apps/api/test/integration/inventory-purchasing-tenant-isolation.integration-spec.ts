@@ -4,6 +4,7 @@ import request from 'supertest';
 import { createTestApp } from './utils/test-app';
 import { registerCompany } from './utils/auth-helpers';
 import { createProduct } from './utils/catalog-helpers';
+import { PrismaService } from '../../src/prisma/prisma.service';
 
 // TA-TENANT-004: Inventory é módulo crítico (docs/architecture/overview.md
 // §8.3) — cenário com duas empresas garantindo que uma nunca enxerga nem
@@ -26,15 +27,34 @@ describe('Isolamento multiempresa — Inventory e Purchasing', () => {
     const productA = await createProduct(app, companyA.accessToken);
     const variantIdA = productA.variants[0].id;
 
-    await request(app.getHttpServer())
+    const adjustment = {
+      productVariantId: variantIdA,
+      quantity: 10,
+      reason: 'Estoque inicial',
+    };
+    const firstAdjustment = await request(app.getHttpServer())
       .post('/api/v1/inventory/adjustments')
       .set(auth(companyA.accessToken))
-      .send({
-        productVariantId: variantIdA,
-        quantity: 10,
-        reason: 'Estoque inicial',
-      })
+      .set('Idempotency-Key', 'tenant-adjustment-replay')
+      .send(adjustment)
       .expect(201);
+
+    const replayedAdjustment = await request(app.getHttpServer())
+      .post('/api/v1/inventory/adjustments')
+      .set(auth(companyA.accessToken))
+      .set('Idempotency-Key', 'tenant-adjustment-replay')
+      .send(adjustment)
+      .expect(201);
+    expect(replayedAdjustment.body).toEqual(firstAdjustment.body);
+
+    const auditLogs = await app.get(PrismaService).auditLog.findMany({
+      where: { companyId: companyA.company.id, action: 'stock.adjusted' },
+    });
+    expect(auditLogs).toHaveLength(1);
+    expect(auditLogs[0]).toMatchObject({
+      entityType: 'stock_adjustment',
+      reason: 'Estoque inicial',
+    });
 
     const balancesAsB = await request(app.getHttpServer())
       .get('/api/v1/inventory/balances')

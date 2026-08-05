@@ -79,6 +79,8 @@ model Company {
   payables                Payable[]
   payablePayments         PayablePayment[]
   expenses                Expense[]
+  auditLogs               AuditLog[]
+  idempotencyRecords      IdempotencyRecord[]
 
   @@map("companies")
 }
@@ -137,6 +139,7 @@ model User {
   createdPayables                Payable[]                @relation("PayableCreatedBy")
   createdPayablePayments         PayablePayment[]         @relation("PayablePaymentCreatedBy")
   createdExpenses                Expense[]                @relation("ExpenseCreatedBy")
+  auditLogs                      AuditLog[]               @relation("AuditLogCreatedBy")
 
   @@map("users")
 }
@@ -230,6 +233,47 @@ model RefreshToken {
 
   @@index([userId])
   @@map("refresh_tokens")
+}
+
+// Trilha append-only das operações sensíveis. Não há endpoint de alteração
+// ou remoção: a retenção será uma política administrativa futura.
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  userId      String?  @map("user_id") @db.Uuid
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  beforeData  Json?    @map("before_data")
+  afterData   Json?    @map("after_data")
+  reason      String?
+  origin      String   @default("api")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+  user    User?   @relation("AuditLogCreatedBy", fields: [userId], references: [id])
+
+  @@index([companyId, createdAt])
+  @@index([companyId, entityType, entityId])
+  @@map("audit_logs")
+}
+
+// Protege comandos que geram estoque ou caixa contra repetição de requisição.
+// A resposta concluída é reaproveitada para a mesma chave, empresa e operação.
+model IdempotencyRecord {
+  id          String    @id @default(uuid()) @db.Uuid
+  companyId   String    @map("company_id") @db.Uuid
+  operation   String
+  key         String    @map("idempotency_key")
+  response    Json?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  completedAt DateTime? @map("completed_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, operation, key])
+  @@index([companyId, completedAt])
+  @@map("idempotency_records")
 }
 
 // ---------------------------------------------------------------------------

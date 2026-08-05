@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { JwtAuthGuard } from '../../tenancy/jwt-auth.guard';
 import { PermissionsGuard } from '../../tenancy/permissions.guard';
@@ -14,11 +22,15 @@ import {
   receivePurchaseSchema,
   type ReceivePurchaseDto,
 } from './dto/receive-purchase.schema';
+import { IdempotencyService } from '../../idempotency/idempotency.service';
 
 @Controller('purchasing/purchases')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class PurchasesController {
-  constructor(private readonly purchases: PurchasesService) {}
+  constructor(
+    private readonly purchases: PurchasesService,
+    private readonly idempotency: IdempotencyService,
+  ) {}
 
   @Post()
   @RequirePermission('manage_purchasing')
@@ -56,8 +68,14 @@ export class PurchasesController {
     @CurrentTenant() tenant: CurrentTenantContext,
     @Param('id') id: string,
     @Body(new ZodValidationPipe(receivePurchaseSchema)) dto: ReceivePurchaseDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.purchases.receive(tenant, id, dto);
+    return this.idempotency.execute(
+      tenant.companyId,
+      `purchases.receive:${id}`,
+      idempotencyKey,
+      () => this.purchases.receive(tenant, id, dto),
+    );
   }
 
   @Post(':id/cancel')

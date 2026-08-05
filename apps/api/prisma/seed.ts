@@ -34,6 +34,9 @@ const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'view_payment_methods',
     ...FINANCE_PERMISSIONS,
     'view_reports',
+    // BR §9.1 — "consultar auditoria" é uma permissão exclusiva do
+    // proprietário, não listada para os demais perfis (§9.2-9.6).
+    'view_audit',
   ],
   admin: [
     'manage_catalog',

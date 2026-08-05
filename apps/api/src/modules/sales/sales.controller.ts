@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { JwtAuthGuard } from '../tenancy/jwt-auth.guard';
 import { PermissionsGuard } from '../tenancy/permissions.guard';
@@ -12,11 +20,15 @@ import {
   type ConfirmSaleDto,
 } from './dto/confirm-sale.schema';
 import { returnSaleSchema, type ReturnSaleDto } from './dto/return-sale.schema';
+import { IdempotencyService } from '../idempotency/idempotency.service';
 
 @Controller('sales')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class SalesController {
-  constructor(private readonly sales: SalesService) {}
+  constructor(
+    private readonly sales: SalesService,
+    private readonly idempotency: IdempotencyService,
+  ) {}
 
   @Post()
   @RequirePermission('manage_sales')
@@ -45,8 +57,14 @@ export class SalesController {
     @CurrentTenant() tenant: CurrentTenantContext,
     @Param('id') id: string,
     @Body(new ZodValidationPipe(confirmSaleSchema)) dto: ConfirmSaleDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.sales.confirm(tenant, id, dto);
+    return this.idempotency.execute(
+      tenant.companyId,
+      `sales.confirm:${id}`,
+      idempotencyKey,
+      () => this.sales.confirm(tenant, id, dto),
+    );
   }
 
   @Post(':id/cancel')

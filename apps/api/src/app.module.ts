@@ -17,11 +17,15 @@ import { ReceivablesModule } from './modules/receivables/receivables.module';
 import { PayablesModule } from './modules/payables/payables.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
 import { ReportingModule } from './modules/reporting/reporting.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { IdempotencyModule } from './modules/idempotency/idempotency.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
+    AuditModule,
+    IdempotencyModule,
     IdentityModule,
     TenancyModule,
     CatalogModule,

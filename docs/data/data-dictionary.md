@@ -38,7 +38,9 @@
       como "futuro" em §10.18 do Documento de Negócio (curva ABC, giro de estoque etc.) não
       implementados — decisão explícita.
 - [ ] Suppliers — ver seção Purchasing (já implementado)
-- [ ] Reporting / Notifications / Imports / Audit
+- [ ] Reporting / Notifications / Imports
+- [x] Audit — trilha append-only + `GET /audit` consultável (view_audit); cobertura parcial de
+      eventos, ver `audit_logs` abaixo.
 
 ---
 
@@ -134,6 +136,53 @@ já que o ciclo de vida é criar → revogar, nunca editar).
 Índice: `(user_id)`.
 
 ---
+
+## Audit
+
+### `audit_logs`
+Trilha append-only para operações sensíveis. Não há atualização ou exclusão exposta pela
+aplicação; o registro é criado na mesma transação do evento de origem.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | escopo obrigatório do tenant |
+| user_id | uuid? FK → users | ator; pode ser nulo para automações futuras |
+| action | text | evento estável, ex.: `stock.adjusted` |
+| entity_type / entity_id | text / uuid? | alvo da operação |
+| before_data / after_data | jsonb? | estado relevante, sem senhas ou tokens |
+| reason | text? | obrigatório quando a regra da ação exigir motivo |
+| origin | text | `api` por padrão; preparado para automação/importação |
+| created_at | timestamptz | |
+
+Índices: `(company_id, created_at)` e `(company_id, entity_type, entity_id)`.
+
+**Consulta**: `GET /audit` (permissão `view_audit`, exclusiva do papel `owner` — BR §9.1/§10.23
+regra 4), filtros opcionais `entityType`/`entityId`/`action`/`from`/`to`/`limit` (máx. 200,
+padrão 50), mais recentes primeiro. Escrita cobre hoje 3 eventos (`stock.adjusted`,
+`purchase.received`, `sale.confirmed`) dos ~16 recomendados em BR §10.23 — cobertura completa
+(login, mudança de permissão, cancelamento, alteração de preço etc.) é débito documentado, não
+implementado ainda.
+
+## Idempotência
+
+### `idempotency_records`
+Chaves persistidas por empresa e operação para impedir que uma repetição de comando crítico
+gere um segundo efeito de estoque ou caixa. Após conclusão, a resposta original é devolvida.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | isola a chave por tenant |
+| operation | text | comando e recurso, ex.: `sales.confirm:{id}` |
+| idempotency_key | text | valor do cabeçalho HTTP |
+| response | jsonb? | resposta concluída; nula enquanto processa |
+| created_at / completed_at | timestamptz | ciclo técnico do comando |
+
+Constraints: `UNIQUE(company_id, operation, idempotency_key)` · índice `(company_id, completed_at)`.
+
+Cabeçalho opcional `Idempotency-Key` (TA-API-002) aceito hoje em `POST /inventory/adjustments`,
+`POST /purchasing/purchases/:id/receive` e `POST /sales/:id/confirm`.
 
 ## Catalog
 

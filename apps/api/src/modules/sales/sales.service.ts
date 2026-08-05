@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AppError } from '../../common/errors/app-error';
 import { InventoryService } from '../inventory/inventory.service';
 import { CashFlowService } from '../cash-flow/cash-flow.service';
+import { AuditService } from '../audit/audit.service';
 import { CurrentTenantContext } from '../tenancy/jwt-payload.interface';
 import { CreateSaleDto } from './dto/create-sale.schema';
 import { ConfirmSaleDto } from './dto/confirm-sale.schema';
@@ -26,6 +27,7 @@ export class SalesService {
     private readonly prisma: PrismaService,
     private readonly inventory: InventoryService,
     private readonly cashFlow: CashFlowService,
+    private readonly audit: AuditService,
   ) {}
 
   // Rascunho — RN 10.10.1: nao altera estoque nem custo.
@@ -231,7 +233,7 @@ export class SalesService {
 
       const { cmv, grossProfit } = calculateCmvAndProfit(costItems, sale.total);
 
-      return tx.sale.update({
+      const confirmedSale = await tx.sale.update({
         where: { id: saleId },
         data: {
           status: 'confirmed',
@@ -240,6 +242,20 @@ export class SalesService {
         },
         include: INCLUDE_DETAILS,
       });
+      await this.audit.record(tx, {
+        companyId: tenant.companyId,
+        userId: tenant.userId,
+        action: 'sale.confirmed',
+        entityType: 'sale',
+        entityId: saleId,
+        beforeData: { status: sale.status },
+        afterData: {
+          status: confirmedSale.status,
+          total: confirmedSale.total.toString(),
+          cmv: cmv.toString(),
+        },
+      });
+      return confirmedSale;
     });
 
     return updatedSale;

@@ -3,6 +3,7 @@ import { Prisma, StockMovementOriginType } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AppError } from '../../common/errors/app-error';
+import { AuditService } from '../audit/audit.service';
 import { ProductsService } from '../catalog/products/products.service';
 import { CurrentTenantContext } from '../tenancy/jwt-payload.interface';
 import { calculateMovingAverageCost } from './moving-average';
@@ -18,6 +19,7 @@ export class InventoryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly products: ProductsService,
+    private readonly audit: AuditService,
   ) {}
 
   // Chamado pelo Purchasing dentro da MESMA transacao do recebimento
@@ -324,6 +326,20 @@ export class InventoryService {
         update: {
           quantityAvailable: { increment: delta },
         },
+      });
+
+      await this.audit.record(tx, {
+        companyId: tenant.companyId,
+        userId: tenant.userId,
+        action: 'stock.adjusted',
+        entityType: 'stock_adjustment',
+        entityId: adjustment.id,
+        afterData: {
+          productVariantId: dto.productVariantId,
+          quantity: delta.toString(),
+          requiresApproval,
+        },
+        reason: dto.reason,
       });
 
       return { movement, adjustment };

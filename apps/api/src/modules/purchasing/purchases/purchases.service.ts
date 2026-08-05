@@ -3,6 +3,7 @@ import { Prisma, PurchaseStatus } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AppError } from '../../../common/errors/app-error';
 import { InventoryService } from '../../inventory/inventory.service';
+import { AuditService } from '../../audit/audit.service';
 import { CurrentTenantContext } from '../../tenancy/jwt-payload.interface';
 import { CreatePurchaseDto } from './dto/create-purchase.schema';
 import { ReceivePurchaseDto } from './dto/receive-purchase.schema';
@@ -19,6 +20,7 @@ export class PurchasesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly inventory: InventoryService,
+    private readonly audit: AuditService,
   ) {}
 
   // Rascunho — RN 10.6.1: nao altera estoque.
@@ -244,11 +246,28 @@ export class PurchasesService {
         ),
       );
 
-      return tx.purchase.update({
+      const receivedPurchase = await tx.purchase.update({
         where: { id: purchaseId },
         data: { status: fullyReceived ? 'received' : 'partially_received' },
         include: INCLUDE_DETAILS,
       });
+      await this.audit.record(tx, {
+        companyId: tenant.companyId,
+        userId: tenant.userId,
+        action: 'purchase.received',
+        entityType: 'purchase',
+        entityId: purchaseId,
+        beforeData: { status: purchase.status },
+        afterData: {
+          status: receivedPurchase.status,
+          receiptId: receipt.id,
+          items: dto.items.map((item) => ({
+            purchaseItemId: item.purchaseItemId,
+            quantityReceived: item.quantityReceived,
+          })),
+        },
+      });
+      return receivedPurchase;
     });
 
     return updatedPurchase;
