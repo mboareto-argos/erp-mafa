@@ -91,6 +91,10 @@ export class ProductsService {
       include: {
         category: true,
         brand: true,
+        // A variante padrão é a identidade operacional usada por estoque,
+        // compras e vendas. Expô-la na leitura evita que a UI invente IDs
+        // ou tente derivá-los do SKU (TA-ARCH-001 / TA-TENANT-002).
+        variants: { select: { id: true, skuVariant: true } },
         prices: { orderBy: { effectiveFrom: 'desc' }, take: 1 },
       },
       orderBy: { name: 'asc' },
