@@ -1,17 +1,28 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
 // Familia tipografica definida em docs/product/design-system.md, secao 4.4
 // (token font.family em packages/design-tokens/tokens.json).
-const fontSans = Inter({
+const fontSans = localFont({
+  src: [
+    { path: "./fonts/inter-400.ttf", weight: "400", style: "normal" },
+    { path: "./fonts/inter-600.ttf", weight: "600", style: "normal" },
+    { path: "./fonts/inter-700.ttf", weight: "700", style: "normal" },
+  ],
   variable: "--font-sans",
-  subsets: ["latin"],
+  display: "swap",
+  fallback: ["Arial", "sans-serif"],
 });
 
-const fontMono = JetBrains_Mono({
+const fontMono = localFont({
+  src: [
+    { path: "./fonts/jetbrains-mono-400.ttf", weight: "400", style: "normal" },
+    { path: "./fonts/jetbrains-mono-600.ttf", weight: "600", style: "normal" },
+  ],
   variable: "--font-mono",
-  subsets: ["latin"],
+  display: "swap",
+  fallback: ["monospace"],
 });
 
 export const metadata: Metadata = {
