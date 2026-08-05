@@ -8,5 +8,6 @@ import { PayablesService } from './payables.service';
   imports: [TenancyModule, CashFlowModule],
   controllers: [PayablesController],
   providers: [PayablesService],
+  exports: [PayablesService],
 })
 export class PayablesModule {}

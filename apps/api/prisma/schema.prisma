@@ -82,6 +82,8 @@ model Company {
   expenses                Expense[]
   auditLogs               AuditLog[]
   idempotencyRecords      IdempotencyRecord[]
+  importJobs              ImportJob[]
+  importRows              ImportRow[]
 
   @@map("companies")
 }
@@ -141,6 +143,8 @@ model User {
   createdPayablePayments         PayablePayment[]         @relation("PayablePaymentCreatedBy")
   createdExpenses                Expense[]                @relation("ExpenseCreatedBy")
   auditLogs                      AuditLog[]               @relation("AuditLogCreatedBy")
+  createdImportJobs              ImportJob[]              @relation("ImportJobCreatedBy")
+  revertedImportJobs             ImportJob[]              @relation("ImportJobRevertedBy")
 
   @@map("users")
 }
@@ -275,6 +279,93 @@ model IdempotencyRecord {
   @@unique([companyId, operation, key])
   @@index([companyId, completedAt])
   @@map("idempotency_records")
+}
+
+// ---------------------------------------------------------------------------
+// Imports (BR §10.19, RN-IMP-001/002, overview.md secao 6.7) — migracao das
+// planilhas da MAFA Store. Fase 6 do roadmap.
+// ---------------------------------------------------------------------------
+
+enum ImportEntityType {
+  product
+  initial_stock
+  customer
+  supplier
+  expense
+  payable
+  receivable
+}
+
+enum ImportJobStatus {
+  completed
+  reverted
+}
+
+// Nunca apaga uma linha ja criada — reverter (RN §34.8 "reversivel antes do
+// aceite final") inativa as entidades geradas e lanca um ajuste
+// compensatorio de estoque quando aplicavel, mantendo TA-DATA-001.
+model ImportJob {
+  id             String           @id @default(uuid()) @db.Uuid
+  companyId      String           @map("company_id") @db.Uuid
+  entityType     ImportEntityType @map("entity_type")
+  status         ImportJobStatus  @default(completed)
+  fileName       String?          @map("file_name")
+  totalRows      Int              @map("total_rows")
+  createdCount   Int              @map("created_count")
+  updatedCount   Int              @map("updated_count")
+  skippedCount   Int              @map("skipped_count")
+  rejectedCount  Int              @map("rejected_count")
+  // Total informado pelo usuario a partir da planilha original — comparado
+  // com a soma das linhas efetivamente criadas (RN §34.8: "a soma das vendas/
+  // recebimentos importados devera ser conciliada com as planilhas").
+  expectedTotal  Decimal?         @map("expected_total") @db.Decimal(14, 2)
+  reconciledTotal Decimal?        @map("reconciled_total") @db.Decimal(14, 2)
+  createdAt      DateTime         @default(now()) @map("created_at")
+  createdBy      String?          @map("created_by") @db.Uuid
+  revertedAt     DateTime?        @map("reverted_at")
+  revertedBy     String?          @map("reverted_by") @db.Uuid
+
+  company         Company     @relation(fields: [companyId], references: [id])
+  createdByUser   User?       @relation("ImportJobCreatedBy", fields: [createdBy], references: [id])
+  revertedByUser  User?       @relation("ImportJobRevertedBy", fields: [revertedBy], references: [id])
+  rows            ImportRow[]
+
+  @@index([companyId, entityType, createdAt])
+  @@map("import_jobs")
+}
+
+enum ImportRowStatus {
+  created
+  updated
+  skipped
+  rejected
+}
+
+enum ImportDuplicateAction {
+  use_existing
+  create_new
+  register_alias
+  ignore
+}
+
+model ImportRow {
+  id               String                 @id @default(uuid()) @db.Uuid
+  importJobId      String                 @map("import_job_id") @db.Uuid
+  companyId        String                 @map("company_id") @db.Uuid
+  rowNumber        Int                    @map("row_number")
+  rawData          Json                   @map("raw_data")
+  status           ImportRowStatus
+  errors           Json?
+  resultEntityType String?                @map("result_entity_type")
+  resultEntityId   String?                @map("result_entity_id") @db.Uuid
+  duplicateAction  ImportDuplicateAction? @map("duplicate_action")
+  createdAt        DateTime               @default(now()) @map("created_at")
+
+  importJob ImportJob @relation(fields: [importJobId], references: [id])
+  company   Company   @relation(fields: [companyId], references: [id])
+
+  @@index([importJobId, rowNumber])
+  @@map("import_rows")
 }
 
 // ---------------------------------------------------------------------------

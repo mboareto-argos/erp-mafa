@@ -15,17 +15,21 @@ export class PrismaService
   constructor() {
     super();
     return new Proxy(this, {
-      get: (target, property, receiver) => {
+      get: (target, property, receiver): unknown => {
         const transaction = PrismaService.tenantTransaction.getStore();
         if (transaction) {
           if (property === '$transaction') {
             return async <T>(callback: (tx: TransactionClient) => Promise<T>) =>
               callback(transaction);
           }
-          const value = Reflect.get(transaction, property, transaction);
+          const value: unknown = Reflect.get(
+            transaction,
+            property,
+            transaction,
+          );
           if (value !== undefined) {
             return typeof value === 'function'
-              ? value.bind(transaction)
+              ? (value as (...args: unknown[]) => unknown).bind(transaction)
               : value;
           }
         }

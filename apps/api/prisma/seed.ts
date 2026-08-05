@@ -37,6 +37,10 @@ const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     // BR §9.1 — "consultar auditoria" é uma permissão exclusiva do
     // proprietário, não listada para os demais perfis (§9.2-9.6).
     'view_audit',
+    // BR §10.19 (Fase 6) — importação é dado sensível de migração; mesmo
+    // nível de exclusividade de "exportar dados"/"configurar integrações"
+    // do proprietário (§9.1).
+    'manage_imports',
   ],
   admin: [
     'manage_catalog',

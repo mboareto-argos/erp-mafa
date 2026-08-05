@@ -10,5 +10,6 @@ import { PurchasesService } from './purchases/purchases.service';
   imports: [TenancyModule, InventoryModule],
   controllers: [SuppliersController, PurchasesController],
   providers: [SuppliersService, PurchasesService],
+  exports: [SuppliersService],
 })
 export class PurchasingModule {}

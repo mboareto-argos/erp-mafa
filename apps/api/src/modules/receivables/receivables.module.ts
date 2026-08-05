@@ -8,5 +8,6 @@ import { ReceivablesService } from './receivables.service';
   imports: [TenancyModule, CashFlowModule],
   controllers: [ReceivablesController],
   providers: [ReceivablesService],
+  exports: [ReceivablesService],
 })
 export class ReceivablesModule {}
