@@ -3,8 +3,8 @@
 ERP simplificado, piloto na **MAFA Store**, com fundação já pensada para evoluir para uma
 plataforma multiempresa (SaaS) para pequenos vendedores.
 
-Este repositório é a **base do projeto**: ainda não tem `apps/web` e `apps/api` implementados,
-mas já tem toda a documentação de fundação necessária para começar.
+Este repositório contém a fundação do projeto: a API Nest.js/Prisma já cobre as Fases 1–5
+do roadmap, e a web Next.js está sendo construída sobre o Design System e os wireframes.
 
 ## Comece por aqui
 
@@ -19,7 +19,7 @@ mas já tem toda a documentação de fundação necessária para começar.
 ## Estrutura
 
 ```
-apps/           web (Next.js) e api (Nest.js) — a implementar
+apps/           web (Next.js) e api (Nest.js)
 packages/       tokens de design, tipos compartilhados, UI compartilhada, config
 docs/           toda a documentação de produto, arquitetura, API, dados, testes e operação
 ```
@@ -37,11 +37,30 @@ Projeto pensado para desenvolvimento com apoio de agentes de IA no [Zed](https:/
 Leia `AGENTS.md` antes de começar qualquer implementação — ele resume as regras de negócio
 e técnicas que nunca podem ser violadas.
 
-## Próximos passos sugeridos
+## Estado atual e próximos passos
 
-1. `pnpm dlx create-turbo@latest` (ou configurar manualmente) para finalizar o scaffold do
-   monorepo em cima da estrutura já existente.
-2. Scaffold de `apps/web` (Next.js) e `apps/api` (Nest.js) — ver `README.md` de cada pasta.
-3. Modelagem do schema Prisma a partir de `docs/architecture/overview.md`, seção 6 e 7.
-4. Primeira fase do roadmap: Identity, Tenancy, Catalog (ver `docs/architecture/overview.md`,
-   seção 15).
+1. API: Fases 1–5 implementadas (fundação, estoque/compras, vendas, financeiro e reporting),
+   mais auditoria (escrita + consulta) e idempotência (TA-API-002) nos comandos críticos.
+2. Web: as 8 telas de negócio (início, produtos, estoque, compras, fornecedores, vendas,
+   financeiro, clientes) existem com dados reais, sessão via cookies httpOnly e permissões
+   aplicadas — construídas sobre o Design System (tokens Tailwind derivados de
+   `packages/design-tokens/tokens.json`).
+3. Fase 6: importação, conciliação e validação com a operação da MAFA Store.
+
+### Débito técnico conhecido
+
+Registrado deliberadamente como pendência, não implementado ainda:
+
+- **Auditoria parcial** (BR §10.23): só 3 dos ~16 eventos recomendados são registrados hoje
+  (`stock.adjusted`, `purchase.received`, `sale.confirmed`) — faltam login, criação/edição de
+  usuário, mudança de permissão, criação/edição de produto, cancelamento de venda, alteração de
+  preço, desconto, pagamento, mudança de vencimento, import/export, mudança de configuração,
+  exclusão lógica e estorno. Consulta já existe (`GET /audit`, permissão `view_audit`).
+- **CRUD só de criação no web**: nenhuma das 8 telas de negócio tem edição ou exclusão lógica
+  ainda — só listar e criar.
+- **Sem paginação/busca/filtro** nas listas do web (aceitável na escala atual, revisar quando o
+  catálogo/base de clientes crescer).
+- **Sem testes automatizados no `apps/web`** — nenhum framework de teste (vitest/playwright)
+  configurado ainda; toda a cobertura de teste do projeto está em `apps/api`.
+- **`quick-purchase-form` só aceita 1 item por compra** — inconsistente com o formulário de
+  venda rápida, que já suporta múltiplas linhas.
