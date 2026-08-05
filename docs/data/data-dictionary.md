@@ -159,8 +159,9 @@ aplicação; o registro é criado na mesma transação do evento de origem.
 
 **Consulta**: `GET /audit` (permissão `view_audit`, exclusiva do papel `owner` — BR §9.1/§10.23
 regra 4), filtros opcionais `entityType`/`entityId`/`action`/`from`/`to`/`limit` (máx. 200,
-padrão 50), mais recentes primeiro. Escrita cobre hoje 3 eventos (`stock.adjusted`,
-`purchase.received`, `sale.confirmed`) dos ~16 recomendados em BR §10.23 — cobertura completa
+padrão 50), mais recentes primeiro. Escrita cobre `stock.adjusted`, `purchase.received`,
+`sale.confirmed`, `product.repriced`, `receivable.paid`, `receivable.cancelled`,
+`payable.paid`, `payable.cancelled` e `transfer.created` — cobertura completa
 (login, mudança de permissão, cancelamento, alteração de preço etc.) é débito documentado, não
 implementado ainda.
 
@@ -182,7 +183,9 @@ gere um segundo efeito de estoque ou caixa. Após conclusão, a resposta origina
 Constraints: `UNIQUE(company_id, operation, idempotency_key)` · índice `(company_id, completed_at)`.
 
 Cabeçalho opcional `Idempotency-Key` (TA-API-002) aceito hoje em `POST /inventory/adjustments`,
-`POST /purchasing/purchases/:id/receive` e `POST /sales/:id/confirm`.
+`POST /purchasing/purchases/:id/receive`, `POST /sales/:id/confirm`,
+`POST /receivables/:id/pay`, `POST /payables/:id/pay` e
+`POST /cash-flow/transfers`.
 
 ## Catalog
 
@@ -211,6 +214,12 @@ auditoria TA-DATA-001. `UNIQUE(company_id, name)` · índice `(company_id, statu
 | created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
 
 Constraints: `UNIQUE(company_id, sku)` · índice `(company_id, status)`.
+
+**API**: `PATCH /catalog/products/:id` edita campos cadastrais (nunca preço/custo — ver
+`product_prices` abaixo); `PATCH /:id/reactivate` (BR US-PROD-002) espelha `/:id/deactivate`;
+`GET /catalog/products` aceita `q`/`page`/`pageSize` opcionais — sem `page` devolve o array
+completo de sempre (retrocompatível com os seletores de produto em Compras/Vendas/Estoque), com
+`page` devolve `{items,total,page,pageSize}`.
 
 ### `product_variants`
 
@@ -242,6 +251,11 @@ sobrescreve a anterior.
 | created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
 
 Índice: `(company_id, product_id, effective_from)`.
+
+**API**: `POST /catalog/products/:id/reprice` (BR §10.3 regras 8-9) é a única forma de mudar
+`sale_price` — insere uma nova linha aqui (nunca edita a existente) e grava um
+`audit_logs` com `action: 'product.repriced'` e o `reason` informado. `cost_price` é
+calculado por recebimentos/ajustes autorizados, nunca digitado nesse comando (DS-FORM-004).
 
 ### `product_tags`
 Tabela de associação explícita `products` ↔ `tags` (em vez de m:n implícito do Prisma), para
@@ -355,6 +369,11 @@ Fonte: `apps/api/prisma/schema.prisma`, migration `20260804175603_add_inventory_
 
 Índice: `(company_id, status)`.
 
+**API**: `PATCH /purchasing/suppliers/:id` (campos cadastrais) e `PATCH /:id/reactivate`,
+mesmo padrão de `products` acima. `GET /purchasing/suppliers` também aceita
+`q`/`page`/`pageSize` opcionais, retrocompatível (sem `page`, array completo, usado pelo
+seletor de fornecedor em Compras).
+
 ### `purchases`
 Sem status financeiro ainda (Payables é Fase 4, fora de escopo — sinalizado explicitamente).
 
@@ -458,6 +477,10 @@ Fase 4). Ver decisão registrada no histórico de commits (Fase 3).
 | created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
 
 Índice: `(company_id, status)`.
+
+**API**: `PATCH /customers/:id` (campos cadastrais) e `PATCH /:id/reactivate`, mesmo padrão de
+`products`/`suppliers` acima. `GET /customers` também aceita `q`/`page`/`pageSize` opcionais,
+retrocompatível (sem `page`, array completo, usado pelo seletor de cliente em Vendas).
 
 ### `payment_methods`
 Sem prazo de recebimento nem configuração de parcelas ainda (venda só à vista nesta fase).

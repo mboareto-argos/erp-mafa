@@ -311,8 +311,9 @@ paths:
       tags: [catalog]
       summary: >
         Cria produto (requer permission:manage_catalog). Cria automaticamente
-        uma ProductVariant padrão e, se referenceCost e salePrice forem
-        informados juntos, a primeira linha de ProductPrice (DS-FORM-004).
+        uma ProductVariant padrão e, se salePrice for informado, a primeira
+        linha de ProductPrice. O custo inicial é calculado como zero até o
+        primeiro recebimento; ele não é aceito neste endpoint (DS-FORM-004).
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -327,12 +328,9 @@ paths:
                 unit: { type: string }
                 categoryId: { type: string, format: uuid }
                 brandId: { type: string, format: uuid }
-                referenceCost:
-                  type: number
-                  description: Exige salePrice junto, ou nenhum dos dois.
                 salePrice:
                   type: number
-                  description: Exige referenceCost junto, ou nenhum dos dois.
+                  description: Preço de venda padrão inicial, opcional.
       responses:
         "201":
           description: Criado
@@ -351,16 +349,62 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
     get:
       tags: [catalog]
-      summary: Lista produtos da empresa ativa, com preço vigente (requer permission:view_catalog)
+      summary: >
+        Lista produtos da empresa ativa, com preço vigente (requer permission:view_catalog).
+        Sem `page`, devolve o array completo de sempre (retrocompatível — é o que
+        compras/vendas/estoque usam pra preencher seletor de produto). Com `page`, muda de
+        formato para `{items,total,page,pageSize}`.
       security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/SearchQuery"
+        - $ref: "#/components/parameters/PageQuery"
+        - $ref: "#/components/parameters/PageSizeQuery"
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: "#/components/schemas/Product" }
+                oneOf:
+                  - type: array
+                    items: { $ref: "#/components/schemas/Product" }
+                  - $ref: "#/components/schemas/PaginatedProducts"
+  /catalog/products/{id}:
+    patch:
+      tags: [catalog]
+      summary: >
+        Edita campos cadastrais do produto (requer permission:manage_catalog). Nunca aceita
+        salePrice/custo — preço só muda via /reprice; custo é calculado por recebimentos
+        e nunca é aceito como edição manual (BR §10.3 regras 8-9; DS-FORM-004).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sku: { type: string }
+                name: { type: string }
+                unit: { type: string }
+                categoryId: { type: string, format: uuid }
+                brandId: { type: string, format: uuid }
+                minStock: { type: number }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "409":
+          description: SKU já em uso nesta empresa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
   /catalog/products/{id}/deactivate:
     patch:
       tags: [catalog]
@@ -374,6 +418,51 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+  /catalog/products/{id}/reactivate:
+    patch:
+      tags: [catalog]
+      summary: Reativa o produto (BR US-PROD-002)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+  /catalog/products/{id}/reprice:
+    post:
+      tags: [catalog]
+      summary: >
+        Reprecifica o produto (requer permission:manage_catalog). Nunca edita um ProductPrice
+        existente — insere uma nova linha de histórico e registra auditoria com o motivo
+        informado (BR §10.3 regras 8-9).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [salePrice, reason]
+              properties:
+                salePrice: { type: number }
+                reason: { type: string }
+      responses:
+        "201":
+          description: Criado
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Product" }
@@ -495,20 +584,73 @@ paths:
               schema: { $ref: "#/components/schemas/Supplier" }
     get:
       tags: [purchasing]
-      summary: Lista fornecedores (requer permission:view_purchasing)
+      summary: >
+        Lista fornecedores (requer permission:view_purchasing). Sem `page`, array completo
+        (retrocompatível — usado pelo seletor de fornecedor em Compras). Com `page`, formato
+        `{items,total,page,pageSize}`.
       security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/SearchQuery"
+        - $ref: "#/components/parameters/PageQuery"
+        - $ref: "#/components/parameters/PageSizeQuery"
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: "#/components/schemas/Supplier" }
+                oneOf:
+                  - type: array
+                    items: { $ref: "#/components/schemas/Supplier" }
+                  - $ref: "#/components/schemas/PaginatedSuppliers"
+  /purchasing/suppliers/{id}:
+    patch:
+      tags: [purchasing]
+      summary: Edita campos cadastrais do fornecedor (requer permission:manage_purchasing)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                document: { type: string }
+                contactName: { type: string }
+                phone: { type: string }
+                whatsapp: { type: string }
+                email: { type: string, format: email }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Supplier" }
   /purchasing/suppliers/{id}/deactivate:
     patch:
       tags: [purchasing]
       summary: Inativa o fornecedor (nunca deleta)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Supplier" }
+  /purchasing/suppliers/{id}/reactivate:
+    patch:
+      tags: [purchasing]
+      summary: Reativa o fornecedor
       security: [{ bearerAuth: [] }]
       parameters:
         - name: id
@@ -716,20 +858,73 @@ paths:
               schema: { $ref: "#/components/schemas/Customer" }
     get:
       tags: [customers]
-      summary: Lista clientes (requer permission:view_customers)
+      summary: >
+        Lista clientes (requer permission:view_customers). Sem `page`, array completo
+        (retrocompatível — usado pelo seletor de cliente em Vendas). Com `page`, formato
+        `{items,total,page,pageSize}`.
       security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/SearchQuery"
+        - $ref: "#/components/parameters/PageQuery"
+        - $ref: "#/components/parameters/PageSizeQuery"
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: "#/components/schemas/Customer" }
+                oneOf:
+                  - type: array
+                    items: { $ref: "#/components/schemas/Customer" }
+                  - $ref: "#/components/schemas/PaginatedCustomers"
+  /customers/{id}:
+    patch:
+      tags: [customers]
+      summary: Edita campos cadastrais do cliente (requer permission:manage_customers)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                whatsapp: { type: string }
+                phone: { type: string }
+                email: { type: string, format: email }
+                instagram: { type: string }
+                birthDate: { type: string, format: date }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
   /customers/{id}/deactivate:
     patch:
       tags: [customers]
       summary: Inativa o cliente (nunca deleta — histórico de compras permanece, RN 10.9.4)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+  /customers/{id}/reactivate:
+    patch:
+      tags: [customers]
+      summary: Reativa o cliente
       security: [{ bearerAuth: [] }]
       parameters:
         - name: id
@@ -1086,6 +1281,8 @@ paths:
         Transferência entre contas próprias (requer permission:manage_financial_accounts) —
         nunca é receita/despesa (RN 10.13.2/10.16.5), gera duas FinancialTransaction.
       security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
       requestBody:
         required: true
         content:
@@ -1181,6 +1378,7 @@ paths:
           in: path
           required: true
           schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
       requestBody:
         required: true
         content:
@@ -1291,6 +1489,7 @@ paths:
           in: path
           required: true
           schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
       requestBody:
         required: true
         content:
@@ -1632,6 +1831,26 @@ components:
         mesmo payload devolve a resposta original; com payload diferente é tratado como uma nova
         operação, não como conflito.
       schema: { type: string, maxLength: 255 }
+    SearchQuery:
+      name: q
+      in: query
+      required: false
+      description: Busca por nome (contains, case-insensitive).
+      schema: { type: string }
+    PageQuery:
+      name: page
+      in: query
+      required: false
+      description: >
+        Presença deste parâmetro é o que ativa a paginação — sem ele a resposta é o array
+        completo de sempre (retrocompatível com os seletores de produto/fornecedor/cliente
+        usados em Compras/Vendas).
+      schema: { type: integer, minimum: 1 }
+    PageSizeQuery:
+      name: pageSize
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
   schemas:
     RoleName:
       type: string
@@ -1693,6 +1912,13 @@ components:
             properties:
               id: { type: string, format: uuid }
               skuVariant: { type: string }
+    PaginatedProducts:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Product" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
     StockBalance:
       type: object
       properties:
@@ -1730,6 +1956,13 @@ components:
         name: { type: string }
         document: { type: string, nullable: true }
         status: { type: string, enum: [active, inactive] }
+    PaginatedSuppliers:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Supplier" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
     Purchase:
       type: object
       properties:
@@ -1774,6 +2007,13 @@ components:
         email: { type: string, nullable: true }
         instagram: { type: string, nullable: true }
         status: { type: string, enum: [active, inactive] }
+    PaginatedCustomers:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Customer" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
     PaymentMethod:
       type: object
       properties:
