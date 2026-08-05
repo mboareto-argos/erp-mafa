@@ -135,14 +135,13 @@ describe('Auth + Catalog — fluxo completo (integração)', () => {
         name: 'Body Splash 200ml',
         unit: 'un',
         categoryId: category.body.id,
-        referenceCost: 15.5,
         salePrice: 39.9,
       })
       .expect(201);
 
     expect(product.body.variants).toHaveLength(1);
     expect(product.body.prices).toHaveLength(1);
-    expect(product.body.prices[0].costPrice).toBe('15.5');
+    expect(product.body.prices[0].costPrice).toBe('0');
 
     const list = await request(app.getHttpServer())
       .get('/api/v1/catalog/products')
@@ -153,7 +152,7 @@ describe('Auth + Catalog — fluxo completo (integração)', () => {
     expect(list.body[0].prices[0].salePrice).toBe('39.9');
   });
 
-  it('exige custo de referência e preço de venda juntos, nunca só um dos dois', async () => {
+  it('rejeita custo digitado diretamente no cadastro do produto', async () => {
     const session = await registerCompany(app);
 
     await request(app.getHttpServer())
@@ -163,6 +162,7 @@ describe('Auth + Catalog — fluxo completo (integração)', () => {
         sku: 'SKU-TEST-2',
         name: 'Produto sem par',
         unit: 'un',
+        salePrice: 39.9,
         referenceCost: 10,
       })
       .expect(400)
@@ -208,9 +208,9 @@ describe('Auth + Catalog — fluxo completo (integração)', () => {
 
     expect(deactivated.body.status).toBe('inactive');
 
-    const stillExists = await prisma.category.findUnique({
-      where: { id: category.body.id },
-    });
+    const stillExists = await prisma.withTenant(session.company.id, () =>
+      prisma.category.findUnique({ where: { id: category.body.id } }),
+    );
     expect(stillExists).not.toBeNull();
     expect(stillExists?.deletedAt).toBeNull();
   });

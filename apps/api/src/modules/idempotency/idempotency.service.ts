@@ -23,16 +23,11 @@ export class IdempotencyService {
         HttpStatus.BAD_REQUEST,
         'Idempotency-Key',
       );
-    try {
-      await this.prisma.idempotencyRecord.create({
-        data: { companyId, operation, key },
-      });
-    } catch (error) {
-      if (
-        !(error instanceof Prisma.PrismaClientKnownRequestError) ||
-        error.code !== 'P2002'
-      )
-        throw error;
+    const created = await this.prisma.idempotencyRecord.createMany({
+      data: { companyId, operation, key },
+      skipDuplicates: true,
+    });
+    if (created.count === 0) {
       const previous = await this.prisma.idempotencyRecord.findUniqueOrThrow({
         where: { companyId_operation_key: { companyId, operation, key } },
       });
