@@ -32,6 +32,11 @@
 - [x] Financeiro (FinancialAccount, CashFlow, Receivables, Payables, Expenses) — ver abaixo
       (migration `20260804190647_add_finance`). Compra recebida gerando `Payable` automática
       ainda não existe — decisão explícita, fica pra uma etapa futura que reabra o Purchasing.
+- [x] Reporting (Dashboard, relatórios, DRE gerencial) — Fase 5, **sem tabela nova** — só
+      agregação de leitura sobre as tabelas já existentes (Sale/SaleItem/Expense/Receivable/
+      Payable/FinancialTransaction/StockBalance). Exportação (CSV/XLSX) e os relatórios listados
+      como "futuro" em §10.18 do Documento de Negócio (curva ABC, giro de estoque etc.) não
+      implementados — decisão explícita.
 - [ ] Suppliers — ver seção Purchasing (já implementado)
 - [ ] Reporting / Notifications / Imports / Audit
 

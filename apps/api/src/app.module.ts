@@ -16,6 +16,7 @@ import { FinancialAccountsModule } from './modules/financial-accounts/financial-
 import { ReceivablesModule } from './modules/receivables/receivables.module';
 import { PayablesModule } from './modules/payables/payables.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
+import { ReportingModule } from './modules/reporting/reporting.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { ExpensesModule } from './modules/expenses/expenses.module';
     ReceivablesModule,
     PayablesModule,
     ExpensesModule,
+    ReportingModule,
   ],
   controllers: [AppController],
   providers: [AppService],

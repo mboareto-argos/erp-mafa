@@ -3,7 +3,7 @@ import { PrismaClient, RoleName } from '@prisma/client';
 // Papeis fixos do sistema (docs/architecture/overview.md, secao 9.2). O
 // vocabulario de permissoes cresce junto com cada modulo implementado —
 // hoje cobre Catalog (Fase 1) + Inventory/Purchasing (Fase 2) +
-// Sales/Customers/Payments (Fase 3) + Financeiro (Fase 4).
+// Sales/Customers/Payments (Fase 3) + Financeiro (Fase 4) + Reporting (Fase 5).
 const FINANCE_PERMISSIONS = [
   'manage_expenses', // ja existia desde a Fase 1, so' ganha endpoint real agora
   'view_expenses',
@@ -33,6 +33,7 @@ const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'manage_payment_methods',
     'view_payment_methods',
     ...FINANCE_PERMISSIONS,
+    'view_reports',
   ],
   admin: [
     'manage_catalog',
@@ -50,6 +51,7 @@ const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'manage_payment_methods',
     'view_payment_methods',
     ...FINANCE_PERMISSIONS,
+    'view_reports',
   ],
   // Vendedor: sem view_cost/view_profit/manage_expenses (§9.2); consulta
   // disponibilidade de estoque (§9.3), sem acesso a compras. Registra
@@ -84,6 +86,7 @@ const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'manage_payment_methods',
     'view_payment_methods',
     ...FINANCE_PERMISSIONS,
+    'view_reports',
   ],
   // Visualizador: somente leitura (§9.2 — réplica read-only simplificada).
   viewer: [
@@ -98,6 +101,7 @@ const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'view_cash_flow',
     'view_receivables',
     'view_payables',
+    'view_reports',
   ],
 };
 

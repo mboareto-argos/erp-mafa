@@ -34,6 +34,11 @@ tags:
     description: Contas a pagar
   - name: expenses
     description: Despesas
+  - name: reporting
+    description: >
+      Dashboard, relatórios e DRE gerencial (docs/architecture/overview.md §10.17/§10.18) —
+      só leitura, agrega dados já existentes. Exportação e relatórios avançados (curva ABC,
+      giro de estoque etc.) ainda não implementados.
 paths:
   /auth/register:
     post:
@@ -1414,6 +1419,164 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
 
+  /reporting/dashboard:
+    get:
+      tags: [reporting]
+      summary: >
+        Indicadores consolidados do período + comparação com o período anterior equivalente
+        (requer permission:view_reports). cmv/grossProfit/netProfitEstimated/margin só aparecem
+        na resposta se o usuário tiver view_cost/view_profit (RN 10.17.2 — omitido no servidor).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DashboardResponse" }
+        "400":
+          description: Período ausente ou inválido
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /reporting/sales:
+    get:
+      tags: [reporting]
+      summary: Vendas do período com totais agregados (requer permission:view_reports)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: channel
+          in: query
+          schema: { type: string, enum: [presencial, whatsapp, instagram, catalogo, outro] }
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, confirmed, cancelled, partially_returned, returned] }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  period: { type: object, properties: { from: { type: string, format: date-time }, to: { type: string, format: date-time } } }
+                  filters: { type: object }
+                  totals:
+                    type: object
+                    properties:
+                      grossRevenue: { type: string }
+                      netRevenue: { type: string }
+                      cmv: { type: string }
+                      grossProfit: { type: string }
+                      salesCount: { type: integer }
+                  sales:
+                    type: array
+                    items: { $ref: "#/components/schemas/Sale" }
+  /reporting/top-products:
+    get:
+      tags: [reporting]
+      summary: Produtos mais vendidos/mais lucrativos no período (requer permission:view_reports)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 10 }
+        - name: orderBy
+          in: query
+          schema: { type: string, enum: [quantity, profit], default: quantity }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  period: { type: object }
+                  orderBy: { type: string }
+                  products:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        productId: { type: string, format: uuid }
+                        sku: { type: string }
+                        name: { type: string }
+                        quantitySold: { type: string }
+                        revenue: { type: string }
+                        profit: { type: string }
+  /reporting/inventory-value:
+    get:
+      tags: [reporting]
+      summary: >
+        Valor de estoque atual, por produto e total (RN 11.10) — foto do momento, sem período
+        (requer permission:view_reports).
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: string }
+                  products:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        productId: { type: string, format: uuid }
+                        sku: { type: string }
+                        name: { type: string }
+                        quantityAvailable: { type: string }
+                        unitCost: { type: string }
+                        value: { type: string }
+  /reporting/dre:
+    get:
+      tags: [reporting]
+      summary: DRE gerencial simplificada do período (RN 11.5/11.6/11.7, requer permission:view_reports)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DreResponse" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1679,6 +1842,47 @@ components:
         financialAccountId: { type: string, format: uuid, nullable: true }
         payableId: { type: string, format: uuid, nullable: true }
         status: { type: string, enum: [pending, paid, cancelled] }
+    DashboardResponse:
+      type: object
+      description: >
+        cmv/grossProfit/netProfitEstimated/margin e as comparações correspondentes só aparecem
+        quando o usuário tem view_cost/view_profit (RN 10.17.2).
+      properties:
+        period: { type: object, properties: { from: { type: string, format: date-time }, to: { type: string, format: date-time } } }
+        revenueGross: { type: string }
+        revenueNet: { type: string }
+        salesCount: { type: integer }
+        averageTicket: { type: string, nullable: true }
+        expensesRealized: { type: string }
+        productsCount: { type: integer }
+        lowStockCount: { type: integer }
+        inventoryValue: { type: string }
+        receivablesOpen: { type: string }
+        payablesOpen: { type: string }
+        cashBalance: { type: string }
+        cmv: { type: string, description: "Só com view_cost" }
+        grossProfit: { type: string, description: "Só com view_profit" }
+        netProfitEstimated: { type: string, description: "Só com view_profit" }
+        margin: { type: string, nullable: true, description: "Só com view_profit" }
+        comparison:
+          type: object
+          properties:
+            revenueNetChangePercent: { type: string, nullable: true }
+            salesCountChangePercent: { type: string, nullable: true }
+            grossProfitChangePercent: { type: string, nullable: true, description: "Só com view_profit" }
+            netProfitChangePercent: { type: string, nullable: true, description: "Só com view_profit" }
+    DreResponse:
+      type: object
+      properties:
+        period: { type: object }
+        grossRevenue: { type: string }
+        discountsAndReturns: { type: string }
+        netRevenue: { type: string }
+        cmv: { type: string }
+        grossProfit: { type: string }
+        paymentFees: { type: string }
+        expenses: { type: string }
+        netProfit: { type: string }
     ErrorResponse:
       type: object
       description: Formato padrão TA-API-001 (docs/architecture/overview.md, secao 10.2)
