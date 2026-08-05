@@ -17,6 +17,7 @@ import { ReceivablesModule } from './modules/receivables/receivables.module';
 import { PayablesModule } from './modules/payables/payables.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
 import { ReportingModule } from './modules/reporting/reporting.module';
+import { ImportsModule } from './modules/imports/imports.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { IdempotencyModule } from './modules/idempotency/idempotency.module';
 
@@ -40,6 +41,7 @@ import { IdempotencyModule } from './modules/idempotency/idempotency.module';
     PayablesModule,
     ExpensesModule,
     ReportingModule,
+    ImportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
