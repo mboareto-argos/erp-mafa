@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
@@ -18,6 +19,10 @@ import {
   createSupplierSchema,
   type CreateSupplierDto,
 } from './dto/create-supplier.schema';
+import {
+  updateSupplierSchema,
+  type UpdateSupplierDto,
+} from './dto/update-supplier.schema';
 
 @Controller('purchasing/suppliers')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -35,8 +40,27 @@ export class SuppliersController {
 
   @Get()
   @RequirePermission('view_purchasing')
-  list(@CurrentTenant() tenant: CurrentTenantContext) {
-    return this.suppliers.list(tenant.companyId);
+  list(
+    @CurrentTenant() tenant: CurrentTenantContext,
+    @Query('q') q?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.suppliers.list(tenant.companyId, {
+      q,
+      page: page ? Number(page) : undefined,
+      pageSize: pageSize ? Number(pageSize) : undefined,
+    });
+  }
+
+  @Patch(':id')
+  @RequirePermission('manage_purchasing')
+  update(
+    @CurrentTenant() tenant: CurrentTenantContext,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(updateSupplierSchema)) dto: UpdateSupplierDto,
+  ) {
+    return this.suppliers.update(tenant.companyId, id, dto);
   }
 
   @Patch(':id/deactivate')
@@ -46,5 +70,14 @@ export class SuppliersController {
     @Param('id') id: string,
   ) {
     return this.suppliers.deactivate(tenant.companyId, id);
+  }
+
+  @Patch(':id/reactivate')
+  @RequirePermission('manage_purchasing')
+  reactivate(
+    @CurrentTenant() tenant: CurrentTenantContext,
+    @Param('id') id: string,
+  ) {
+    return this.suppliers.reactivate(tenant.companyId, id);
   }
 }

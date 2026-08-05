@@ -10,20 +10,8 @@ export const createProductSchema = z
     // Estoque minimo (§10.3) — usado pelo alerta de estoque baixo do
     // Inventory (RN 10.7.8).
     minStock: z.number().nonnegative().optional(),
-    // Custo de referencia inicial (§10.3 do Documento de Negocio) — distinto
-    // do custo operacional calculado por Purchasing/Inventory (DS-FORM-004).
-    // So pode ser informado na criacao; nao existe endpoint de update.
-    referenceCost: z.number().nonnegative().optional(),
     salePrice: z.number().nonnegative().optional(),
   })
-  .refine(
-    (data) =>
-      (data.referenceCost === undefined) === (data.salePrice === undefined),
-    {
-      message:
-        'Informe custo de referência e preço de venda juntos, ou nenhum dos dois.',
-      path: ['salePrice'],
-    },
-  );
+  .strict();
 
 export type CreateProductDto = z.infer<typeof createProductSchema>;

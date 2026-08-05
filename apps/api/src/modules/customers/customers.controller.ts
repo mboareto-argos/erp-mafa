@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
@@ -18,6 +19,10 @@ import {
   createCustomerSchema,
   type CreateCustomerDto,
 } from './dto/create-customer.schema';
+import {
+  updateCustomerSchema,
+  type UpdateCustomerDto,
+} from './dto/update-customer.schema';
 
 @Controller('customers')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -35,8 +40,27 @@ export class CustomersController {
 
   @Get()
   @RequirePermission('view_customers')
-  list(@CurrentTenant() tenant: CurrentTenantContext) {
-    return this.customers.list(tenant.companyId);
+  list(
+    @CurrentTenant() tenant: CurrentTenantContext,
+    @Query('q') q?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.customers.list(tenant.companyId, {
+      q,
+      page: page ? Number(page) : undefined,
+      pageSize: pageSize ? Number(pageSize) : undefined,
+    });
+  }
+
+  @Patch(':id')
+  @RequirePermission('manage_customers')
+  update(
+    @CurrentTenant() tenant: CurrentTenantContext,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(updateCustomerSchema)) dto: UpdateCustomerDto,
+  ) {
+    return this.customers.update(tenant.companyId, id, dto);
   }
 
   @Patch(':id/deactivate')
@@ -46,5 +70,14 @@ export class CustomersController {
     @Param('id') id: string,
   ) {
     return this.customers.deactivate(tenant.companyId, id);
+  }
+
+  @Patch(':id/reactivate')
+  @RequirePermission('manage_customers')
+  reactivate(
+    @CurrentTenant() tenant: CurrentTenantContext,
+    @Param('id') id: string,
+  ) {
+    return this.customers.reactivate(tenant.companyId, id);
   }
 }

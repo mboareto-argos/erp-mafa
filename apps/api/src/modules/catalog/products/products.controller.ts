@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
@@ -18,6 +19,14 @@ import {
   createProductSchema,
   type CreateProductDto,
 } from './dto/create-product.schema';
+import {
+  updateProductSchema,
+  type UpdateProductDto,
+} from './dto/update-product.schema';
+import {
+  repriceProductSchema,
+  type RepriceProductDto,
+} from './dto/reprice-product.schema';
 
 @Controller('catalog/products')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -35,8 +44,27 @@ export class ProductsController {
 
   @Get()
   @RequirePermission('view_catalog')
-  list(@CurrentTenant() tenant: CurrentTenantContext) {
-    return this.products.list(tenant.companyId);
+  list(
+    @CurrentTenant() tenant: CurrentTenantContext,
+    @Query('q') q?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.products.list(tenant.companyId, {
+      q,
+      page: page ? Number(page) : undefined,
+      pageSize: pageSize ? Number(pageSize) : undefined,
+    });
+  }
+
+  @Patch(':id')
+  @RequirePermission('manage_catalog')
+  update(
+    @CurrentTenant() tenant: CurrentTenantContext,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(updateProductSchema)) dto: UpdateProductDto,
+  ) {
+    return this.products.update(tenant.companyId, id, dto);
   }
 
   @Patch(':id/deactivate')
@@ -46,5 +74,24 @@ export class ProductsController {
     @Param('id') id: string,
   ) {
     return this.products.deactivate(tenant.companyId, id);
+  }
+
+  @Patch(':id/reactivate')
+  @RequirePermission('manage_catalog')
+  reactivate(
+    @CurrentTenant() tenant: CurrentTenantContext,
+    @Param('id') id: string,
+  ) {
+    return this.products.reactivate(tenant.companyId, id);
+  }
+
+  @Post(':id/reprice')
+  @RequirePermission('manage_catalog')
+  reprice(
+    @CurrentTenant() tenant: CurrentTenantContext,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(repriceProductSchema)) dto: RepriceProductDto,
+  ) {
+    return this.products.reprice(tenant, id, dto);
   }
 }
