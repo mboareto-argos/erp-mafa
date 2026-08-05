@@ -40,27 +40,38 @@ e técnicas que nunca podem ser violadas.
 ## Estado atual e próximos passos
 
 1. API: Fases 1–5 implementadas (fundação, estoque/compras, vendas, financeiro e reporting),
-   mais auditoria (escrita + consulta) e idempotência (TA-API-002) nos comandos críticos.
-2. Web: as 8 telas de negócio (início, produtos, estoque, compras, fornecedores, vendas,
+   mais auditoria (escrita + consulta) e idempotência (TA-API-002) nos comandos críticos —
+   ajuste de estoque, recebimento de compra, confirmação de venda, pagamento/cancelamento de
+   contas a receber/pagar e transferências entre contas.
+2. RLS no PostgreSQL (TA-DATA-005): segunda camada de isolamento multiempresa direto no banco,
+   independente do filtro por `company_id` na aplicação — ver `docs/operations/runbook.md`.
+3. Web: as 8 telas de negócio (início, produtos, estoque, compras, fornecedores, vendas,
    financeiro, clientes) existem com dados reais, sessão via cookies httpOnly e permissões
    aplicadas — construídas sobre o Design System (tokens Tailwind derivados de
-   `packages/design-tokens/tokens.json`).
-3. Fase 6: importação, conciliação e validação com a operação da MAFA Store.
+   `packages/design-tokens/tokens.json`, fontes vendorizadas localmente para build
+   reproduzível). Produtos, Fornecedores e Clientes têm CRUD completo (edição, reativação,
+   busca, paginação); Compras e Vendas usam um wizard multi-item (Itens → Custos/Pagamento →
+   Confirmar).
+4. Fase 6: importação, conciliação e validação com a operação da MAFA Store.
 
 ### Débito técnico conhecido
 
 Registrado deliberadamente como pendência, não implementado ainda:
 
-- **Auditoria parcial** (BR §10.23): só 3 dos ~16 eventos recomendados são registrados hoje
-  (`stock.adjusted`, `purchase.received`, `sale.confirmed`) — faltam login, criação/edição de
-  usuário, mudança de permissão, criação/edição de produto, cancelamento de venda, alteração de
-  preço, desconto, pagamento, mudança de vencimento, import/export, mudança de configuração,
-  exclusão lógica e estorno. Consulta já existe (`GET /audit`, permissão `view_audit`).
-- **CRUD só de criação no web**: nenhuma das 8 telas de negócio tem edição ou exclusão lógica
-  ainda — só listar e criar.
-- **Sem paginação/busca/filtro** nas listas do web (aceitável na escala atual, revisar quando o
-  catálogo/base de clientes crescer).
+- **Auditoria ainda não cobre todos os eventos** (BR §10.23): cobre hoje ajuste de estoque,
+  recebimento de compra, confirmação de venda, pagamento/cancelamento de contas a
+  receber/pagar, transferências e reprecificação de produto — faltam login, criação/edição de
+  usuário, mudança de permissão, criação/edição de produto (campos cadastrais), desconto,
+  mudança de vencimento, import/export, mudança de configuração e estorno. Consulta já existe
+  (`GET /audit`, permissão `view_audit`).
+- **CRUD só de criação em Estoque/Compras/Vendas/Financeiro** — por design nos dois primeiros
+  (movimentação e venda/compra confirmadas são imutáveis, corrigir é lançar um novo
+  ajuste/estorno, nunca editar); edição em Financeiro (contas, formas de pagamento, despesas)
+  ainda não foi implementada.
+- **Paginação/busca só em Produtos, Clientes e Fornecedores** — as listas de Compras, Vendas,
+  Estoque e Financeiro continuam sem paginação (mitigado por filtro de período onde existe).
+  `GET` desses três cadastros aceita array completo sem `page` por compatibilidade temporária
+  com os seletores usados em Compras/Vendas/Estoque — remover esse modo legado exige revisar
+  os três consumidores juntos, não isoladamente.
 - **Sem testes automatizados no `apps/web`** — nenhum framework de teste (vitest/playwright)
   configurado ainda; toda a cobertura de teste do projeto está em `apps/api`.
-- **`quick-purchase-form` só aceita 1 item por compra** — inconsistente com o formulário de
-  venda rápida, que já suporta múltiplas linhas.
