@@ -1,4 +1,11 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { JwtAuthGuard } from '../../tenancy/jwt-auth.guard';
 import { PermissionsGuard } from '../../tenancy/permissions.guard';
@@ -10,19 +17,29 @@ import {
   createTransferSchema,
   type CreateTransferDto,
 } from './dto/create-transfer.schema';
+import { IdempotencyService } from '../../idempotency/idempotency.service';
 
 @Controller('cash-flow/transfers')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class TransfersController {
-  constructor(private readonly transfers: TransfersService) {}
+  constructor(
+    private readonly transfers: TransfersService,
+    private readonly idempotency: IdempotencyService,
+  ) {}
 
   @Post()
   @RequirePermission('manage_financial_accounts')
   create(
     @CurrentTenant() tenant: CurrentTenantContext,
     @Body(new ZodValidationPipe(createTransferSchema)) dto: CreateTransferDto,
+    @Headers('idempotency-key') key?: string,
   ) {
-    return this.transfers.create(tenant, dto);
+    return this.idempotency.execute(
+      tenant.companyId,
+      `transfers.create:${dto.fromAccountId}:${dto.toAccountId}`,
+      key,
+      () => this.transfers.create(tenant, dto),
+    );
   }
 
   @Get()

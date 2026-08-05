@@ -5,12 +5,14 @@ import { AppError } from '../../../common/errors/app-error';
 import { CashFlowService } from '../cash-flow.service';
 import { CurrentTenantContext } from '../../tenancy/jwt-payload.interface';
 import { CreateTransferDto } from './dto/create-transfer.schema';
+import { AuditService } from '../../audit/audit.service';
 
 @Injectable()
 export class TransfersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cashFlow: CashFlowService,
+    private readonly audit: AuditService,
   ) {}
 
   // RN 10.13.2/10.16.5: transferência entre contas próprias nunca é
@@ -73,6 +75,19 @@ export class TransfersService {
         createdBy: tenant.userId,
       });
 
+      await this.audit.record(tx, {
+        companyId: tenant.companyId,
+        userId: tenant.userId,
+        action: 'transfer.created',
+        entityType: 'transfer',
+        entityId: transfer.id,
+        afterData: {
+          amount: transfer.amount.toString(),
+          fromAccountId: transfer.fromAccountId,
+          toAccountId: transfer.toAccountId,
+        },
+        reason: dto.reason,
+      });
       return transfer;
     });
   }

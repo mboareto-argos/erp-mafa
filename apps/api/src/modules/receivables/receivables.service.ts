@@ -11,6 +11,7 @@ import { CurrentTenantContext } from '../tenancy/jwt-payload.interface';
 import { CreateReceivableDto } from './dto/create-receivable.schema';
 import { PayReceivableDto } from './dto/pay-receivable.schema';
 import { CancelReceivableDto } from './dto/cancel-receivable.schema';
+import { AuditService } from '../audit/audit.service';
 
 const INCLUDE_DETAILS = {
   customer: true,
@@ -22,6 +23,7 @@ export class ReceivablesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cashFlow: CashFlowService,
+    private readonly audit: AuditService,
   ) {}
 
   async create(tenant: CurrentTenantContext, dto: CreateReceivableDto) {
@@ -149,11 +151,21 @@ export class ReceivablesService {
         ? 'received'
         : 'partially_received';
 
-      return tx.receivable.update({
+      const updated = await tx.receivable.update({
         where: { id },
         data: { amountReceived: newAmountReceived, status },
         include: INCLUDE_DETAILS,
       });
+      await this.audit.record(tx, {
+        companyId: tenant.companyId,
+        userId: tenant.userId,
+        action: 'receivable.paid',
+        entityType: 'receivable',
+        entityId: id,
+        afterData: { amount: amount.toString(), status },
+        reason: undefined,
+      });
+      return updated;
     });
   }
 
@@ -164,10 +176,22 @@ export class ReceivablesService {
     dto: CancelReceivableDto,
   ) {
     await this.assertPayable(tenant.companyId, id);
-    return this.prisma.receivable.update({
-      where: { id },
-      data: { status: 'cancelled', cancelReason: dto.reason },
-      include: INCLUDE_DETAILS,
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.receivable.update({
+        where: { id },
+        data: { status: 'cancelled', cancelReason: dto.reason },
+        include: INCLUDE_DETAILS,
+      });
+      await this.audit.record(tx, {
+        companyId: tenant.companyId,
+        userId: tenant.userId,
+        action: 'receivable.cancelled',
+        entityType: 'receivable',
+        entityId: id,
+        afterData: { status: 'cancelled' },
+        reason: dto.reason,
+      });
+      return updated;
     });
   }
 

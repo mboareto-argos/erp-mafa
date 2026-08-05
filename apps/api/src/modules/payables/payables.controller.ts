@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { JwtAuthGuard } from '../tenancy/jwt-auth.guard';
 import { PermissionsGuard } from '../tenancy/permissions.guard';
@@ -15,11 +23,15 @@ import {
   cancelPayableSchema,
   type CancelPayableDto,
 } from './dto/cancel-payable.schema';
+import { IdempotencyService } from '../idempotency/idempotency.service';
 
 @Controller('payables')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class PayablesController {
-  constructor(private readonly payables: PayablesService) {}
+  constructor(
+    private readonly payables: PayablesService,
+    private readonly idempotency: IdempotencyService,
+  ) {}
 
   @Post()
   @RequirePermission('manage_payables')
@@ -48,8 +60,14 @@ export class PayablesController {
     @CurrentTenant() tenant: CurrentTenantContext,
     @Param('id') id: string,
     @Body(new ZodValidationPipe(payPayableSchema)) dto: PayPayableDto,
+    @Headers('idempotency-key') key?: string,
   ) {
-    return this.payables.pay(tenant, id, dto);
+    return this.idempotency.execute(
+      tenant.companyId,
+      `payables.pay:${id}`,
+      key,
+      () => this.payables.pay(tenant, id, dto),
+    );
   }
 
   @Post(':id/cancel')

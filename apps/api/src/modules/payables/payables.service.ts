@@ -11,6 +11,7 @@ import { CurrentTenantContext } from '../tenancy/jwt-payload.interface';
 import { CreatePayableDto } from './dto/create-payable.schema';
 import { PayPayableDto } from './dto/pay-payable.schema';
 import { CancelPayableDto } from './dto/cancel-payable.schema';
+import { AuditService } from '../audit/audit.service';
 
 const INCLUDE_DETAILS = {
   supplier: true,
@@ -22,6 +23,7 @@ export class PayablesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cashFlow: CashFlowService,
+    private readonly audit: AuditService,
   ) {}
 
   async create(tenant: CurrentTenantContext, dto: CreatePayableDto) {
@@ -133,11 +135,20 @@ export class PayablesService {
         ? 'paid'
         : 'partially_paid';
 
-      return tx.payable.update({
+      const updated = await tx.payable.update({
         where: { id },
         data: { amountPaid: newAmountPaid, status },
         include: INCLUDE_DETAILS,
       });
+      await this.audit.record(tx, {
+        companyId: tenant.companyId,
+        userId: tenant.userId,
+        action: 'payable.paid',
+        entityType: 'payable',
+        entityId: id,
+        afterData: { amount: amount.toString(), status },
+      });
+      return updated;
     });
   }
 
@@ -147,10 +158,22 @@ export class PayablesService {
     dto: CancelPayableDto,
   ) {
     await this.assertPayable(tenant.companyId, id);
-    return this.prisma.payable.update({
-      where: { id },
-      data: { status: 'cancelled', cancelReason: dto.reason },
-      include: INCLUDE_DETAILS,
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.payable.update({
+        where: { id },
+        data: { status: 'cancelled', cancelReason: dto.reason },
+        include: INCLUDE_DETAILS,
+      });
+      await this.audit.record(tx, {
+        companyId: tenant.companyId,
+        userId: tenant.userId,
+        action: 'payable.cancelled',
+        entityType: 'payable',
+        entityId: id,
+        afterData: { status: 'cancelled' },
+        reason: dto.reason,
+      });
+      return updated;
     });
   }
 

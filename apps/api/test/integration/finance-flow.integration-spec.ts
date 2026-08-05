@@ -75,10 +75,19 @@ describe('Financeiro — fluxo completo (integração)', () => {
     const payable = await request(app.getHttpServer())
       .post(`/api/v1/payables/${payableId}/pay`)
       .set(auth(session.accessToken))
+      .set('Idempotency-Key', 'payable-replay')
       .send({ financialAccountId: account.id, amount: 300 })
       .expect(201);
     expect(payable.body.status).toBe('paid');
     expect(payable.body.amountPaid).toBe('300');
+
+    const replayedPayable = await request(app.getHttpServer())
+      .post(`/api/v1/payables/${payableId}/pay`)
+      .set(auth(session.accessToken))
+      .set('Idempotency-Key', 'payable-replay')
+      .send({ financialAccountId: account.id, amount: 300 })
+      .expect(201);
+    expect(replayedPayable.body).toEqual(payable.body);
 
     const balance = await getAccountBalance(
       app,
@@ -114,9 +123,18 @@ describe('Financeiro — fluxo completo (integração)', () => {
     const paid = await request(app.getHttpServer())
       .post(`/api/v1/receivables/${receivable.body.id}/pay`)
       .set(auth(session.accessToken))
+      .set('Idempotency-Key', 'receivable-replay')
       .send({ financialAccountId: account.id, amount: 200 })
       .expect(201);
     expect(paid.body.status).toBe('partially_received');
+
+    const replayed = await request(app.getHttpServer())
+      .post(`/api/v1/receivables/${receivable.body.id}/pay`)
+      .set(auth(session.accessToken))
+      .set('Idempotency-Key', 'receivable-replay')
+      .send({ financialAccountId: account.id, amount: 200 })
+      .expect(201);
+    expect(replayed.body).toEqual(paid.body);
 
     const overpay = await request(app.getHttpServer())
       .post(`/api/v1/receivables/${receivable.body.id}/pay`)
@@ -178,9 +196,10 @@ describe('Financeiro — fluxo completo (integração)', () => {
       name: 'Banco',
     });
 
-    await request(app.getHttpServer())
+    const transfer = await request(app.getHttpServer())
       .post('/api/v1/cash-flow/transfers')
       .set(auth(session.accessToken))
+      .set('Idempotency-Key', 'transfer-replay')
       .send({
         fromAccountId: accountA.id,
         toAccountId: accountB.id,
@@ -188,6 +207,19 @@ describe('Financeiro — fluxo completo (integração)', () => {
         reason: 'Depósito',
       })
       .expect(201);
+
+    const replayedTransfer = await request(app.getHttpServer())
+      .post('/api/v1/cash-flow/transfers')
+      .set(auth(session.accessToken))
+      .set('Idempotency-Key', 'transfer-replay')
+      .send({
+        fromAccountId: accountA.id,
+        toAccountId: accountB.id,
+        amount: 100,
+        reason: 'Depósito',
+      })
+      .expect(201);
+    expect(replayedTransfer.body).toEqual(transfer.body);
 
     expect(await getAccountBalance(app, session.accessToken, accountA.id)).toBe(
       '-100',

@@ -47,9 +47,12 @@ describe('Isolamento multiempresa — Inventory e Purchasing', () => {
       .expect(201);
     expect(replayedAdjustment.body).toEqual(firstAdjustment.body);
 
-    const auditLogs = await app.get(PrismaService).auditLog.findMany({
-      where: { companyId: companyA.company.id, action: 'stock.adjusted' },
-    });
+    const prisma = app.get(PrismaService);
+    const auditLogs = await prisma.withTenant(companyA.company.id, () =>
+      prisma.auditLog.findMany({
+        where: { companyId: companyA.company.id, action: 'stock.adjusted' },
+      }),
+    );
     expect(auditLogs).toHaveLength(1);
     expect(auditLogs[0]).toMatchObject({
       entityType: 'stock_adjustment',

@@ -73,9 +73,12 @@ describe('Idempotency-Key e auditoria — purchases.receive e sales.confirm', ()
       .expect(201);
     expect(replayedReceive.body).toEqual(firstReceive.body);
 
-    const auditLogs = await app.get(PrismaService).auditLog.findMany({
-      where: { companyId: session.company.id, action: 'purchase.received' },
-    });
+    const prisma = app.get(PrismaService);
+    const auditLogs = await prisma.withTenant(session.company.id, () =>
+      prisma.auditLog.findMany({
+        where: { companyId: session.company.id, action: 'purchase.received' },
+      }),
+    );
     expect(auditLogs).toHaveLength(1);
     expect(auditLogs[0]).toMatchObject({
       entityType: 'purchase',
@@ -146,9 +149,12 @@ describe('Idempotency-Key e auditoria — purchases.receive e sales.confirm', ()
       .expect(201);
     expect(replayedConfirm.body).toEqual(firstConfirm.body);
 
-    const auditLogs = await app.get(PrismaService).auditLog.findMany({
-      where: { companyId: session.company.id, action: 'sale.confirmed' },
-    });
+    const prisma = app.get(PrismaService);
+    const auditLogs = await prisma.withTenant(session.company.id, () =>
+      prisma.auditLog.findMany({
+        where: { companyId: session.company.id, action: 'sale.confirmed' },
+      }),
+    );
     expect(auditLogs).toHaveLength(1);
     expect(auditLogs[0]).toMatchObject({
       entityType: 'sale',
@@ -187,13 +193,16 @@ describe('Idempotency-Key e auditoria — purchases.receive e sales.confirm', ()
     // registro já criado para a mesma chave, ainda sem resposta gravada
     // (completedAt/response nulos) — exatamente o que IdempotencyService
     // grava antes de rodar a ação.
-    await app.get(PrismaService).idempotencyRecord.create({
-      data: {
-        companyId: session.company.id,
-        operation: `inventory.adjustments:${variantId}:5:Concorrência`,
-        key: 'in-flight-key',
-      },
-    });
+    const prisma = app.get(PrismaService);
+    await prisma.withTenant(session.company.id, () =>
+      prisma.idempotencyRecord.create({
+        data: {
+          companyId: session.company.id,
+          operation: `inventory.adjustments:${variantId}:5:Concorrência`,
+          key: 'in-flight-key',
+        },
+      }),
+    );
 
     const response = await request(app.getHttpServer())
       .post('/api/v1/inventory/adjustments')
