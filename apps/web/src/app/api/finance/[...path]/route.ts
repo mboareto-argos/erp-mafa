@@ -8,7 +8,9 @@ async function forward(request: Request, context: RouteContext<"/api/finance/[..
   const allowed = new Set(["expenses", "payables", "receivables", "cash-flow/transactions", "cash-flow/transfers"]);
   const target = path.join("/");
   const isSettlement = /^(receivables|payables)\/[0-9a-f-]{36}\/pay$/.test(target);
-  if (!allowed.has(target) && !isSettlement) return NextResponse.json({ message: "Recurso financeiro inválido." }, { status: 404 });
+  const isCancellation = /^(receivables|payables)\/[0-9a-f-]{36}\/cancel$/.test(target);
+  const isExpenseCancellation = /^expenses\/[0-9a-f-]{36}\/cancel$/.test(target);
+  if (!allowed.has(target) && !isSettlement && !isCancellation && !isExpenseCancellation) return NextResponse.json({ message: "Recurso financeiro inválido." }, { status: 404 });
   try {
     const query = new URL(request.url).search;
     const body = method === "POST" ? JSON.stringify(await request.json()) : undefined;

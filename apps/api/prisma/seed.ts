@@ -18,6 +18,7 @@ const FINANCE_PERMISSIONS = [
 
 const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
   owner: [
+    'view_dashboard',
     'manage_catalog',
     'view_catalog',
     'view_cost',
@@ -43,6 +44,7 @@ const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'manage_imports',
   ],
   admin: [
+    'view_dashboard',
     'manage_catalog',
     'view_catalog',
     'view_cost',
@@ -59,6 +61,7 @@ const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'view_payment_methods',
     ...FINANCE_PERMISSIONS,
     'view_reports',
+    'manage_imports',
   ],
   // Vendedor: sem view_cost/view_profit/manage_expenses (§9.2); consulta
   // disponibilidade de estoque (§9.3), sem acesso a compras. Registra
@@ -67,6 +70,7 @@ const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
   // conforme permissão"). Sem acesso financeiro (contas/receivables/
   // payables/despesas).
   sales: [
+    'view_dashboard',
     'view_catalog',
     'view_inventory',
     'manage_sales',
@@ -78,11 +82,12 @@ const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
   // Estoquista: sem permissoes financeiras; registra recebimentos e consulta
   // compras (§9.4), ajusta estoque mediante autorizacao (permissao
   // adjust_stock — sem fila de aprovacao real ainda, ver StockAdjustment).
-  inventory: ['view_catalog', 'view_inventory', 'adjust_stock', 'manage_purchasing', 'view_purchasing'],
+  inventory: ['view_dashboard', 'view_catalog', 'view_inventory', 'adjust_stock', 'manage_purchasing', 'view_purchasing'],
   // Financeiro: sem manage_catalog alem de leitura; consulta compras para
   // contexto de contas a pagar, sem gerenciar compras. Configura formas de
   // pagamento (taxas) e todo o modulo financeiro — natural do papel (§9.5).
   finance: [
+    'view_dashboard',
     'view_catalog',
     'view_cost',
     'view_profit',
@@ -97,6 +102,7 @@ const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
   ],
   // Visualizador: somente leitura (§9.2 — réplica read-only simplificada).
   viewer: [
+    'view_dashboard',
     'view_catalog',
     'view_inventory',
     'view_purchasing',

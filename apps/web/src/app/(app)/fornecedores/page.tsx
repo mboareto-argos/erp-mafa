@@ -1,16 +1,16 @@
-import { ContactDirectory } from "@/components/contacts/contact-directory";
-import { ListingPagination, ListingSearch } from "@/components/listings/listing-ui";
+import { AppIcon } from "@/components/layout/app-icon";
+import { SupplierDirectory, type SupplierListItem } from "@/components/suppliers/supplier-directory";
+import { ListingMetrics, ListingPagination, ListingSearch } from "@/components/listings/listing-ui";
 import { backendAuthenticatedRequest, getSession } from "@/lib/session";
 
-type Supplier = { id: string; name: string; email: string | null; phone: string | null; whatsapp: string |null; document: string | null; contactName: string | null; status: "active" | "inactive" };
-type PaginatedSuppliers = { items: Supplier[]; total: number; page: number; pageSize: number };
+type PaginatedSuppliers = { items: SupplierListItem[]; total: number; page: number; pageSize: number };
 
 export default async function SuppliersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; new?: string }>;
 }) {
-  const { q, page } = await searchParams;
+  const { q, page, new: newAction } = await searchParams;
   const currentPage = Number(page ?? "1") || 1;
   const query = new URLSearchParams({ page: String(currentPage) });
   if (q) query.set("q", q);
@@ -30,9 +30,13 @@ export default async function SuppliersPage({
         </div>
       </div>
 
+      {canManage && <div className="page-workspace-action"><a className="button button-primary compact-button" href="?new=supplier"><AppIcon name="plus" />Novo fornecedor</a></div>}
+
+      <ListingMetrics metrics={[{ label: "Fornecedores cadastrados", value: suppliers.total, detail: "Na empresa atual", icon: "suppliers" }, { label: "Ativos nesta página", value: suppliers.items.filter(supplier => supplier.status === "active").length, detail: "Disponíveis para compras", icon: "suppliers" }, { label: "Resultados exibidos", value: suppliers.items.length, detail: q ? "Para a busca atual" : "Na página atual", icon: "search" }]} />
+
       <ListingSearch id="supplier-search" label="Buscar por nome" query={q} placeholder="Ex.: distribuidora" />
 
-      <ContactDirectory kind="fornecedor" contacts={suppliers.items} canManage={canManage} />
+      <SupplierDirectory suppliers={suppliers.items} canManage={canManage} initialOpen={newAction === "supplier"} query={q} />
 
       <ListingPagination page={suppliers.page} total={suppliers.total} pageSize={suppliers.pageSize} query={q} />
     </main>

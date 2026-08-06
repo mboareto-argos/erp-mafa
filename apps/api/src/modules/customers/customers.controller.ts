@@ -53,6 +53,15 @@ export class CustomersController {
     });
   }
 
+  @Get(':id')
+  @RequirePermission('view_customers')
+  detail(
+    @CurrentTenant() tenant: CurrentTenantContext,
+    @Param('id') id: string,
+  ) {
+    return this.customers.detail(tenant.companyId, id);
+  }
+
   @Patch(':id')
   @RequirePermission('manage_customers')
   update(

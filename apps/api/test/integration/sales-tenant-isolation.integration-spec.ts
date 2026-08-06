@@ -53,6 +53,15 @@ describe('Isolamento multiempresa — Sales', () => {
       .expect(404);
 
     await request(app.getHttpServer())
+      .patch(`/api/v1/sales/${sale.body.id}`)
+      .set(auth(companyB.accessToken))
+      .send({
+        channel: 'presencial',
+        items: [{ productVariantId: variantIdA, quantity: 1, unitPrice: 100 }],
+      })
+      .expect(404);
+
+    await request(app.getHttpServer())
       .post(`/api/v1/sales/${sale.body.id}/confirm`)
       .set(auth(companyB.accessToken))
       .send({ payments: [{ paymentMethodId: paymentMethodA.id, amount: 200 }] })

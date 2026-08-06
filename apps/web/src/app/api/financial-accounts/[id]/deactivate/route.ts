@@ -1,0 +1,3 @@
+import { NextResponse } from "next/server";
+import { ApiRequestError, backendAuthenticatedRequest } from "@/lib/session";
+export async function PATCH(_: Request, context: RouteContext<"/api/financial-accounts/[id]/deactivate">) { const { id } = await context.params; try { return NextResponse.json(await backendAuthenticatedRequest(`/financial-accounts/${id}/deactivate`, { method: "PATCH" })); } catch (error) { return NextResponse.json({ message: error instanceof Error ? error.message : "Não foi possível inativar a conta." }, { status: error instanceof ApiRequestError ? error.status : 502 }); } }

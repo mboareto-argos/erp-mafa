@@ -146,12 +146,24 @@ describe('Reporting — dashboard e relatórios (integração)', () => {
     expect(dashboard.body.revenueNet).toBe('300');
   });
 
-  it('vendedor não tem permission:view_reports — 403 em qualquer endpoint do módulo', async () => {
+  it('vendedor acessa somente o dashboard operacional, sem custos ou financeiro', async () => {
     const session = await registerCompany(app);
     const salesToken = await switchRole(app, session, 'sales');
 
-    await request(app.getHttpServer())
+    const dashboard = await request(app.getHttpServer())
       .get(`/api/v1/reporting/dashboard?from=${from}&to=${to}`)
+      .set(auth(salesToken))
+      .expect(200);
+    expect(dashboard.body.revenueNet).toBeDefined();
+    expect(dashboard.body.salesTrend).toBeInstanceOf(Array);
+    expect(dashboard.body.expensesRealized).toBeUndefined();
+    expect(dashboard.body.cashBalance).toBeUndefined();
+    expect(dashboard.body.inventoryValue).toBeUndefined();
+    expect(dashboard.body.cmv).toBeUndefined();
+    expect(dashboard.body.netProfitEstimated).toBeUndefined();
+
+    await request(app.getHttpServer())
+      .get(`/api/v1/reporting/dre?from=${from}&to=${to}`)
       .set(auth(salesToken))
       .expect(403);
   });

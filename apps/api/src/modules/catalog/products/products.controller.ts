@@ -57,6 +57,12 @@ export class ProductsController {
     });
   }
 
+  @Get(':id')
+  @RequirePermission('view_catalog')
+  get(@CurrentTenant() tenant: CurrentTenantContext, @Param('id') id: string) {
+    return this.products.get(tenant.companyId, id);
+  }
+
   @Patch(':id')
   @RequirePermission('manage_catalog')
   update(

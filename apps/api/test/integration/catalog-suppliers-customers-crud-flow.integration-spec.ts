@@ -62,6 +62,13 @@ describe('Edição, reativação, reprecificação e paginação — Products, S
 
       expect(updated.body.name).toBe('Nome Atualizado');
       expect(updated.body.minStock).toBe('5');
+
+      const cleared = await request(app.getHttpServer())
+        .patch(`/api/v1/catalog/products/${product.id}`)
+        .set(auth(session.accessToken))
+        .send({ minStock: null })
+        .expect(200);
+      expect(cleared.body.minStock).toBeNull();
     });
 
     it('rejeita edição de SKU para um valor já em uso', async () => {
@@ -118,6 +125,13 @@ describe('Edição, reativação, reprecificação e paginação — Products, S
       );
       expect(priceCountAfter).toBe(priceCountBefore + 1);
 
+      const detail = await request(app.getHttpServer())
+        .get(`/api/v1/catalog/products/${product.id}`)
+        .set(auth(session.accessToken))
+        .expect(200);
+      expect(detail.body.prices).toHaveLength(priceCountAfter);
+      expect(detail.body.prices[0].salePrice).toBe('59.9');
+
       const auditLogs = await prisma.withTenant(session.company.id, () =>
         prisma.auditLog.findMany({
           where: {
@@ -129,6 +143,47 @@ describe('Edição, reativação, reprecificação e paginação — Products, S
       );
       expect(auditLogs).toHaveLength(1);
       expect(auditLogs[0].reason).toBe('Ajuste de mercado');
+    });
+
+    it('produto inativo não pode entrar em novas compras ou vendas (BR §10.3 regra 3)', async () => {
+      const session = await registerCompany(app);
+      const product = await createProduct(app, session.accessToken);
+
+      await request(app.getHttpServer())
+        .patch(`/api/v1/catalog/products/${product.id}/deactivate`)
+        .set(auth(session.accessToken))
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .post('/api/v1/purchasing/purchases')
+        .set(auth(session.accessToken))
+        .send({
+          items: [
+            {
+              productVariantId: product.variants[0].id,
+              quantity: 1,
+              unitCostOriginCurrency: 10,
+            },
+          ],
+        })
+        .expect(400);
+
+      await request(app.getHttpServer())
+        .post('/api/v1/sales')
+        .set(auth(session.accessToken))
+        .send({
+          channel: 'presencial',
+          discount: 0,
+          items: [
+            {
+              productVariantId: product.variants[0].id,
+              quantity: 1,
+              unitPrice: 20,
+              discount: 0,
+            },
+          ],
+        })
+        .expect(400);
     });
 
     it('rejeita reprecificação sem motivo', async () => {
@@ -232,6 +287,121 @@ describe('Edição, reativação, reprecificação e paginação — Products, S
       expect(reactivated.body.status).toBe('active');
     });
 
+    it('consulta a ficha agregada e permite limpar contatos do fornecedor', async () => {
+      const session = await registerCompany(app);
+      const supplier = await createSupplier(session.accessToken);
+
+      await request(app.getHttpServer())
+        .patch(`/api/v1/purchasing/suppliers/${supplier.id}`)
+        .set(auth(session.accessToken))
+        .send({ contactName: 'Contato', email: 'compras@fornecedor.com' })
+        .expect(200);
+
+      const detail = await request(app.getHttpServer())
+        .get(`/api/v1/purchasing/suppliers/${supplier.id}`)
+        .set(auth(session.accessToken))
+        .expect(200);
+      expect(detail.body.summary).toEqual({
+        purchasesCount: 0,
+        totalPurchased: '0',
+        averagePurchase: '0',
+        lastPurchaseAt: null,
+        productsSupplied: 0,
+        outstandingBalance: '0',
+      });
+      expect(detail.body.recentPurchases).toEqual([]);
+
+      const cleared = await request(app.getHttpServer())
+        .patch(`/api/v1/purchasing/suppliers/${supplier.id}`)
+        .set(auth(session.accessToken))
+        .send({ contactName: null, email: null })
+        .expect(200);
+      expect(cleared.body.contactName).toBeNull();
+      expect(cleared.body.email).toBeNull();
+    });
+
+    it('calcula os indicadores do fornecedor com Decimal a partir das compras válidas', async () => {
+      const session = await registerCompany(app);
+      const supplier = await createSupplier(session.accessToken);
+      const product = await createProduct(app, session.accessToken);
+      const purchase = await request(app.getHttpServer())
+        .post('/api/v1/purchasing/purchases')
+        .set(auth(session.accessToken))
+        .send({
+          supplierId: supplier.id,
+          items: [
+            {
+              productVariantId: product.variants[0].id,
+              quantity: 2,
+              unitCostOriginCurrency: 25,
+            },
+          ],
+        })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post(`/api/v1/purchasing/purchases/${purchase.body.id}/order`)
+        .set(auth(session.accessToken))
+        .expect(201);
+
+      const detail = await request(app.getHttpServer())
+        .get(`/api/v1/purchasing/suppliers/${supplier.id}`)
+        .set(auth(session.accessToken))
+        .expect(200);
+      expect(detail.body.summary.purchasesCount).toBe(1);
+      expect(detail.body.summary.totalPurchased).toBe('50');
+      expect(detail.body.summary.averagePurchase).toBe('50');
+      expect(detail.body.summary.productsSupplied).toBe(1);
+      expect(detail.body.recentPurchases).toHaveLength(1);
+      expect(detail.body.recentPurchases[0].total).toBe('50');
+    });
+
+    it('impede usar fornecedor ou cliente inativo em novas operações', async () => {
+      const session = await registerCompany(app);
+      const supplier = await createSupplier(session.accessToken);
+      const customer = await createCustomer(session.accessToken);
+      const product = await createProduct(app, session.accessToken);
+      await request(app.getHttpServer())
+        .patch(`/api/v1/purchasing/suppliers/${supplier.id}/deactivate`)
+        .set(auth(session.accessToken))
+        .expect(200);
+      await request(app.getHttpServer())
+        .patch(`/api/v1/customers/${customer.id}/deactivate`)
+        .set(auth(session.accessToken))
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .post('/api/v1/purchasing/purchases')
+        .set(auth(session.accessToken))
+        .send({
+          supplierId: supplier.id,
+          items: [
+            {
+              productVariantId: product.variants[0].id,
+              quantity: 1,
+              unitCostOriginCurrency: 10,
+            },
+          ],
+        })
+        .expect(400);
+      await request(app.getHttpServer())
+        .post('/api/v1/sales')
+        .set(auth(session.accessToken))
+        .send({
+          customerId: customer.id,
+          channel: 'presencial',
+          discount: 0,
+          items: [
+            {
+              productVariantId: product.variants[0].id,
+              quantity: 1,
+              unitPrice: 20,
+              discount: 0,
+            },
+          ],
+        })
+        .expect(400);
+    });
+
     it('edita e reativa um cliente', async () => {
       const session = await registerCompany(app);
       const customer = await createCustomer(session.accessToken);
@@ -253,6 +423,39 @@ describe('Edição, reativação, reprecificação e paginação — Products, S
         .set(auth(session.accessToken))
         .expect(200);
       expect(reactivated.body.status).toBe('active');
+    });
+
+    it('consulta a ficha agregada e permite limpar contatos opcionais', async () => {
+      const session = await registerCompany(app);
+      const customer = await createCustomer(session.accessToken);
+
+      await request(app.getHttpServer())
+        .patch(`/api/v1/customers/${customer.id}`)
+        .set(auth(session.accessToken))
+        .send({ whatsapp: '11999999999', email: 'cliente@teste.com' })
+        .expect(200);
+
+      const detail = await request(app.getHttpServer())
+        .get(`/api/v1/customers/${customer.id}`)
+        .set(auth(session.accessToken))
+        .expect(200);
+      expect(detail.body.summary).toEqual({
+        salesCount: 0,
+        totalPurchased: '0',
+        averageTicket: '0',
+        lastPurchaseAt: null,
+        productsPurchased: 0,
+        outstandingBalance: '0',
+      });
+      expect(detail.body.recentSales).toEqual([]);
+
+      const cleared = await request(app.getHttpServer())
+        .patch(`/api/v1/customers/${customer.id}`)
+        .set(auth(session.accessToken))
+        .send({ whatsapp: null, email: null })
+        .expect(200);
+      expect(cleared.body.whatsapp).toBeNull();
+      expect(cleared.body.email).toBeNull();
     });
   });
 
@@ -297,9 +500,19 @@ describe('Edição, reativação, reprecificação e paginação — Products, S
         .expect(404);
 
       await request(app.getHttpServer())
+        .get(`/api/v1/purchasing/suppliers/${supplier.id}`)
+        .set(auth(companyB.accessToken))
+        .expect(404);
+
+      await request(app.getHttpServer())
         .patch(`/api/v1/customers/${customer.id}`)
         .set(auth(companyB.accessToken))
         .send({ name: 'Invasão' })
+        .expect(404);
+
+      await request(app.getHttpServer())
+        .get(`/api/v1/customers/${customer.id}`)
+        .set(auth(companyB.accessToken))
         .expect(404);
     });
   });

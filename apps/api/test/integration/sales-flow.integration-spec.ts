@@ -34,8 +34,15 @@ describe('Sales — fluxo completo à vista (integração)', () => {
       unitCost,
     );
     const customer = await createCustomer(app, session.accessToken);
-    const paymentMethod = await createPaymentMethod(app, session.accessToken);
-    return { session, variantId, customer, paymentMethod };
+    const account = await request(app.getHttpServer())
+      .post('/api/v1/financial-accounts')
+      .set(auth(session.accessToken))
+      .send({ name: 'Caixa da loja' })
+      .expect(201);
+    const paymentMethod = await createPaymentMethod(app, session.accessToken, {
+      financialAccountId: account.body.id,
+    });
+    return { session, variantId, customer, paymentMethod, account: account.body };
   }
 
   it('rascunho não altera o estoque (RN 10.10.1)', async () => {
@@ -57,6 +64,27 @@ describe('Sales — fluxo completo à vista (integração)', () => {
       .set(auth(session.accessToken))
       .expect(200);
     expect(balances.body[0].quantityAvailable).toBe('10');
+  });
+
+  it('edita apenas o rascunho, substitui itens sem apagar histórico e recalcula totais', async () => {
+    const { session, variantId, customer } = await setup();
+    const sale = await request(app.getHttpServer())
+      .post('/api/v1/sales')
+      .set(auth(session.accessToken))
+      .send({ channel: 'presencial', items: [{ productVariantId: variantId, quantity: 2, unitPrice: 100 }] })
+      .expect(201);
+
+    const updated = await request(app.getHttpServer())
+      .patch(`/api/v1/sales/${sale.body.id}`)
+      .set(auth(session.accessToken))
+      .send({ channel: 'whatsapp', customerId: customer.id, discount: 10, items: [{ productVariantId: variantId, quantity: 3, unitPrice: 120 }] })
+      .expect(200);
+
+    expect(updated.body.status).toBe('draft');
+    expect(updated.body.channel).toBe('whatsapp');
+    expect(updated.body.items).toHaveLength(1);
+    expect(updated.body.subtotal).toBe('360');
+    expect(updated.body.total).toBe('350');
   });
 
   it('confirmar baixa estoque, congela custo e calcula CMV/lucro', async () => {
@@ -139,8 +167,8 @@ describe('Sales — fluxo completo à vista (integração)', () => {
     expect(response.body.error.code).toBe('PAYMENT_AMOUNT_MISMATCH');
   });
 
-  it('cancelar venda confirmada restaura o estoque (RN 10.10.15)', async () => {
-    const { session, variantId, paymentMethod } = await setup();
+  it('cancelar venda confirmada restaura estoque e estorna o caixa (RN 10.10.15)', async () => {
+    const { session, variantId, paymentMethod, account } = await setup();
 
     const sale = await request(app.getHttpServer())
       .post('/api/v1/sales')
@@ -167,6 +195,17 @@ describe('Sales — fluxo completo à vista (integração)', () => {
       .set(auth(session.accessToken))
       .expect(200);
     expect(balances.body[0].quantityAvailable).toBe('10');
+
+    const transactions = await request(app.getHttpServer())
+      .get(`/api/v1/cash-flow/transactions?financialAccountId=${account.id}`)
+      .set(auth(session.accessToken))
+      .expect(200);
+    expect(transactions.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'in', amount: '400' }),
+        expect.objectContaining({ type: 'out', amount: '-400' }),
+      ]),
+    );
   });
 
   it('devolução parcial (item apto) restaura parte do estoque e recalcula CMV/lucro (RN 10.11.8)', async () => {

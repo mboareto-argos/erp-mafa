@@ -43,7 +43,7 @@ export class ReportingController {
   constructor(private readonly reporting: ReportingService) {}
 
   @Get('dashboard')
-  @RequirePermission('view_reports')
+  @RequirePermission('view_dashboard')
   dashboard(
     @CurrentTenant() tenant: CurrentTenantContext,
     @Query('from') from?: string,

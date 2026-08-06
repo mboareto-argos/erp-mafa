@@ -1,16 +1,16 @@
-import { ContactDirectory } from "@/components/contacts/contact-directory";
-import { ListingPagination, ListingSearch } from "@/components/listings/listing-ui";
+import { CustomerDirectory, type CustomerListItem } from "@/components/customers/customer-directory";
+import { AppIcon } from "@/components/layout/app-icon";
+import { ListingMetrics, ListingPagination, ListingSearch } from "@/components/listings/listing-ui";
 import { backendAuthenticatedRequest, getSession } from "@/lib/session";
 
-type Customer = { id: string; name: string; email: string | null; phone: string | null; whatsapp: string | null; instagram: string | null; birthDate: string | null; status: "active" | "inactive" };
-type PaginatedCustomers = { items: Customer[]; total: number; page: number; pageSize: number };
+type PaginatedCustomers = { items: CustomerListItem[]; total: number; page: number; pageSize: number };
 
 export default async function CustomersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; new?: string }>;
 }) {
-  const { q, page } = await searchParams;
+  const { q, page, new: newAction } = await searchParams;
   const currentPage = Number(page ?? "1") || 1;
   const query = new URLSearchParams({ page: String(currentPage) });
   if (q) query.set("q", q);
@@ -30,9 +30,13 @@ export default async function CustomersPage({
         </div>
       </div>
 
+      {canManage && <div className="page-workspace-action"><a className="button button-primary compact-button" href="?new=customer"><AppIcon name="plus" />Novo cliente</a></div>}
+
+      <ListingMetrics metrics={[{ label: "Clientes cadastrados", value: customers.total, detail: "Na empresa atual", icon: "customers" }, { label: "Ativos nesta página", value: customers.items.filter(customer => customer.status === "active").length, detail: "Disponíveis para venda", icon: "customers" }, { label: "Resultados exibidos", value: customers.items.length, detail: q ? "Para a busca atual" : "Na página atual", icon: "search" }]} />
+
       <ListingSearch id="customer-search" label="Buscar por nome" query={q} placeholder="Ex.: Ana" />
 
-      <ContactDirectory kind="cliente" contacts={customers.items} canManage={canManage} />
+      <CustomerDirectory customers={customers.items} canManage={canManage} initialOpen={newAction === "customer"} query={q} />
 
       <ListingPagination page={customers.page} total={customers.total} pageSize={customers.pageSize} query={q} />
     </main>

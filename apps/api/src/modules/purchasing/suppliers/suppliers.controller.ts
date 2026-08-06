@@ -53,6 +53,15 @@ export class SuppliersController {
     });
   }
 
+  @Get(':id')
+  @RequirePermission('view_purchasing')
+  detail(
+    @CurrentTenant() tenant: CurrentTenantContext,
+    @Param('id') id: string,
+  ) {
+    return this.suppliers.detail(tenant.companyId, id);
+  }
+
   @Patch(':id')
   @RequirePermission('manage_purchasing')
   update(

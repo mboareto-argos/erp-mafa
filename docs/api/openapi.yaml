@@ -376,6 +376,26 @@ paths:
                     items: { $ref: "#/components/schemas/Product" }
                   - $ref: "#/components/schemas/PaginatedProducts"
   /catalog/products/{id}:
+    get:
+      tags: [catalog]
+      summary: Detalhe do produto com variações e histórico completo de preços (requer permission:view_catalog)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "404":
+          description: Produto não encontrado nesta empresa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
     patch:
       tags: [catalog]
       summary: >
@@ -397,9 +417,9 @@ paths:
                 sku: { type: string }
                 name: { type: string }
                 unit: { type: string }
-                categoryId: { type: string, format: uuid }
-                brandId: { type: string, format: uuid }
-                minStock: { type: number }
+                categoryId: { type: string, format: uuid, nullable: true }
+                brandId: { type: string, format: uuid, nullable: true }
+                minStock: { type: number, nullable: true }
       responses:
         "200":
           description: OK
@@ -577,11 +597,11 @@ paths:
               required: [name]
               properties:
                 name: { type: string }
-                document: { type: string }
-                contactName: { type: string }
-                phone: { type: string }
-                whatsapp: { type: string }
-                email: { type: string, format: email }
+                document: { type: string, nullable: true }
+                contactName: { type: string, nullable: true }
+                phone: { type: string, nullable: true }
+                whatsapp: { type: string, nullable: true }
+                email: { type: string, format: email, nullable: true }
       responses:
         "201":
           description: Criado
@@ -610,6 +630,21 @@ paths:
                     items: { $ref: "#/components/schemas/Supplier" }
                   - $ref: "#/components/schemas/PaginatedSuppliers"
   /purchasing/suppliers/{id}:
+    get:
+      tags: [purchasing]
+      summary: Consulta ficha e indicadores do fornecedor (requer permission:view_purchasing)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Fornecedor com resumo comercial e compras recentes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupplierDetail" }
     patch:
       tags: [purchasing]
       summary: Edita campos cadastrais do fornecedor (requer permission:manage_purchasing)
@@ -626,11 +661,11 @@ paths:
               type: object
               properties:
                 name: { type: string }
-                document: { type: string }
-                contactName: { type: string }
-                phone: { type: string }
-                whatsapp: { type: string }
-                email: { type: string, format: email }
+                document: { type: string, nullable: true }
+                contactName: { type: string, nullable: true }
+                phone: { type: string, nullable: true }
+                whatsapp: { type: string, nullable: true }
+                email: { type: string, format: email, nullable: true }
       responses:
         "200":
           description: OK
@@ -735,6 +770,47 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
+    patch:
+      tags: [purchasing]
+      summary: Substitui os dados e itens de uma compra em rascunho (requer permission:manage_purchasing)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                supplierId: { type: string, format: uuid }
+                currency: { type: string, default: BRL }
+                exchangeRate: { type: number }
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [productVariantId, quantity, unitCostOriginCurrency]
+                    properties:
+                      productVariantId: { type: string, format: uuid }
+                      quantity: { type: number }
+                      unitCostOriginCurrency: { type: number }
+      responses:
+        "200":
+          description: Rascunho atualizado; itens anteriores preservados como inativos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Purchase" }
+        "409":
+          description: Compra não está em rascunho
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
   /purchasing/purchases/{id}/order:
     post:
       tags: [purchasing]
@@ -825,6 +901,7 @@ paths:
           in: path
           required: true
           schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
       responses:
         "201":
           description: Cancelada
@@ -851,11 +928,11 @@ paths:
               required: [name]
               properties:
                 name: { type: string }
-                whatsapp: { type: string }
-                phone: { type: string }
-                email: { type: string, format: email }
-                instagram: { type: string }
-                birthDate: { type: string, format: date }
+                whatsapp: { type: string, nullable: true }
+                phone: { type: string, nullable: true }
+                email: { type: string, format: email, nullable: true }
+                instagram: { type: string, nullable: true }
+                birthDate: { type: string, format: date, nullable: true }
       responses:
         "201":
           description: Criado
@@ -884,6 +961,21 @@ paths:
                     items: { $ref: "#/components/schemas/Customer" }
                   - $ref: "#/components/schemas/PaginatedCustomers"
   /customers/{id}:
+    get:
+      tags: [customers]
+      summary: Consulta ficha e indicadores do cliente (requer permission:view_customers)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Cliente com resumo de relacionamento e vendas recentes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerDetail" }
     patch:
       tags: [customers]
       summary: Edita campos cadastrais do cliente (requer permission:manage_customers)
@@ -900,11 +992,11 @@ paths:
               type: object
               properties:
                 name: { type: string }
-                whatsapp: { type: string }
-                phone: { type: string }
-                email: { type: string, format: email }
-                instagram: { type: string }
-                birthDate: { type: string, format: date }
+                whatsapp: { type: string, nullable: true }
+                phone: { type: string, nullable: true }
+                email: { type: string, format: email, nullable: true }
+                instagram: { type: string, nullable: true }
+                birthDate: { type: string, format: date, nullable: true }
       responses:
         "200":
           description: OK
@@ -1044,6 +1136,53 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/Sale" }
   /sales/{id}:
+    patch:
+      tags: [sales]
+      summary: Edita os dados e substitui os itens de uma venda em rascunho (requer permission:manage_sales)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channel, items]
+              properties:
+                customerId: { type: string, format: uuid }
+                channel: { type: string, enum: [presencial, whatsapp, instagram, catalogo, outro] }
+                discount: { type: number, default: 0 }
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [productVariantId, quantity, unitPrice]
+                    properties:
+                      productVariantId: { type: string, format: uuid }
+                      quantity: { type: number }
+                      unitPrice: { type: number }
+                      discount: { type: number, default: 0 }
+      responses:
+        "200":
+          description: Rascunho atualizado; itens anteriores permanecem inativados no histórico
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Sale" }
+        "404":
+          description: Venda não encontrada nesta empresa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: Somente rascunhos podem ser editados
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
     get:
       tags: [sales]
       summary: Detalhe da venda, com itens/pagamentos/devoluções (requer permission:view_sales)
@@ -1117,7 +1256,8 @@ paths:
       tags: [sales]
       summary: >
         Cancela a venda — permitido em draft (sem efeito) e confirmed
-        (restaura o estoque ainda não devolvido). Bloqueado se já
+        (restaura o estoque ainda não devolvido e registra saída de estorno
+        para cada entrada financeira original). Bloqueado se já
         returned/partially_returned/cancelled.
       security: [{ bearerAuth: [] }]
       parameters:
@@ -1125,6 +1265,7 @@ paths:
           in: path
           required: true
           schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
       responses:
         "201":
           description: Cancelada
@@ -1553,6 +1694,8 @@ paths:
         FinancialTransaction de saída direto; paidNow=false exige dueDate e gera
         automaticamente um Payable vinculado (RN 10.15.3).
       security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
       requestBody:
         required: true
         content:
@@ -1633,8 +1776,8 @@ paths:
       tags: [reporting]
       summary: >
         Indicadores consolidados do período + comparação com o período anterior equivalente
-        (requer permission:view_reports). cmv/grossProfit/netProfitEstimated/margin só aparecem
-        na resposta se o usuário tiver view_cost/view_profit (RN 10.17.2 — omitido no servidor).
+        (requer permission:view_dashboard). O servidor compõe a resposta conforme as permissões
+        de vendas, estoque, financeiro, custo e lucro do perfil; campos não autorizados são omitidos.
       security: [{ bearerAuth: [] }]
       parameters:
         - name: from
@@ -2070,6 +2213,16 @@ components:
             properties:
               id: { type: string, format: uuid }
               skuVariant: { type: string }
+        prices:
+          type: array
+          description: Na listagem contém somente o preço vigente; no detalhe contém o histórico completo, do mais recente ao mais antigo.
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              salePrice: { type: string }
+              costPrice: { type: string, description: Calculado; nunca editável diretamente. }
+              effectiveFrom: { type: string, format: date-time }
     PaginatedProducts:
       type: object
       properties:
@@ -2095,8 +2248,16 @@ components:
         type: { type: string, enum: [in, out, adjustment, return] }
         quantity: { type: string }
         unitCost: { type: string, nullable: true }
-        originType: { type: string, enum: [purchase, adjustment, return] }
+        originType: { type: string, enum: [purchase, adjustment, return, sale] }
         originId: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        adjustment:
+          allOf:
+            - $ref: "#/components/schemas/StockAdjustment"
+          nullable: true
+        productVariant:
+          type: object
+          description: Variação e produto incluídos na consulta de movimentações para identificação no histórico.
     StockAdjustment:
       type: object
       properties:
@@ -2113,7 +2274,37 @@ components:
         companyId: { type: string, format: uuid }
         name: { type: string }
         document: { type: string, nullable: true }
+        contactName: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        whatsapp: { type: string, nullable: true }
+        email: { type: string, format: email, nullable: true }
         status: { type: string, enum: [active, inactive] }
+    SupplierDetail:
+      allOf:
+        - $ref: "#/components/schemas/Supplier"
+        - type: object
+          properties:
+            summary:
+              type: object
+              properties:
+                purchasesCount: { type: integer }
+                totalPurchased: { type: string }
+                averagePurchase: { type: string }
+                lastPurchaseAt: { type: string, format: date-time, nullable: true }
+                productsSupplied: { type: integer }
+                outstandingBalance: { type: string }
+            recentPurchases:
+              type: array
+              maxItems: 5
+              items:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  status: { type: string }
+                  currency: { type: string }
+                  total: { type: string }
+                  createdAt: { type: string, format: date-time }
+                  itemsCount: { type: integer }
     PaginatedSuppliers:
       type: object
       properties:
@@ -2164,7 +2355,32 @@ components:
         phone: { type: string, nullable: true }
         email: { type: string, nullable: true }
         instagram: { type: string, nullable: true }
+        birthDate: { type: string, format: date, nullable: true }
         status: { type: string, enum: [active, inactive] }
+    CustomerDetail:
+      allOf:
+        - $ref: "#/components/schemas/Customer"
+        - type: object
+          properties:
+            summary:
+              type: object
+              properties:
+                salesCount: { type: integer }
+                totalPurchased: { type: string }
+                averageTicket: { type: string }
+                lastPurchaseAt: { type: string, format: date-time, nullable: true }
+                productsPurchased: { type: integer }
+                outstandingBalance: { type: string }
+            recentSales:
+              type: array
+              maxItems: 5
+              items:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  status: { type: string }
+                  total: { type: string }
+                  createdAt: { type: string, format: date-time }
     PaginatedCustomers:
       type: object
       properties:
@@ -2300,8 +2516,9 @@ components:
     DashboardResponse:
       type: object
       description: >
-        cmv/grossProfit/netProfitEstimated/margin e as comparações correspondentes só aparecem
-        quando o usuário tem view_cost/view_profit (RN 10.17.2).
+        Resposta polimórfica por permissão. Métricas de vendas exigem view_sales; estoque exige
+        view_inventory; valores financeiros exigem suas permissões específicas; CMV/lucro exigem
+        view_cost/view_profit. Campos sem autorização são omitidos no servidor (RN 10.17.1/2).
       properties:
         period: { type: object, properties: { from: { type: string, format: date-time }, to: { type: string, format: date-time } } }
         revenueGross: { type: string }
@@ -2313,7 +2530,9 @@ components:
         lowStockCount: { type: integer }
         inventoryValue: { type: string }
         receivablesOpen: { type: string }
+        overdueReceivablesCount: { type: integer }
         payablesOpen: { type: string }
+        overduePayablesCount: { type: integer }
         cashBalance: { type: string }
         cmv: { type: string, description: "Só com view_cost" }
         grossProfit: { type: string, description: "Só com view_profit" }
@@ -2326,6 +2545,27 @@ components:
             salesCountChangePercent: { type: string, nullable: true }
             grossProfitChangePercent: { type: string, nullable: true, description: "Só com view_profit" }
             netProfitChangePercent: { type: string, nullable: true, description: "Só com view_profit" }
+        salesTrend:
+          type: array
+          description: "Só com view_sales; série diária das vendas válidas do período."
+          items:
+            type: object
+            properties:
+              date: { type: string, format: date }
+              revenue: { type: string }
+              salesCount: { type: integer }
+        topProducts:
+          type: array
+          description: "Só com view_sales; profit é omitido sem view_profit."
+          items:
+            type: object
+            properties:
+              productId: { type: string, format: uuid }
+              sku: { type: string }
+              name: { type: string }
+              quantitySold: { type: string }
+              revenue: { type: string }
+              profit: { type: string, description: "Só com view_profit" }
     DreResponse:
       type: object
       properties:

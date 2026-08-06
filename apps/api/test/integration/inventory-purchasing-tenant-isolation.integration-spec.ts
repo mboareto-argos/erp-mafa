@@ -129,5 +129,19 @@ describe('Isolamento multiempresa — Inventory e Purchasing', () => {
       .post(`/api/v1/purchasing/purchases/${purchase.body.id}/order`)
       .set(auth(companyB.accessToken))
       .expect(404);
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/purchasing/purchases/${purchase.body.id}`)
+      .set(auth(companyB.accessToken))
+      .send({
+        items: [
+          {
+            productVariantId: productA.variants[0].id,
+            quantity: 3,
+            unitCostOriginCurrency: 12,
+          },
+        ],
+      })
+      .expect(404);
   });
 });

@@ -15,6 +15,16 @@ const PRODUCT_INCLUDE = {
   prices: { orderBy: { effectiveFrom: 'desc' as const }, take: 1 },
 } satisfies Prisma.ProductInclude;
 
+const PRODUCT_DETAIL_INCLUDE = {
+  category: true,
+  brand: true,
+  variants: { select: { id: true, skuVariant: true } as const },
+  prices: {
+    where: { deletedAt: null },
+    orderBy: { effectiveFrom: 'desc' as const },
+  },
+} satisfies Prisma.ProductInclude;
+
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -149,12 +159,27 @@ export class ProductsService {
     return { items, total, page, pageSize };
   }
 
+  async get(companyId: string, id: string) {
+    const product = await this.prisma.product.findFirst({
+      where: { id, companyId, deletedAt: null },
+      include: PRODUCT_DETAIL_INCLUDE,
+    });
+    if (!product) {
+      throw new AppError(
+        'PRODUCT_NOT_FOUND',
+        'Produto não encontrado.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return product;
+  }
+
   async update(companyId: string, id: string, dto: UpdateProductDto) {
     await this.findOwnedOrThrow(companyId, id);
-    if (dto.categoryId !== undefined) {
+    if (dto.categoryId) {
       await this.assertBelongsToCompany('category', dto.categoryId, companyId);
     }
-    if (dto.brandId !== undefined) {
+    if (dto.brandId) {
       await this.assertBelongsToCompany('brand', dto.brandId, companyId);
     }
     try {

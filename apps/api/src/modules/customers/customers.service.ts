@@ -64,6 +64,83 @@ export class CustomersService {
     return this.prisma.customer.update({ where: { id }, data: dto });
   }
 
+  async detail(companyId: string, id: string) {
+    const customer = await this.findOwnedOrThrow(companyId, id);
+    const validSaleStatuses = ['confirmed', 'partially_returned'] as const;
+    const [salesSummary, purchasedVariants, receivables, recentSales] =
+      await Promise.all([
+        this.prisma.sale.aggregate({
+          where: {
+            companyId,
+            customerId: id,
+            deletedAt: null,
+            status: { in: [...validSaleStatuses] },
+          },
+          _count: { _all: true },
+          _sum: { total: true },
+          _avg: { total: true },
+          _max: { createdAt: true },
+        }),
+        this.prisma.saleItem.findMany({
+          where: {
+            companyId,
+            deletedAt: null,
+            sale: {
+              customerId: id,
+              deletedAt: null,
+              status: { in: [...validSaleStatuses] },
+            },
+          },
+          distinct: ['productVariantId'],
+          select: { productVariantId: true },
+        }),
+        this.prisma.receivable.findMany({
+          where: {
+            companyId,
+            customerId: id,
+            deletedAt: null,
+            status: { in: ['pending', 'partially_received'] },
+          },
+          select: { amountOriginal: true, amountReceived: true },
+        }),
+        this.prisma.sale.findMany({
+          where: { companyId, customerId: id, deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          select: {
+            id: true,
+            status: true,
+            total: true,
+            createdAt: true,
+            _count: { select: { items: true } },
+          },
+        }),
+      ]);
+
+    const outstandingBalance = receivables.reduce(
+      (total, receivable) =>
+        total.plus(receivable.amountOriginal.minus(receivable.amountReceived)),
+      new Prisma.Decimal(0),
+    );
+
+    return {
+      ...customer,
+      summary: {
+        salesCount: salesSummary._count._all,
+        totalPurchased: (
+          salesSummary._sum.total ?? new Prisma.Decimal(0)
+        ).toString(),
+        averageTicket: (
+          salesSummary._avg.total ?? new Prisma.Decimal(0)
+        ).toString(),
+        lastPurchaseAt: salesSummary._max.createdAt,
+        productsPurchased: purchasedVariants.length,
+        outstandingBalance: outstandingBalance.toString(),
+      },
+      recentSales,
+    };
+  }
+
   // Nunca apaga — histórico de compras permanece após inativação (RN 10.9.4).
   async deactivate(companyId: string, id: string) {
     await this.findOwnedOrThrow(companyId, id);

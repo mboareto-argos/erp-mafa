@@ -357,6 +357,14 @@ export class InventoryService {
   getMovements(companyId: string, productVariantId?: string) {
     return this.prisma.stockMovement.findMany({
       where: { companyId, ...(productVariantId ? { productVariantId } : {}) },
+      include: {
+        adjustment: {
+          select: { reason: true, requiresApproval: true, approvedBy: true },
+        },
+        productVariant: {
+          include: { product: true },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }

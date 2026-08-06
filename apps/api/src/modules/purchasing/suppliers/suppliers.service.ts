@@ -62,6 +62,110 @@ export class SuppliersService {
     return this.prisma.supplier.update({ where: { id }, data: dto });
   }
 
+  async detail(companyId: string, id: string) {
+    const supplier = await this.findOwnedOrThrow(companyId, id);
+    const purchases = await this.prisma.purchase.findMany({
+      where: {
+        companyId,
+        supplierId: id,
+        deletedAt: null,
+        status: { in: ['ordered', 'partially_received', 'received'] },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        status: true,
+        currency: true,
+        exchangeRate: true,
+        createdAt: true,
+        items: {
+          where: { deletedAt: null },
+          select: {
+            productVariantId: true,
+            quantity: true,
+            unitCostOriginCurrency: true,
+          },
+        },
+        receipts: {
+          where: { deletedAt: null },
+          select: {
+            costAllocations: {
+              where: { deletedAt: null },
+              select: { amount: true },
+            },
+          },
+        },
+      },
+    });
+    const payables = await this.prisma.payable.findMany({
+      where: {
+        companyId,
+        supplierId: id,
+        deletedAt: null,
+        status: { in: ['pending', 'partially_paid'] },
+      },
+      select: { amountOriginal: true, amountPaid: true },
+    });
+
+    const productsSupplied = new Set<string>();
+    const calculatedPurchases = purchases.map((purchase) => {
+      const merchandiseOrigin = purchase.items.reduce((total, item) => {
+        productsSupplied.add(item.productVariantId);
+        return total.plus(item.quantity.mul(item.unitCostOriginCurrency));
+      }, new Prisma.Decimal(0));
+      const additionalCosts = purchase.receipts.reduce(
+        (total, receipt) =>
+          receipt.costAllocations.reduce(
+            (receiptTotal, allocation) => receiptTotal.plus(allocation.amount),
+            total,
+          ),
+        new Prisma.Decimal(0),
+      );
+      const exchangeRate =
+        purchase.currency === 'BRL'
+          ? new Prisma.Decimal(1)
+          : (purchase.exchangeRate ?? new Prisma.Decimal(1));
+      return {
+        ...purchase,
+        totalOrigin: merchandiseOrigin.plus(additionalCosts),
+        totalCompanyCurrency: merchandiseOrigin
+          .mul(exchangeRate)
+          .plus(additionalCosts),
+      };
+    });
+    const totalPurchased = calculatedPurchases.reduce(
+      (total, purchase) => total.plus(purchase.totalCompanyCurrency),
+      new Prisma.Decimal(0),
+    );
+    const outstandingBalance = payables.reduce(
+      (total, payable) =>
+        total.plus(payable.amountOriginal.minus(payable.amountPaid)),
+      new Prisma.Decimal(0),
+    );
+
+    return {
+      ...supplier,
+      summary: {
+        purchasesCount: calculatedPurchases.length,
+        totalPurchased: totalPurchased.toString(),
+        averagePurchase: calculatedPurchases.length
+          ? totalPurchased.div(calculatedPurchases.length).toString()
+          : '0',
+        lastPurchaseAt: calculatedPurchases[0]?.createdAt ?? null,
+        productsSupplied: productsSupplied.size,
+        outstandingBalance: outstandingBalance.toString(),
+      },
+      recentPurchases: calculatedPurchases.slice(0, 5).map((purchase) => ({
+        id: purchase.id,
+        status: purchase.status,
+        currency: purchase.currency,
+        createdAt: purchase.createdAt,
+        itemsCount: purchase.items.length,
+        total: purchase.totalOrigin.toString(),
+      })),
+    };
+  }
+
   // Nunca apaga — so inativa (mesmo padrao de Catalog, RN 10.5.2 do
   // Documento de Negocio: historico de compras permanece apos inativacao).
   async deactivate(companyId: string, id: string) {

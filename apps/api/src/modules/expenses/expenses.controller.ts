@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, UseGuards } from '@nestjs/common';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { JwtAuthGuard } from '../tenancy/jwt-auth.guard';
 import { PermissionsGuard } from '../tenancy/permissions.guard';
@@ -10,19 +10,29 @@ import {
   createExpenseSchema,
   type CreateExpenseDto,
 } from './dto/create-expense.schema';
+import { IdempotencyService } from '../idempotency/idempotency.service';
 
 @Controller('expenses')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ExpensesController {
-  constructor(private readonly expenses: ExpensesService) {}
+  constructor(
+    private readonly expenses: ExpensesService,
+    private readonly idempotency: IdempotencyService,
+  ) {}
 
   @Post()
   @RequirePermission('manage_expenses')
   create(
     @CurrentTenant() tenant: CurrentTenantContext,
     @Body(new ZodValidationPipe(createExpenseSchema)) dto: CreateExpenseDto,
+    @Headers('idempotency-key') key?: string,
   ) {
-    return this.expenses.create(tenant, dto);
+    return this.idempotency.execute(
+      tenant.companyId,
+      'expenses.create',
+      key,
+      () => this.expenses.create(tenant, dto),
+    );
   }
 
   @Get()

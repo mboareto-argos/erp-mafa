@@ -33,6 +33,7 @@ describe('Financeiro — fluxo completo (integração)', () => {
     const expense = await request(app.getHttpServer())
       .post('/api/v1/expenses')
       .set(auth(session.accessToken))
+      .set('Idempotency-Key', 'paid-expense-replay')
       .send({
         description: 'Embalagens',
         category: 'embalagem',
@@ -43,6 +44,21 @@ describe('Financeiro — fluxo completo (integração)', () => {
       })
       .expect(201);
     expect(expense.body.status).toBe('paid');
+
+    const replayedExpense = await request(app.getHttpServer())
+      .post('/api/v1/expenses')
+      .set(auth(session.accessToken))
+      .set('Idempotency-Key', 'paid-expense-replay')
+      .send({
+        description: 'Embalagens',
+        category: 'embalagem',
+        amount: 50,
+        competenceDate: '2026-08-04',
+        paidNow: true,
+        financialAccountId: account.id,
+      })
+      .expect(201);
+    expect(replayedExpense.body).toEqual(expense.body);
 
     const balance = await getAccountBalance(
       app,

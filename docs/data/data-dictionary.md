@@ -162,9 +162,9 @@ aplicação; o registro é criado na mesma transação do evento de origem.
 **Consulta**: `GET /audit` (permissão `view_audit`, exclusiva do papel `owner` — BR §9.1/§10.23
 regra 4), filtros opcionais `entityType`/`entityId`/`action`/`from`/`to`/`limit` (máx. 200,
 padrão 50), mais recentes primeiro. Escrita cobre `stock.adjusted`, `purchase.received`,
-`sale.confirmed`, `product.repriced`, `receivable.paid`, `receivable.cancelled`,
+`purchase.draft_updated`, `purchase.cancelled`, `sale.confirmed`, `sale.draft_updated`, `sale.cancelled`, `product.repriced`, `receivable.paid`, `receivable.cancelled`,
 `payable.paid`, `payable.cancelled` e `transfer.created` — cobertura completa
-(login, mudança de permissão, cancelamento, alteração de preço etc.) é débito documentado, não
+(login, mudança de permissão, cancelamentos de outros domínios, alteração de preço etc.) é débito documentado, não
 implementado ainda.
 
 ## Idempotência
@@ -383,6 +383,10 @@ ser append-only, sem `updated_at`/`deleted_at` (mesma exceção de `stock_balanc
 
 Índice: `(company_id, product_variant_id)`.
 
+**Consulta:** `GET /inventory/movements` inclui a identificação da variação/produto e, quando
+a origem é um ajuste manual, motivo e sinalização de aprovação. O filtro opcional
+`productVariantId` e o escopo obrigatório de `company_id` permanecem aplicados.
+
 ### `stock_adjustments`
 Complementa uma `stock_movement(type=adjustment)` com motivo (RN 10.7.9) e aprovação (RN
 10.7.10). `requires_approval` calculado por um limiar fixo no `InventoryService` (50 unidades)
@@ -441,6 +445,9 @@ Fonte: `apps/api/prisma/schema.prisma`, migration `20260804175603_add_inventory_
 mesmo padrão de `products` acima. `GET /purchasing/suppliers` também aceita
 `q`/`page`/`pageSize` opcionais, retrocompatível (sem `page`, array completo, usado pelo
 seletor de fornecedor em Compras).
+`GET /purchasing/suppliers/:id` retorna a ficha agregada, com totais normalizados em BRL via
+`exchange_rate`, saldo de contas a pagar e até cinco compras recentes, sempre filtrados por
+`company_id`.
 
 ### `purchases`
 Sem status financeiro ainda (Payables é Fase 4, fora de escopo — sinalizado explicitamente).
@@ -549,6 +556,8 @@ Fase 4). Ver decisão registrada no histórico de commits (Fase 3).
 **API**: `PATCH /customers/:id` (campos cadastrais) e `PATCH /:id/reactivate`, mesmo padrão de
 `products`/`suppliers` acima. `GET /customers` também aceita `q`/`page`/`pageSize` opcionais,
 retrocompatível (sem `page`, array completo, usado pelo seletor de cliente em Vendas).
+`GET /customers/:id` retorna a ficha agregada, com indicadores em `Decimal`, saldo de
+recebíveis e até cinco vendas recentes, sempre filtrados por `company_id`.
 
 ### `payment_methods`
 Sem prazo de recebimento nem configuração de parcelas ainda (venda só à vista nesta fase).

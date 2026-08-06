@@ -3,5 +3,5 @@
 import { ListingError } from "@/components/listings/listing-error";
 
 export default function Error({ reset }: { reset: () => void }) {
-  return <ListingError reset={reset} />;
+  return <main className="page-content"><ListingError reset={reset} /></main>;
 }

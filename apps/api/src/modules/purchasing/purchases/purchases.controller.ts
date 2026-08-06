@@ -4,6 +4,7 @@ import {
   Get,
   Headers,
   Param,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -53,6 +54,16 @@ export class PurchasesController {
     return this.purchases.get(tenant.companyId, id);
   }
 
+  @Patch(':id')
+  @RequirePermission('manage_purchasing')
+  updateDraft(
+    @CurrentTenant() tenant: CurrentTenantContext,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(createPurchaseSchema)) dto: CreatePurchaseDto,
+  ) {
+    return this.purchases.updateDraft(tenant, id, dto);
+  }
+
   @Post(':id/order')
   @RequirePermission('manage_purchasing')
   order(
@@ -83,7 +94,13 @@ export class PurchasesController {
   cancel(
     @CurrentTenant() tenant: CurrentTenantContext,
     @Param('id') id: string,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.purchases.cancel(tenant.companyId, id);
+    return this.idempotency.execute(
+      tenant.companyId,
+      `purchases.cancel:${id}`,
+      idempotencyKey,
+      () => this.purchases.cancel(tenant, id),
+    );
   }
 }

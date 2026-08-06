@@ -86,7 +86,7 @@ function ContactRow({ kind, contact, canManage }: { kind: Kind; contact: Contact
   }
 
   return (
-    <>
+    <section className="contact-directory">
       <tr>
         <td data-label="Nome">
           <strong>{contact.name}</strong>
@@ -100,7 +100,7 @@ function ContactRow({ kind, contact, canManage }: { kind: Kind; contact: Contact
         </td>
         {canManage && (
           <td data-label="Ações">
-            <div className="page-actions">
+            <div className="table-actions">
               <button
                 type="button"
                 className="button button-secondary compact-button"
@@ -123,7 +123,7 @@ function ContactRow({ kind, contact, canManage }: { kind: Kind; contact: Contact
       {editOpen && (
         <tr>
           <td colSpan={5}>
-            <form className="settlement-form" onSubmit={submitEdit} noValidate>
+            <form className="settlement-form table-edit-form" onSubmit={submitEdit} noValidate>
               <div className="form-grid">
                 <div className="field">
                   <label htmlFor={`edit-name-${contact.id}`}>Nome</label>
@@ -173,7 +173,7 @@ function ContactRow({ kind, contact, canManage }: { kind: Kind; contact: Contact
           </td>
         </tr>
       )}
-    </>
+    </section>
   );
 }
 
@@ -181,13 +181,15 @@ export function ContactDirectory({
   kind,
   contacts,
   canManage,
+  initialOpen = false,
 }: {
   kind: Kind;
   contacts: Contact[];
   canManage: boolean;
+  initialOpen?: boolean;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
   const endpoint = endpointFor(kind);
@@ -231,9 +233,9 @@ export function ContactDirectory({
   return (
     <>
       {canManage && !open && contacts.length > 0 && (
-        <button className="button button-primary compact-button" onClick={() => setOpen(true)}>
+        <div className="directory-toolbar"><button className="button button-primary compact-button" onClick={() => setOpen(true)}>
           Novo {kind}
-        </button>
+        </button></div>
       )}
       {canManage && open && (
         <section className="form-card">

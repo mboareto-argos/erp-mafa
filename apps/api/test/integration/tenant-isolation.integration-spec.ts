@@ -93,4 +93,25 @@ describe('Isolamento multiempresa — Catalog', () => {
         .expect(201);
     }
   });
+
+  it('empresa B não acessa o detalhe e o histórico de preço do produto da empresa A', async () => {
+    const companyA = await registerCompany(app, { companyName: 'Empresa A4' });
+    const companyB = await registerCompany(app, { companyName: 'Empresa B4' });
+
+    const productA = await request(app.getHttpServer())
+      .post('/api/v1/catalog/products')
+      .set('Authorization', `Bearer ${companyA.accessToken}`)
+      .send({
+        sku: 'SKU-DETAIL-A',
+        name: 'Produto privado A',
+        unit: 'un',
+        salePrice: 50,
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .get(`/api/v1/catalog/products/${productA.body.id}`)
+      .set('Authorization', `Bearer ${companyB.accessToken}`)
+      .expect(404);
+  });
 });

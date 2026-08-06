@@ -4,6 +4,7 @@ import {
   Get,
   Headers,
   Param,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -45,6 +46,16 @@ export class SalesController {
     return this.sales.list(tenant.companyId);
   }
 
+  @Patch(':id')
+  @RequirePermission('manage_sales')
+  updateDraft(
+    @CurrentTenant() tenant: CurrentTenantContext,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(createSaleSchema)) dto: CreateSaleDto,
+  ) {
+    return this.sales.updateDraft(tenant, id, dto);
+  }
+
   @Get(':id')
   @RequirePermission('view_sales')
   get(@CurrentTenant() tenant: CurrentTenantContext, @Param('id') id: string) {
@@ -72,8 +83,14 @@ export class SalesController {
   cancel(
     @CurrentTenant() tenant: CurrentTenantContext,
     @Param('id') id: string,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.sales.cancel(tenant, id);
+    return this.idempotency.execute(
+      tenant.companyId,
+      `sales.cancel:${id}`,
+      idempotencyKey,
+      () => this.sales.cancel(tenant, id),
+    );
   }
 
   @Post(':id/return')

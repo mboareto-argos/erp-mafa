@@ -11,7 +11,10 @@ import { allocateAdditionalCosts, ReceivedItemInput } from './cost-allocation';
 
 const INCLUDE_DETAILS = {
   supplier: true,
-  items: true,
+  items: {
+    where: { deletedAt: null },
+    include: { productVariant: { include: { product: true } } },
+  },
   receipts: { include: { items: true, costAllocations: true } },
 } satisfies Prisma.PurchaseInclude;
 
@@ -27,7 +30,12 @@ export class PurchasesService {
   async create(tenant: CurrentTenantContext, dto: CreatePurchaseDto) {
     if (dto.supplierId) {
       const supplier = await this.prisma.supplier.findFirst({
-        where: { id: dto.supplierId, companyId: tenant.companyId },
+        where: {
+          id: dto.supplierId,
+          companyId: tenant.companyId,
+          status: 'active',
+          deletedAt: null,
+        },
       });
       if (!supplier) {
         throw new AppError(
@@ -41,7 +49,11 @@ export class PurchasesService {
 
     for (const item of dto.items) {
       const variant = await this.prisma.productVariant.findFirst({
-        where: { id: item.productVariantId, companyId: tenant.companyId },
+        where: {
+          id: item.productVariantId,
+          companyId: tenant.companyId,
+          product: { status: 'active', deletedAt: null },
+        },
       });
       if (!variant) {
         throw new AppError(
@@ -98,6 +110,99 @@ export class PurchasesService {
       );
     }
     return purchase;
+  }
+
+  // Rascunhos podem ser revistos sem impacto em estoque. Os itens anteriores
+  // são inativados para preservar o histórico, seguindo o padrão de Vendas.
+  async updateDraft(
+    tenant: CurrentTenantContext,
+    id: string,
+    dto: CreatePurchaseDto,
+  ) {
+    const purchase = await this.findByStatus(tenant.companyId, id, ['draft']);
+
+    if (dto.supplierId) {
+      const supplier = await this.prisma.supplier.findFirst({
+        where: {
+          id: dto.supplierId,
+          companyId: tenant.companyId,
+          status: 'active',
+          deletedAt: null,
+        },
+      });
+      if (!supplier) {
+        throw new AppError(
+          'INVALID_SUPPLIER',
+          'Fornecedor inválido.',
+          HttpStatus.BAD_REQUEST,
+          'supplierId',
+        );
+      }
+    }
+
+    for (const item of dto.items) {
+      const variant = await this.prisma.productVariant.findFirst({
+        where: {
+          id: item.productVariantId,
+          companyId: tenant.companyId,
+          product: { status: 'active', deletedAt: null },
+        },
+      });
+      if (!variant) {
+        throw new AppError(
+          'INVALID_PRODUCT_VARIANT',
+          'Produto inválido.',
+          HttpStatus.BAD_REQUEST,
+          'items.productVariantId',
+        );
+      }
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.purchaseItem.updateMany({
+        where: {
+          purchaseId: purchase.id,
+          companyId: tenant.companyId,
+          deletedAt: null,
+        },
+        data: { deletedAt: new Date() },
+      });
+      const updated = await tx.purchase.update({
+        where: { id: purchase.id },
+        data: {
+          supplierId: dto.supplierId ?? null,
+          currency: dto.currency,
+          exchangeRate: dto.exchangeRate,
+          exchangeRateDate: dto.exchangeRate ? new Date() : null,
+          items: {
+            create: dto.items.map((item) => ({
+              companyId: tenant.companyId,
+              productVariantId: item.productVariantId,
+              quantity: item.quantity,
+              unitCostOriginCurrency: item.unitCostOriginCurrency,
+              createdBy: tenant.userId,
+            })),
+          },
+        },
+        include: INCLUDE_DETAILS,
+      });
+      await this.audit.record(tx, {
+        companyId: tenant.companyId,
+        userId: tenant.userId,
+        action: 'purchase.draft_updated',
+        entityType: 'purchase',
+        entityId: purchase.id,
+        beforeData: {
+          supplierId: purchase.supplierId,
+          itemCount: purchase.items.length,
+        },
+        afterData: {
+          supplierId: updated.supplierId,
+          itemCount: updated.items.length,
+        },
+      });
+      return updated;
+    });
   }
 
   // RN 10.6.2: marcada como pedido tambem nao aumenta o estoque disponivel.
@@ -276,8 +381,8 @@ export class PurchasesService {
   // So permite cancelar antes do recebimento — estornar uma compra ja
   // recebida (RN 10.6.6) exige reverter estoque/custo e nao esta
   // implementado nesta fase (decisao explicita, ver plano da Fase 2).
-  async cancel(companyId: string, id: string) {
-    const purchase = await this.get(companyId, id);
+  async cancel(tenant: CurrentTenantContext, id: string) {
+    const purchase = await this.get(tenant.companyId, id);
     if (purchase.status === 'cancelled') {
       throw new AppError(
         'PURCHASE_ALREADY_CANCELLED',
@@ -295,10 +400,22 @@ export class PurchasesService {
         HttpStatus.CONFLICT,
       );
     }
-    return this.prisma.purchase.update({
-      where: { id: purchase.id },
-      data: { status: 'cancelled' },
-      include: INCLUDE_DETAILS,
+    return this.prisma.$transaction(async (tx) => {
+      const cancelled = await tx.purchase.update({
+        where: { id: purchase.id },
+        data: { status: 'cancelled' },
+        include: INCLUDE_DETAILS,
+      });
+      await this.audit.record(tx, {
+        companyId: tenant.companyId,
+        userId: tenant.userId,
+        action: 'purchase.cancelled',
+        entityType: 'purchase',
+        entityId: purchase.id,
+        beforeData: { status: purchase.status },
+        afterData: { status: cancelled.status },
+      });
+      return cancelled;
     });
   }
 

@@ -57,6 +57,63 @@ describe('Inventory + Purchasing — fluxo completo (integração)', () => {
     expect(balances.body).toHaveLength(0);
   });
 
+  it('edita somente o rascunho e preserva os itens anteriores por inativação', async () => {
+    const { session, variantId } = await createOwnerSessionWithProduct();
+
+    const purchase = await request(app.getHttpServer())
+      .post('/api/v1/purchasing/purchases')
+      .set(auth(session.accessToken))
+      .send({
+        items: [
+          {
+            productVariantId: variantId,
+            quantity: 2,
+            unitCostOriginCurrency: 10,
+          },
+        ],
+      })
+      .expect(201);
+    const previousItemId = purchase.body.items[0].id;
+
+    const updated = await request(app.getHttpServer())
+      .patch(`/api/v1/purchasing/purchases/${purchase.body.id}`)
+      .set(auth(session.accessToken))
+      .send({
+        items: [
+          {
+            productVariantId: variantId,
+            quantity: 4,
+            unitCostOriginCurrency: 12.5,
+          },
+        ],
+      })
+      .expect(200);
+    expect(updated.body.items).toHaveLength(1);
+    expect(updated.body.items[0]).toMatchObject({
+      quantity: '4',
+      unitCostOriginCurrency: '12.5',
+    });
+    expect(updated.body.items[0].id).not.toBe(previousItemId);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/purchasing/purchases/${purchase.body.id}/order`)
+      .set(auth(session.accessToken))
+      .expect(201);
+    await request(app.getHttpServer())
+      .patch(`/api/v1/purchasing/purchases/${purchase.body.id}`)
+      .set(auth(session.accessToken))
+      .send({
+        items: [
+          {
+            productVariantId: variantId,
+            quantity: 5,
+            unitCostOriginCurrency: 13,
+          },
+        ],
+      })
+      .expect(409);
+  });
+
   it('recebimento parcial e total: saldo, status da compra e custo médio móvel (RN 11.4)', async () => {
     const { session, variantId } = await createOwnerSessionWithProduct();
 
@@ -227,6 +284,14 @@ describe('Inventory + Purchasing — fluxo completo (integração)', () => {
       .set(auth(session.accessToken))
       .expect(200);
     expect(balances.body[0].quantityAvailable).toBe('10');
+
+    const movements = await request(app.getHttpServer())
+      .get(`/api/v1/inventory/movements?productVariantId=${variantId}`)
+      .set(auth(session.accessToken))
+      .expect(200);
+    expect(movements.body).toHaveLength(1);
+    expect(movements.body[0].adjustment.reason).toBe('Estoque inicial');
+    expect(movements.body[0].productVariant.product.name).toBeTruthy();
   });
 
   it('alerta de estoque baixo reflete o saldo disponível vs. minStock (RN 10.7.8)', async () => {

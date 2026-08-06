@@ -16,7 +16,10 @@ import {
 
 const INCLUDE_DETAILS = {
   customer: true,
-  items: true,
+  items: {
+    where: { deletedAt: null },
+    include: { productVariant: { include: { product: true } } },
+  },
   payments: { include: { paymentMethod: true } },
   returns: { include: { items: true } },
 } satisfies Prisma.SaleInclude;
@@ -34,7 +37,12 @@ export class SalesService {
   async create(tenant: CurrentTenantContext, dto: CreateSaleDto) {
     if (dto.customerId) {
       const customer = await this.prisma.customer.findFirst({
-        where: { id: dto.customerId, companyId: tenant.companyId },
+        where: {
+          id: dto.customerId,
+          companyId: tenant.companyId,
+          status: 'active',
+          deletedAt: null,
+        },
       });
       if (!customer) {
         throw new AppError(
@@ -48,7 +56,11 @@ export class SalesService {
 
     for (const item of dto.items) {
       const variant = await this.prisma.productVariant.findFirst({
-        where: { id: item.productVariantId, companyId: tenant.companyId },
+        where: {
+          id: item.productVariantId,
+          companyId: tenant.companyId,
+          product: { status: 'active', deletedAt: null },
+        },
       });
       if (!variant) {
         throw new AppError(
@@ -107,6 +119,100 @@ export class SalesService {
       );
     }
     return sale;
+  }
+
+  // Apenas rascunhos podem ser alterados. Itens substituídos são inativados,
+  // nunca apagados, preservando o histórico operacional.
+  async updateDraft(
+    tenant: CurrentTenantContext,
+    id: string,
+    dto: CreateSaleDto,
+  ) {
+    const sale = await this.findByStatus(tenant.companyId, id, ['draft']);
+
+    if (dto.customerId) {
+      const customer = await this.prisma.customer.findFirst({
+        where: {
+          id: dto.customerId,
+          companyId: tenant.companyId,
+          status: 'active',
+          deletedAt: null,
+        },
+      });
+      if (!customer) {
+        throw new AppError(
+          'INVALID_CUSTOMER',
+          'Cliente inválido.',
+          HttpStatus.BAD_REQUEST,
+          'customerId',
+        );
+      }
+    }
+
+    for (const item of dto.items) {
+      const variant = await this.prisma.productVariant.findFirst({
+        where: {
+          id: item.productVariantId,
+          companyId: tenant.companyId,
+          product: { status: 'active', deletedAt: null },
+        },
+      });
+      if (!variant) {
+        throw new AppError(
+          'INVALID_PRODUCT_VARIANT',
+          'Produto inválido.',
+          HttpStatus.BAD_REQUEST,
+          'items.productVariantId',
+        );
+      }
+    }
+
+    const { subtotal, total } = calculateSaleTotals(dto.items, dto.discount);
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.saleItem.updateMany({
+        where: {
+          saleId: sale.id,
+          companyId: tenant.companyId,
+          deletedAt: null,
+        },
+        data: { deletedAt: new Date() },
+      });
+      const updated = await tx.sale.update({
+        where: { id: sale.id },
+        data: {
+          customerId: dto.customerId ?? null,
+          channel: dto.channel,
+          subtotal,
+          discount: dto.discount,
+          total,
+          items: {
+            create: dto.items.map((item) => ({
+              companyId: tenant.companyId,
+              productVariantId: item.productVariantId,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              discount: item.discount,
+              createdBy: tenant.userId,
+            })),
+          },
+        },
+        include: INCLUDE_DETAILS,
+      });
+      await this.audit.record(tx, {
+        companyId: tenant.companyId,
+        userId: tenant.userId,
+        action: 'sale.draft_updated',
+        entityType: 'sale',
+        entityId: sale.id,
+        beforeData: {
+          subtotal: sale.subtotal.toString(),
+          total: sale.total.toString(),
+        },
+        afterData: { subtotal: subtotal.toString(), total: total.toString() },
+      });
+      return updated;
+    });
   }
 
   // Confirma a venda: congela o custo por item (RN 10.10.9), baixa estoque
@@ -271,10 +377,22 @@ export class SalesService {
     ]);
 
     if (sale.status === 'draft') {
-      return this.prisma.sale.update({
-        where: { id: sale.id },
-        data: { status: 'cancelled' },
-        include: INCLUDE_DETAILS,
+      return this.prisma.$transaction(async (tx) => {
+        const cancelled = await tx.sale.update({
+          where: { id: sale.id },
+          data: { status: 'cancelled' },
+          include: INCLUDE_DETAILS,
+        });
+        await this.audit.record(tx, {
+          companyId: tenant.companyId,
+          userId: tenant.userId,
+          action: 'sale.cancelled',
+          entityType: 'sale',
+          entityId: sale.id,
+          beforeData: { status: sale.status },
+          afterData: { status: cancelled.status },
+        });
+        return cancelled;
       });
     }
 
@@ -294,11 +412,44 @@ export class SalesService {
         }
       }
 
-      return tx.sale.update({
+      for (const payment of sale.payments) {
+        const originalTransaction = await tx.financialTransaction.findFirst({
+          where: {
+            companyId: tenant.companyId,
+            originType: 'sale_payment',
+            originId: payment.id,
+            type: 'in',
+          },
+        });
+        if (originalTransaction) {
+          await this.cashFlow.recordTransaction(tx, {
+            companyId: tenant.companyId,
+            financialAccountId: originalTransaction.financialAccountId,
+            type: 'out',
+            amount: originalTransaction.amount.negated(),
+            originType: 'sale_payment',
+            originId: payment.id,
+            description: `Estorno do cancelamento da venda ${sale.id}`,
+            createdBy: tenant.userId,
+          });
+        }
+      }
+
+      const cancelled = await tx.sale.update({
         where: { id: sale.id },
         data: { status: 'cancelled' },
         include: INCLUDE_DETAILS,
       });
+      await this.audit.record(tx, {
+        companyId: tenant.companyId,
+        userId: tenant.userId,
+        action: 'sale.cancelled',
+        entityType: 'sale',
+        entityId: sale.id,
+        beforeData: { status: sale.status },
+        afterData: { status: cancelled.status },
+      });
+      return cancelled;
     });
   }
 

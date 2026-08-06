@@ -27,6 +27,12 @@ export class ReportingService {
   ) {}
 
   async getDashboard(tenant: CurrentTenantContext, from: Date, to: Date) {
+    const canViewSales = tenant.permissions.includes('view_sales');
+    const canViewInventory = tenant.permissions.includes('view_inventory');
+    const canViewExpenses = tenant.permissions.includes('view_expenses');
+    const canViewReceivables = tenant.permissions.includes('view_receivables');
+    const canViewPayables = tenant.permissions.includes('view_payables');
+    const canViewCashFlow = tenant.permissions.includes('view_cash_flow');
     const canViewCost = tenant.permissions.includes('view_cost');
     const canViewProfit = tenant.permissions.includes('view_profit');
 
@@ -69,41 +75,95 @@ export class ReportingService {
     const productsCount = await this.prisma.product.count({
       where: { companyId: tenant.companyId, status: 'active', deletedAt: null },
     });
+    const [overdueReceivablesCount, overduePayablesCount] = await Promise.all([
+      canViewReceivables
+        ? this.prisma.receivable.count({
+            where: {
+              companyId: tenant.companyId,
+              status: { in: ['pending', 'partially_received'] },
+              dueDate: { lt: new Date() },
+              deletedAt: null,
+            },
+          })
+        : 0,
+      canViewPayables
+        ? this.prisma.payable.count({
+            where: {
+              companyId: tenant.companyId,
+              status: { in: ['pending', 'partially_paid'] },
+              dueDate: { lt: new Date() },
+              deletedAt: null,
+            },
+          })
+        : 0,
+    ]);
+    const [salesTrend, topProductsResult] = canViewSales
+      ? await Promise.all([
+          this.getSalesTrend(tenant.companyId, from, to),
+          this.getTopProducts(tenant.companyId, from, to, 5, 'quantity'),
+        ])
+      : [[], { products: [] }];
+    const topProducts = topProductsResult.products.map((product) => ({
+      productId: product.productId,
+      sku: product.sku,
+      name: product.name,
+      quantitySold: product.quantitySold,
+      revenue: product.revenue,
+      ...(canViewProfit ? { profit: product.profit } : {}),
+    }));
 
     const base = {
       period: { from, to },
-      revenueGross: current.grossRevenue.toString(),
-      revenueNet: current.netRevenue.toString(),
-      salesCount: current.salesCount,
-      averageTicket:
-        calculateAverageTicket(
-          current.netRevenue,
-          current.salesCount,
-        )?.toString() ?? null,
-      expensesRealized: expensesRealized.toString(),
-      productsCount,
-      lowStockCount: lowStock.length,
-      inventoryValue: inventorySummary.toString(),
-      receivablesOpen: receivablesOpen.toString(),
-      payablesOpen: payablesOpen.toString(),
-      cashBalance: cashBalance.toString(),
-      comparison: {
-        revenueNetChangePercent:
-          calculatePercentChange(
-            current.netRevenue,
-            previous.netRevenue,
-          )?.toString() ?? null,
-        salesCountChangePercent:
-          calculatePercentChange(
-            current.salesCount,
-            previous.salesCount,
-          )?.toString() ?? null,
-      },
+      ...(canViewSales
+        ? {
+            revenueGross: current.grossRevenue.toString(),
+            revenueNet: current.netRevenue.toString(),
+            salesCount: current.salesCount,
+            averageTicket:
+              calculateAverageTicket(
+                current.netRevenue,
+                current.salesCount,
+              )?.toString() ?? null,
+            comparison: {
+              revenueNetChangePercent:
+                calculatePercentChange(
+                  current.netRevenue,
+                  previous.netRevenue,
+                )?.toString() ?? null,
+              salesCountChangePercent:
+                calculatePercentChange(
+                  current.salesCount,
+                  previous.salesCount,
+                )?.toString() ?? null,
+            },
+            salesTrend,
+            topProducts,
+          }
+        : {}),
+      ...(canViewExpenses
+        ? { expensesRealized: expensesRealized.toString() }
+        : {}),
+      ...(canViewInventory
+        ? { productsCount, lowStockCount: lowStock.length }
+        : {}),
+      ...(canViewInventory && canViewCost
+        ? { inventoryValue: inventorySummary.toString() }
+        : {}),
+      ...(canViewReceivables
+        ? {
+            receivablesOpen: receivablesOpen.toString(),
+            overdueReceivablesCount,
+          }
+        : {}),
+      ...(canViewPayables
+        ? { payablesOpen: payablesOpen.toString(), overduePayablesCount }
+        : {}),
+      ...(canViewCashFlow ? { cashBalance: cashBalance.toString() } : {}),
     };
 
     // RN 10.17.2: quem não tem view_cost/view_profit nunca recebe CMV/lucro
     // no dashboard — omitido no servidor, não só escondido no frontend.
-    if (!canViewCost) {
+    if (!canViewSales || !canViewCost) {
       return base;
     }
     const withCost = { ...base, cmv: current.cmv.toString() };
@@ -119,7 +179,7 @@ export class ReportingService {
         calculateMargin(current.grossProfit, current.netRevenue)?.toString() ??
         null,
       comparison: {
-        ...base.comparison,
+        ...('comparison' in base ? base.comparison : {}),
         grossProfitChangePercent:
           calculatePercentChange(
             current.grossProfit,
@@ -361,6 +421,37 @@ export class ReportingService {
       paymentFees: new Prisma.Decimal(feesAgg._sum.feeAmount ?? 0),
       salesCount: salesAgg._count._all,
     };
+  }
+
+  private async getSalesTrend(companyId: string, from: Date, to: Date) {
+    const sales = await this.prisma.sale.findMany({
+      where: {
+        companyId,
+        status: { in: COUNTED_SALE_STATUSES },
+        createdAt: { gte: from, lte: to },
+      },
+      select: { createdAt: true, total: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const byDay = new Map<
+      string,
+      { revenue: Prisma.Decimal; salesCount: number }
+    >();
+    for (const sale of sales) {
+      const day = sale.createdAt.toISOString().slice(0, 10);
+      const current = byDay.get(day) ?? {
+        revenue: new Prisma.Decimal(0),
+        salesCount: 0,
+      };
+      current.revenue = current.revenue.add(sale.total);
+      current.salesCount += 1;
+      byDay.set(day, current);
+    }
+    return Array.from(byDay.entries()).map(([date, value]) => ({
+      date,
+      revenue: value.revenue.toString(),
+      salesCount: value.salesCount,
+    }));
   }
 
   private async getRealizedExpenses(companyId: string, from: Date, to: Date) {

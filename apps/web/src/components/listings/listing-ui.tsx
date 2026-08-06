@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { AppIcon, type IconName } from "@/components/layout/app-icon";
 
 type SearchProps = {
   id: string;
@@ -9,8 +10,8 @@ type SearchProps = {
 
 export function ListingSearch({ id, label, placeholder, query }: SearchProps) {
   return (
-    <form method="GET" className="mb-5 grid gap-2">
-      <div className="field mb-0">
+    <form method="GET" className="listing-search">
+      <div className="field">
         <label htmlFor={id}>{label}</label>
         <input id={id} name="q" defaultValue={query} placeholder={placeholder} />
       </div>
@@ -29,7 +30,7 @@ export function ListingTable({
   children: ReactNode;
 }) {
   return (
-    <section className="data-card overflow-hidden">
+    <section className="data-card">
       <div className="table-wrap">
         <table>
           <thead>
@@ -40,6 +41,10 @@ export function ListingTable({
       </div>
     </section>
   );
+}
+
+export function ListingMetrics({ metrics }: { metrics: Array<{ label: string; value: string | number; detail: string; icon: IconName }> }) {
+  return <section className="listing-metrics" aria-label="Resumo da listagem">{metrics.map(metric => <article className="listing-metric" key={metric.label}><span className="listing-metric-icon"><AppIcon name={metric.icon} /></span><div><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.detail}</small></div></article>)}</section>;
 }
 
 export function ListingEmptyState({
@@ -53,8 +58,8 @@ export function ListingEmptyState({
 }) {
   return (
     <section className="empty-card" aria-live="polite">
-      <span className="mb-3 inline-grid h-touch w-touch place-items-center rounded-full bg-brand-accent-subtle text-xl" aria-hidden="true">
-        ◌
+      <span className="empty-state-mark" aria-hidden="true">
+        ✦
       </span>
       <h2>{title}</h2>
       <p>{description}</p>
@@ -68,11 +73,13 @@ export function ListingPagination({
   total,
   pageSize,
   query,
+  extraParams,
 }: {
   page: number;
   total: number;
   pageSize: number;
   query?: string;
+  extraParams?: Record<string, string | undefined>;
 }) {
   const totalPages = Math.max(Math.ceil(total / pageSize), 1);
   if (totalPages <= 1) return null;
@@ -80,11 +87,14 @@ export function ListingPagination({
   const hrefFor = (nextPage: number) => {
     const params = new URLSearchParams({ page: String(nextPage) });
     if (query) params.set("q", query);
+    Object.entries(extraParams ?? {}).forEach(([key, value]) => {
+      if (value) params.set(key, value);
+    });
     return `?${params.toString()}`;
   };
 
   return (
-    <nav className="page-actions mt-4" aria-label="Paginação">
+    <nav className="page-actions listing-pagination" aria-label="Paginação">
       {page > 1 && (
         <a className="button button-secondary compact-button" href={hrefFor(page - 1)}>
           Anterior
