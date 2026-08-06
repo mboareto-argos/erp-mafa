@@ -93,6 +93,17 @@ describe('Reporting — dashboard e relatórios (integração)', () => {
     expect(dre.body.grossProfit).toBe('150');
     expect(dre.body.expenses).toBe('50');
     expect(dre.body.netProfit).toBe('100');
+    expect(dre.body.profitDistribution).toMatchObject({ applied: true, baseAmount: '100', reinvestment: { rate: '60', amount: '60' }, proLabore: { rate: '25', amount: '25' } });
+  });
+
+  it('aplica a política de distribuição válida no período sem transformá-la em despesa', async () => {
+    const { session } = await setupSaleAndExpense();
+    await request(app.getHttpServer()).post('/api/v1/company/profit-distribution').set(auth(session.accessToken)).send({ effectiveFrom: '2026-08-01', reinvestmentRate: 50, proLaboreRate: 30, reserveRate: 15, marketingRate: 5 }).expect(201);
+    const dre = await request(app.getHttpServer()).get(`/api/v1/reporting/dre?from=${from}&to=${to}`).set(auth(session.accessToken)).expect(200);
+    expect(dre.body.netProfit).toBe('100');
+    expect(dre.body.expenses).toBe('50');
+    expect(dre.body.profitDistribution.reinvestment).toEqual({ rate: '50', amount: '50' });
+    expect(dre.body.profitDistribution.proLabore).toEqual({ rate: '30', amount: '30' });
   });
 
   it('top-products lista o produto vendido com quantidade e lucro corretos', async () => {

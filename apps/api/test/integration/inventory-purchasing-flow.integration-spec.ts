@@ -394,4 +394,29 @@ describe('Inventory + Purchasing — fluxo completo (integração)', () => {
       .expect(409);
     expect(cancelResponse.body.error.code).toBe('PURCHASE_ALREADY_RECEIVED');
   });
+
+  it('recebimento a prazo gera parcelas e o estorno reverte estoque e compromissos', async () => {
+    const { session, variantId } = await createOwnerSessionWithProduct();
+    const supplier = await request(app.getHttpServer()).post('/api/v1/purchasing/suppliers').set(auth(session.accessToken)).send({ name: 'Fornecedor parcelado' }).expect(201);
+    const purchase = await request(app.getHttpServer()).post('/api/v1/purchasing/purchases').set(auth(session.accessToken)).send({ supplierId: supplier.body.id, items: [{ productVariantId: variantId, quantity: 2, unitCostOriginCurrency: 50 }] }).expect(201);
+    await request(app.getHttpServer()).post(`/api/v1/purchasing/purchases/${purchase.body.id}/order`).set(auth(session.accessToken)).expect(201);
+    const received = await request(app.getHttpServer()).post(`/api/v1/purchasing/purchases/${purchase.body.id}/receive`).set(auth(session.accessToken)).send({ items: [{ purchaseItemId: purchase.body.items[0].id, quantityReceived: 2 }], installmentPlan: { count: 3, firstDueDate: '2026-09-15' } }).expect(201);
+    expect(received.body.payables).toHaveLength(3);
+    const reversed = await request(app.getHttpServer()).post(`/api/v1/purchasing/purchases/${purchase.body.id}/reverse`).set(auth(session.accessToken)).send({ reason: 'Devolução ao fornecedor' }).expect(201);
+    expect(reversed.body.status).toBe('cancelled');
+    expect(reversed.body.payables.every((item: { status: string }) => item.status === 'cancelled')).toBe(true);
+    const balances = await request(app.getHttpServer()).get('/api/v1/inventory/balances').set(auth(session.accessToken)).expect(200);
+    expect(balances.body[0].quantityAvailable).toBe('0');
+  });
+
+  it('inventário físico transforma divergência em ajuste rastreável', async () => {
+    const { session, variantId } = await createOwnerSessionWithProduct();
+    await request(app.getHttpServer()).post('/api/v1/inventory/adjustments').set(auth(session.accessToken)).send({ productVariantId: variantId, quantity: 5, reason: 'Saldo inicial' }).expect(201);
+    const count = await request(app.getHttpServer()).post('/api/v1/inventory/counts').set(auth(session.accessToken)).send({ notes: 'Contagem mensal' }).expect(201);
+    expect(count.body.items[0].expectedQuantity).toBe('5');
+    await request(app.getHttpServer()).patch(`/api/v1/inventory/counts/${count.body.id}`).set(auth(session.accessToken)).send({ items: [{ itemId: count.body.items[0].id, countedQuantity: 3 }] }).expect(200);
+    await request(app.getHttpServer()).post(`/api/v1/inventory/counts/${count.body.id}/complete`).set(auth(session.accessToken)).expect(201);
+    const balances = await request(app.getHttpServer()).get('/api/v1/inventory/balances').set(auth(session.accessToken)).expect(200);
+    expect(balances.body[0].quantityAvailable).toBe('3');
+  });
 });

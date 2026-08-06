@@ -14,6 +14,7 @@ const navigationGroups: readonly NavigationGroup[] = [
   { label: "Comercial", items: [{ href: "/vendas", label: "Vendas", icon: "sales", permission: "view_sales" }, { href: "/clientes", label: "Clientes", icon: "customers", permission: "view_customers" }, { href: "/produtos", label: "Produtos", icon: "products", permission: "view_catalog" }] },
   { label: "Suprimentos", items: [{ href: "/compras", label: "Compras", icon: "purchases", permission: "view_purchasing" }, { href: "/fornecedores", label: "Fornecedores", icon: "suppliers", permission: "view_purchasing" }, { href: "/estoque", label: "Estoque", icon: "inventory", permission: "view_inventory" }, { href: "/importacoes", label: "Importações", icon: "imports", permission: "manage_imports" }] },
   { label: "Financeiro", items: [{ href: "/financeiro", label: "Financeiro", icon: "finance", permission: "view_financial_accounts" }] },
+  { label: "Administração", items: [{ href: "/configuracoes", label: "Configurações", icon: "settings", permission: "view_company_settings" }] },
 ];
 
 const roleLabels: Record<string, string> = { owner: "Proprietário", admin: "Administrador", manager: "Gerente", seller: "Vendedor", viewer: "Consulta" };

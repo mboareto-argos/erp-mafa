@@ -34,6 +34,7 @@ export const createExpenseSchema = z
     paidNow: z.boolean(),
     financialAccountId: z.string().uuid().optional(),
     dueDate: z.coerce.date().optional(),
+    installmentCount: z.number().int().min(1).max(60).default(1),
   })
   .refine(
     (data) => (data.paidNow ? !!data.financialAccountId : !!data.dueDate),

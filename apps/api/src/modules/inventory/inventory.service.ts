@@ -147,7 +147,8 @@ export class InventoryService {
     );
     const quantity = new Prisma.Decimal(params.quantity);
 
-    if (currentAvailable.lessThan(quantity)) {
+    const company = await tx.company.findUnique({ where: { id: params.companyId }, select: { allowNegativeStock: true } });
+    if (currentAvailable.lessThan(quantity) && !company?.allowNegativeStock) {
       throw new AppError(
         'STOCK_INSUFFICIENT',
         'Quantidade solicitada maior que o estoque disponível.',
@@ -233,6 +234,20 @@ export class InventoryService {
     return { movement };
   }
 
+  // Estorno controlado de recebimento: remove a quantidade disponível e
+  // reverte o efeito do lote no custo médio atual, sem apagar a entrada.
+  async reversePurchaseReceipt(tx: Prisma.TransactionClient, params: { companyId: string; productVariantId: string; quantity: Prisma.Decimal.Value; receivedUnitCost: Prisma.Decimal.Value; originId: string; createdBy?: string }) {
+    const [variant, balance] = await Promise.all([tx.productVariant.findUniqueOrThrow({ where: { id: params.productVariantId } }), tx.stockBalance.findUnique({ where: { companyId_productVariantId: { companyId: params.companyId, productVariantId: params.productVariantId } } })]);
+    const available = new Prisma.Decimal(balance?.quantityAvailable ?? 0); const reserved = new Prisma.Decimal(balance?.quantityReserved ?? 0); const quantity = new Prisma.Decimal(params.quantity);
+    if (available.lessThan(quantity)) throw new AppError('PURCHASE_REVERSAL_STOCK_UNAVAILABLE', 'Não há estoque disponível suficiente para estornar este recebimento.', HttpStatus.CONFLICT, 'quantity', { available: available.toString(), required: quantity.toString() });
+    const lastPrice = await tx.productPrice.findFirst({ where: { companyId: params.companyId, productId: variant.productId, deletedAt: null }, orderBy: { effectiveFrom: 'desc' } });
+    const currentPhysical = available.add(reserved); const remainingPhysical = currentPhysical.sub(quantity); const remainingValue = currentPhysical.mul(lastPrice?.costPrice ?? 0).sub(quantity.mul(params.receivedUnitCost)); const newCost = remainingPhysical.greaterThan(0) ? Prisma.Decimal.max(remainingValue.div(remainingPhysical), 0) : new Prisma.Decimal(0);
+    const movement = await tx.stockMovement.create({ data: { companyId: params.companyId, productVariantId: params.productVariantId, type: 'out', quantity: quantity.negated(), unitCost: params.receivedUnitCost, originType: 'return', originId: params.originId, createdBy: params.createdBy } });
+    await tx.stockBalance.update({ where: { companyId_productVariantId: { companyId: params.companyId, productVariantId: params.productVariantId } }, data: { quantityAvailable: { decrement: quantity } } });
+    await this.products.appendCostHistory(tx, { companyId: params.companyId, productId: variant.productId, productVariantId: params.productVariantId, costPrice: newCost, createdBy: params.createdBy });
+    return { movement, newCost };
+  }
+
   // Ajuste manual pontual (RN 10.7.9/10.7.10) — abre a propria transacao,
   // ninguem mais participa dela nesta fase.
   async adjustStock(
@@ -266,10 +281,8 @@ export class InventoryService {
     const delta = new Prisma.Decimal(dto.quantity);
     const resultingAvailable = currentAvailable.add(delta);
 
-    // Uma saida nunca deixa o estoque disponivel negativo, salvo permissao
-    // explicita (RN 10.7.6) — essa configuracao ainda nao existe, entao o
-    // MVP so bloqueia.
-    if (resultingAvailable.isNegative()) {
+    const company = await this.prisma.company.findUnique({ where: { id: tenant.companyId }, select: { allowNegativeStock: true } });
+    if (resultingAvailable.isNegative() && !company?.allowNegativeStock) {
       throw new AppError(
         'STOCK_INSUFFICIENT',
         'O ajuste deixaria o estoque disponível negativo.',

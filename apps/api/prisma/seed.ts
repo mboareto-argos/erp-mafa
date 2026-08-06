@@ -42,6 +42,9 @@ const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     // nível de exclusividade de "exportar dados"/"configurar integrações"
     // do proprietário (§9.1).
     'manage_imports',
+    'view_company_settings',
+    'manage_company_settings',
+    'manage_users',
   ],
   admin: [
     'view_dashboard',
@@ -62,6 +65,8 @@ const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     ...FINANCE_PERMISSIONS,
     'view_reports',
     'manage_imports',
+    'view_company_settings',
+    'manage_users',
   ],
   // Vendedor: sem view_cost/view_profit/manage_expenses (§9.2); consulta
   // disponibilidade de estoque (§9.3), sem acesso a compras. Registra

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const protectedPaths = ["/inicio", "/vendas", "/clientes", "/produtos", "/compras", "/fornecedores", "/estoque", "/financeiro"];
+const protectedPaths = ["/inicio", "/vendas", "/clientes", "/produtos", "/compras", "/fornecedores", "/estoque", "/financeiro", "/configuracoes"];
 
 export function proxy(request: NextRequest) {
   const hasAccessToken = Boolean(request.cookies.get("erp_mafa_access")?.value);
@@ -10,4 +10,4 @@ export function proxy(request: NextRequest) {
   return NextResponse.next();
 }
 
-export const config = { matcher: ["/", "/inicio/:path*", "/vendas/:path*", "/clientes/:path*", "/produtos/:path*", "/compras/:path*", "/fornecedores/:path*", "/estoque/:path*", "/financeiro/:path*", "/entrar", "/cadastro"] };
+export const config = { matcher: ["/", "/inicio/:path*", "/vendas/:path*", "/clientes/:path*", "/produtos/:path*", "/compras/:path*", "/fornecedores/:path*", "/estoque/:path*", "/financeiro/:path*", "/configuracoes/:path*", "/entrar", "/cadastro"] };

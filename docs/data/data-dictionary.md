@@ -48,7 +48,8 @@
 
 ## Identity / Tenancy
 
-Fonte: `apps/api/prisma/schema.prisma`, migration `20260804140629_init`.
+Fonte: `apps/api/prisma/schema.prisma`, migrations `20260804140629_init` e
+`20260806192214_add_company_settings`.
 
 ### `companies`
 Raiz do tenant — não possui `company_id` (é a própria empresa). Não segue TA-DATA-001
@@ -62,6 +63,14 @@ por definição (ver comentário no schema.prisma).
 | segment | text? | |
 | plan | text? | |
 | brand_accent_color | text | default `#C49A28` — token `--brand-accent` (design-system §4.3) |
+| email / phone | text? | contato operacional da empresa |
+| currency | text | default `BRL`; fica bloqueada após o início das operações |
+| timezone | text | default `America/Sao_Paulo` |
+| operation_start_date | date? | data civil de início da operação |
+| allow_negative_stock | boolean | default `false` |
+| allocation_method | text | `proportional_value` ou `proportional_quantity` |
+| default_min_stock | numeric(14,3)? | política prospectiva para novos produtos |
+| discount_limit | numeric(5,2)? | percentual máximo configurado pela empresa |
 | status | enum(active, inactive) | |
 | created_at / updated_at / deleted_at | timestamptz | |
 
@@ -735,7 +744,8 @@ motivo (RN 10.14.5) — `receivable_payments` é imutável (sem `updated_at`).
 | id | uuid PK | |
 | company_id | uuid FK → companies | |
 | customer_id | uuid? FK → customers | |
-| sale_id | uuid? FK → sales | referência preparada para uma futura venda a prazo, sem uso ainda |
+| sale_id | uuid? FK → sales | venda a prazo que originou as parcelas |
+| installment_number / installment_count | integer? | posição e total da agenda gerada automaticamente |
 | description | text | |
 | amount_original | numeric(14,2) | |
 | amount_received | numeric(14,2) | materializado, default 0 |
@@ -759,14 +769,18 @@ motivo (RN 10.14.5) — `receivable_payments` é imutável (sem `updated_at`).
 `receivable_payments`.
 
 ### `payables` / `payable_payments`
-Estrutura simétrica a `receivables`/`receivable_payments`. `expense_id`? **não** existe como
-coluna própria — o vínculo com uma despesa futura é a FK inversa (`expenses.payable_id`).
+Estrutura simétrica a `receivables`/`receivable_payments`. Compras e despesas futuras podem
+gerar várias parcelas; `expenses.payable_id` permanece como ponte de compatibilidade para a
+primeira parcela.
 
 | Coluna (`payables`) | Tipo | Notas |
 |---|---|---|
 | id | uuid PK | |
 | company_id | uuid FK → companies | |
 | supplier_id | uuid? FK → suppliers | |
+| purchase_id | uuid? FK → purchases | compra que originou a agenda |
+| expense_id | uuid? FK → expenses | despesa que originou a agenda |
+| installment_number / installment_count | integer? | posição e total da agenda |
 | description | text | |
 | amount_original | numeric(14,2) | |
 | amount_paid | numeric(14,2) | materializado, default 0 |
@@ -784,8 +798,9 @@ coluna própria — o vínculo com uma despesa futura é a FK inversa (`expenses
 ### `expenses`
 RN 10.15.1/10.15.2/10.15.3: registrar uma despesa não significa pagá-la. Criada com
 `paidNow=true` (na API) gera uma `financial_transaction` de saída direto (`status=paid`);
-criada como despesa futura (`paidNow=false`) gera automaticamente um `payable` vinculado
-(`payable_id`) com `status=pending` — pagar depois é pagar esse `payable`, sem endpoint de
+criada como despesa futura (`paidNow=false`) gera automaticamente uma ou mais parcelas em
+`payables`; `payable_id` aponta para a primeira por compatibilidade — pagar depois é baixar
+essas contas, sem endpoint de
 pagamento duplicado em `expenses`.
 
 | Coluna | Tipo | Notas |
@@ -804,3 +819,39 @@ pagamento duplicado em `expenses`.
 | created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
 
 Índice: `(company_id, status)`.
+
+### `inventory_counts` / `inventory_count_items`
+Inventário físico em duas fases. O rascunho congela o saldo esperado por variante; concluir
+gera `stock_movements` e `stock_adjustments` somente para divergências, preservando o histórico.
+
+| Coluna (`inventory_counts`) | Tipo | Notas |
+|---|---|---|
+| id / company_id | uuid | PK e escopo do tenant |
+| status | enum(draft, completed, cancelled) | somente rascunho aceita contagens |
+| notes | text? | observação operacional |
+| completed_at / completed_by | timestamptz? / uuid? | autoria da conclusão |
+| created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
+
+| Coluna (`inventory_count_items`) | Tipo | Notas |
+|---|---|---|
+| id / company_id | uuid | PK e escopo do tenant |
+| inventory_count_id | uuid FK → inventory_counts | |
+| product_variant_id | uuid FK → product_variants | único por inventário |
+| expected_quantity / counted_quantity | numeric(14,3) | foto do sistema e quantidade física |
+| counted_at / counted_by | timestamptz? / uuid? | autoria da contagem |
+| created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
+
+### `profit_distribution_policies`
+Política temporal usada depois do resultado líquido da DRE. Não cria despesa nem altera o
+lucro operacional; quando o resultado é negativo, a base distribuível é zero.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id / company_id | uuid | PK e escopo do tenant |
+| effective_from | date | uma política por empresa/data inicial |
+| reinvestment_rate / pro_labore_rate | numeric(5,2) | percentuais |
+| reserve_rate / marketing_rate | numeric(5,2) | percentuais; soma total = 100% |
+| created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
+
+As tabelas novas de inventário/distribuição têm RLS forçada para `erp_mafa_app`, usando
+`app.current_company_id`, como as demais tabelas operacionais.

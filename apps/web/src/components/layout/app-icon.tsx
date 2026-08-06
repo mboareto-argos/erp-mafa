@@ -1,4 +1,4 @@
-export type IconName = "home" | "sales" | "customers" | "products" | "purchases" | "suppliers" | "inventory" | "finance" | "imports" | "chevronRight" | "chevronsLeft" | "chevronsRight" | "chevronDown" | "shield" | "search" | "plus" | "eye" | "edit" | "cancel" | "more";
+export type IconName = "home" | "sales" | "customers" | "products" | "purchases" | "suppliers" | "inventory" | "finance" | "imports" | "settings" | "chevronRight" | "chevronsLeft" | "chevronsRight" | "chevronDown" | "shield" | "search" | "plus" | "eye" | "edit" | "cancel" | "more";
 
 const paths: Record<IconName, string> = {
   home: "M3 10.8 12 3l9 7.8v9.7a.5.5 0 0 1-.5.5H15v-6H9v6H3.5a.5.5 0 0 1-.5-.5z",
@@ -10,6 +10,7 @@ const paths: Record<IconName, string> = {
   inventory: "M4 7h16v13H4zM7 4h10v3M8 11h8M8 15h5",
   finance: "M12 3v18M16 7.2c-.6-1.2-2-2-4-2-2.2 0-3.7 1.1-3.7 2.8 0 4 7.4 2 7.4 6 0 1.8-1.6 3-3.8 3-2 0-3.6-.9-4.3-2.2",
   imports: "M12 3v12m0-12L7.5 7.5M12 3l4.5 4.5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5",
+  settings: "M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm0-5 1.2 2.2 2.5.6 2-1.4 1.6 1.6-1.4 2 .6 2.5 2.2 1.2v2.3L21 13.6l-.6 2.5 1.4 2-1.6 1.6-2-1.4-2.5.6-1.2 2.2h-2.3L11 18.9l-2.5-.6-2 1.4-1.6-1.6 1.4-2-.6-2.5-2.2-1.2v-2.3L5.7 9l.6-2.5-1.4-2 1.6-1.6 2 1.4 2.5-.6L12 3.5Z",
   chevronRight: "m9 18 6-6-6-6",
   chevronsLeft: "m13 17-5-5 5-5m4 10-5-5 5-5",
   chevronsRight: "m11 17 5-5-5-5m-4 10 5-5-5-5",

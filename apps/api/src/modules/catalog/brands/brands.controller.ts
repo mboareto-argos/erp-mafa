@@ -18,6 +18,7 @@ import {
   createBrandSchema,
   type CreateBrandDto,
 } from './dto/create-brand.schema';
+import { updateBrandSchema, type UpdateBrandDto } from './dto/update-brand.schema';
 
 @Controller('catalog/brands')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -45,6 +46,18 @@ export class BrandsController {
     @CurrentTenant() tenant: CurrentTenantContext,
     @Param('id') id: string,
   ) {
-    return this.brands.deactivate(tenant.companyId, id);
+    return this.brands.changeStatus(tenant, id, 'inactive');
+  }
+
+  @Patch(':id/reactivate')
+  @RequirePermission('manage_catalog')
+  reactivate(@CurrentTenant() tenant: CurrentTenantContext, @Param('id') id: string) {
+    return this.brands.changeStatus(tenant, id, 'active');
+  }
+
+  @Patch(':id')
+  @RequirePermission('manage_catalog')
+  update(@CurrentTenant() tenant: CurrentTenantContext, @Param('id') id: string, @Body(new ZodValidationPipe(updateBrandSchema)) dto: UpdateBrandDto) {
+    return this.brands.update(tenant, id, dto);
   }
 }

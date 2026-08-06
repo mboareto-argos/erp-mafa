@@ -6,6 +6,8 @@ import { BalancesController } from './balances/balances.controller';
 import { MovementsController } from './movements/movements.controller';
 import { AdjustmentsController } from './adjustments/adjustments.controller';
 import { LowStockController } from './low-stock/low-stock.controller';
+import { InventoryCountsController } from './counts/inventory-counts.controller';
+import { InventoryCountsService } from './counts/inventory-counts.service';
 
 @Module({
   imports: [TenancyModule, CatalogModule],
@@ -14,8 +16,9 @@ import { LowStockController } from './low-stock/low-stock.controller';
     MovementsController,
     AdjustmentsController,
     LowStockController,
+    InventoryCountsController,
   ],
-  providers: [InventoryService],
+  providers: [InventoryService, InventoryCountsService],
   exports: [InventoryService],
 })
 export class InventoryModule {}

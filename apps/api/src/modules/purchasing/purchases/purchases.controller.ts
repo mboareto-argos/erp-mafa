@@ -24,6 +24,7 @@ import {
   type ReceivePurchaseDto,
 } from './dto/receive-purchase.schema';
 import { IdempotencyService } from '../../idempotency/idempotency.service';
+import { reversePurchaseSchema, type ReversePurchaseDto } from './dto/reverse-purchase.schema';
 
 @Controller('purchasing/purchases')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -102,5 +103,11 @@ export class PurchasesController {
       idempotencyKey,
       () => this.purchases.cancel(tenant, id),
     );
+  }
+
+  @Post(':id/reverse')
+  @RequirePermission('manage_purchasing')
+  reverse(@CurrentTenant() tenant: CurrentTenantContext, @Param('id') id: string, @Body(new ZodValidationPipe(reversePurchaseSchema)) dto: ReversePurchaseDto, @Headers('idempotency-key') idempotencyKey?: string) {
+    return this.idempotency.execute(tenant.companyId, `purchases.reverse:${id}`, idempotencyKey, () => this.purchases.reverse(tenant, id, dto.reason));
   }
 }

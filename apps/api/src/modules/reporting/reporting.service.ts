@@ -171,6 +171,10 @@ export class ReportingService {
       return withCost;
     }
 
+    const savedPolicy = await this.prisma.profitDistributionPolicy.findFirst({ where: { companyId: tenant.companyId, effectiveFrom: { lte: to }, deletedAt: null }, orderBy: { effectiveFrom: 'desc' } });
+    const policy = savedPolicy ?? { effectiveFrom: null, reinvestmentRate: new Prisma.Decimal(60), proLaboreRate: new Prisma.Decimal(25), reserveRate: new Prisma.Decimal(10), marketingRate: new Prisma.Decimal(5) };
+    const distributable = Prisma.Decimal.max(netProfitEstimated, 0);
+    const allocation = (rate: Prisma.Decimal) => distributable.mul(rate).div(100).toDecimalPlaces(2).toString();
     return {
       ...withCost,
       grossProfit: current.grossProfit.toString(),
@@ -178,6 +182,7 @@ export class ReportingService {
       margin:
         calculateMargin(current.grossProfit, current.netRevenue)?.toString() ??
         null,
+      profitDistribution: { applied: netProfitEstimated.greaterThan(0), baseAmount: distributable.toString(), effectiveFrom: policy.effectiveFrom, reinvestment: { rate: policy.reinvestmentRate.toString(), amount: allocation(policy.reinvestmentRate) }, proLabore: { rate: policy.proLaboreRate.toString(), amount: allocation(policy.proLaboreRate) }, reserve: { rate: policy.reserveRate.toString(), amount: allocation(policy.reserveRate) }, marketing: { rate: policy.marketingRate.toString(), amount: allocation(policy.marketingRate) } },
       comparison: {
         ...('comparison' in base ? base.comparison : {}),
         grossProfitChangePercent:
@@ -195,8 +200,11 @@ export class ReportingService {
   }
 
   async getDre(companyId: string, from: Date, to: Date) {
-    const summary = await this.getSalesSummary(companyId, from, to);
-    const expenses = await this.getRealizedExpenses(companyId, from, to);
+    const [summary, expenses, savedPolicy] = await Promise.all([
+      this.getSalesSummary(companyId, from, to),
+      this.getRealizedExpenses(companyId, from, to),
+      this.prisma.profitDistributionPolicy.findFirst({ where: { companyId, effectiveFrom: { lte: to }, deletedAt: null }, orderBy: { effectiveFrom: 'desc' } }),
+    ]);
 
     const dre = calculateDre({
       grossRevenue: summary.grossRevenue,
@@ -206,6 +214,9 @@ export class ReportingService {
       expenses,
     });
 
+    const policy = savedPolicy ?? { effectiveFrom: null, reinvestmentRate: new Prisma.Decimal(60), proLaboreRate: new Prisma.Decimal(25), reserveRate: new Prisma.Decimal(10), marketingRate: new Prisma.Decimal(5) };
+    const distributable = Prisma.Decimal.max(dre.netProfit, 0);
+    const allocation = (rate: Prisma.Decimal) => distributable.mul(rate).div(100).toDecimalPlaces(2).toString();
     return {
       period: { from, to },
       grossRevenue: dre.grossRevenue.toString(),
@@ -216,6 +227,15 @@ export class ReportingService {
       paymentFees: dre.paymentFees.toString(),
       expenses: dre.expenses.toString(),
       netProfit: dre.netProfit.toString(),
+      profitDistribution: {
+        applied: dre.netProfit.greaterThan(0),
+        effectiveFrom: policy.effectiveFrom,
+        baseAmount: distributable.toString(),
+        reinvestment: { rate: policy.reinvestmentRate.toString(), amount: allocation(policy.reinvestmentRate) },
+        proLabore: { rate: policy.proLaboreRate.toString(), amount: allocation(policy.proLaboreRate) },
+        reserve: { rate: policy.reserveRate.toString(), amount: allocation(policy.reserveRate) },
+        marketing: { rate: policy.marketingRate.toString(), amount: allocation(policy.marketingRate) },
+      },
     };
   }
 

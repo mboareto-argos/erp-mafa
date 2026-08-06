@@ -5,6 +5,8 @@ import { TenancyModule } from '../tenancy/tenancy.module';
 import { AuthController } from './auth/auth.controller';
 import { AuthService } from './auth/auth.service';
 import { UsersService } from './users/users.service';
+import { UsersController } from './users/users.controller';
+import { InvitationsController } from './users/invitations.controller';
 
 @Module({
   imports: [
@@ -17,7 +19,7 @@ import { UsersService } from './users/users.service';
       }),
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, UsersController, InvitationsController],
   providers: [AuthService, UsersService],
   exports: [UsersService],
 })

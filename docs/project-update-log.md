@@ -44,6 +44,92 @@ arquiteturais permanentes, criar um ADR novo em vez de alterar ADRs existentes.
 
 ## Estado inicial — 2026-08-05
 
+### Bloco 25 — Operações avançadas essenciais do MVP
+
+- **Período:** 2026-08-06
+- **Status:** concluído.
+- **Objetivo:** eliminar os últimos controles paralelos indispensáveis ao uso
+  diário: parcelamentos automáticos, devoluções/estornos, inventário físico e
+  distribuição gerencial do lucro.
+- **Modificado:** vendas agora aceitam entrada imediata opcional e agenda de até
+  60 parcelas, exigem cliente no crédito e geram `receivables` cuja soma em
+  centavos é exatamente o saldo. Compras recebidas e despesas futuras também
+  geram agendas mensais em `payables`; os detalhes Web mostram essas parcelas.
+  Devoluções de venda ajustam primeiro os recebíveis ainda abertos e lançam
+  saída de caixa para o valor já realizado. Compras recebidas ganharam estorno
+  explícito com motivo: ele bloqueia quando já há pagamento, reverte estoque e
+  custo médio, cancela parcelas pendentes e mantém todo o histórico. A tela de
+  Estoque ganhou inventário físico completo — foto esperada, salvamento da
+  contagem e conclusão que cria movimentos/ajustes apenas para divergências.
+  Configurações ganhou política de distribuição do lucro por vigência; a DRE
+  aplica reinvestimento, pró-labore, reserva e marketing somente sobre resultado
+  líquido positivo, sem classificá-los como despesa, e o Dashboard exibe essa
+  projeção com acesso direto à política. A política de estoque
+  negativo do Bloco 24 passou a ser respeitada nas saídas e ajustes.
+- **Dados e segurança:** migrations
+  `20260806193758_add_operation_installments`,
+  `20260806194442_add_physical_inventory`,
+  `20260806195211_add_expense_installments`,
+  `20260806195544_add_profit_distribution_policies`,
+  `20260806195928_add_sale_return_cash_origin` e
+  `20260806200500_enable_rls_new_tables` foram criadas e aplicadas. As tabelas
+  novas usam RLS forçada com `app.current_company_id`; todos os comandos usam o
+  tenant autenticado, permissões no backend e auditoria para conclusão/estorno
+  e mudança de política. Dicionário de dados, OpenAPI e README foram atualizados.
+- **Motivo:** BR §§10.6, 10.8, 10.11, 10.14, 10.15 e RN-SALE-027,
+  RN-REC-010, RN-DRE-002/003/004 exigem que parcelas nasçam da operação, estoque
+  seja reconciliável por inventário, correções sejam movimentos auditáveis e a
+  distribuição aconteça somente depois do lucro líquido.
+- **Validação:** `pnpm test` passou com 13 suítes/46 testes; build da API,
+  TypeScript e ESLint do Web passaram; integração completa passou com 15
+  suítes/96 testes; `pnpm test:tenant` passou com 5 suítes/14 testes;
+  `git diff --check` passou. A cobertura integrada inclui venda e despesa em
+  três parcelas, compra parcelada seguida de estorno, inventário com divergência
+  e política temporal aplicada à DRE. O build Web continuou em Turbopack e
+  encontrou o bloqueio ambiental já conhecido ao criar processo/porta
+  (`Operation not permitted`), sem erro de TypeScript ou lint.
+- **Pendências / retomada:** validar visualmente os novos fluxos no navegador e
+  executar o build Web num ambiente que permita o processo auxiliar do
+  Turbopack. Pagamento imediato de compra continua sendo registrado pelo fluxo
+  normal de conta a pagar; não foi criado um segundo mecanismo de caixa.
+
+### Bloco 24 — Catálogo, empresa e equipe em Configurações
+
+- **Período:** 2026-08-06
+- **Status:** concluído.
+- **Objetivo:** fechar os cadastros e configurações-base que ainda impediam a
+  administração autônoma da empresa: categorias, marcas, dados operacionais e
+  acessos da equipe.
+- **Modificado:** Categorias e Marcas ganharam edição, inativação e reativação
+  auditadas, sempre escopadas à empresa e sem exclusão física. Foi criada a área
+  Web `Configurações`, com abas responsivas de Catálogo, Empresa e Equipe. A
+  empresa agora armazena contato, moeda, fuso, início da operação, cor de marca,
+  política de estoque negativo, rateio padrão, estoque mínimo padrão e limite de
+  desconto. A moeda fica bloqueada após existirem operações. A equipe ganhou
+  listagem de membros, convite por link válido por sete dias, aceite público por
+  token, atribuição de perfil e remoção lógica; o último proprietário e o próprio
+  acesso não podem ser removidos. Mudanças de perfil revogam refresh tokens.
+  Criada e aplicada a migration `20260806192214_add_company_settings`; a seed
+  adicionou `view_company_settings`, `manage_company_settings` e `manage_users`.
+- **Motivo:** BR §§7.2, 9, 10.1, 10.2, 10.4 e 10.22 exigem categorias
+  estruturadas, configuração independente e administração segura de usuários.
+  A implementação preserva DS-PERM-001 e usa os contratos dos módulos Catalog,
+  Identity e Tenancy, sem confiar em `company_id` do cliente.
+- **Validação:** migration aplicada no banco local; seed local executada; build
+  da API, ESLint e TypeScript do Web passaram. A integração completa passou com
+  15 suítes/91 testes, incluindo edição auditada de categoria/marca,
+  isolamento das configurações, convite/aceite/login e bloqueio de acesso à
+  administração para Vendedor.
+- **Pendências / retomada:** avançar para o Bloco 25. O envio automático do link
+  por e-mail depende do provedor de notificações; no MVP o link é copiado pela
+  pessoa administradora. Configurações que ainda não têm comportamento de
+  domínio não foram expostas como controles decorativos.
+- **Ajuste pós-validação:** corrigido o formulário de convite da equipe para
+  preservar a referência do elemento antes da chamada assíncrona. O reset agora
+  acontece sobre essa referência estável e, ao adicionar um usuário já
+  existente, antes do recarregamento da lista; isso elimina o erro
+  `event.currentTarget.reset` sem alterar o convite criado no backend.
+
 ### Bloco 23 — Dashboard operacional por perfil
 
 - **Período:** 2026-08-06
@@ -1048,12 +1134,10 @@ deste documento foram concluídos nos Blocos 3, 4, 5 e 7, e removidos daqui. Ver
 seção "Débito técnico conhecido", para a lista completa e sempre mais atual — este bloco só
 resume o que é relevante para quem for continuar o trabalho.)*
 
-- **Auditoria cobre só uma parte dos eventos de BR §10.23**: ajuste de estoque, recebimento de
-  compra, confirmação de venda, pagamento/cancelamento de contas a receber/pagar,
-  transferências, reprecificação de produto e confirmação/reversão de importação. Faltam
-  login, criação/edição de usuário, mudança de permissão, edição de campos cadastrais de
-  produto, desconto, mudança de vencimento, export, mudança de configuração e estorno fora do
-  fluxo de importação. Consulta já existe (`GET /audit`, permissão `view_audit`).
+- **Auditoria cobre só uma parte dos eventos de BR §10.23**: além dos eventos anteriores,
+  cobre configurações/equipe, inventário, devolução e estorno de compra. Ainda faltam
+  login, algumas edições cadastrais/financeiras, mudança de vencimento, exportação e estornos
+  excepcionais de caixa. Consulta já existe (`GET /audit`, permissão `view_audit`).
 - **Edição em Financeiro não implementada** (contas, formas de pagamento,
   despesas e vencimentos). O Bloco 22 concluiu criação, consulta, baixas,
   cancelamentos aplicáveis, transferências e inativação; alteração auditada de

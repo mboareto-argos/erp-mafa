@@ -12,6 +12,7 @@ import { CreateReceivableDto } from './dto/create-receivable.schema';
 import { PayReceivableDto } from './dto/pay-receivable.schema';
 import { CancelReceivableDto } from './dto/cancel-receivable.schema';
 import { AuditService } from '../audit/audit.service';
+import { buildInstallmentSchedule } from '../../common/finance/installment-schedule';
 
 const INCLUDE_DETAILS = {
   customer: true,
@@ -66,6 +67,15 @@ export class ReceivablesService {
       },
       include: INCLUDE_DETAILS,
     });
+  }
+
+  async createForSale(client: Prisma.TransactionClient, params: { companyId: string; userId: string; saleId: string; customerId: string; amount: Prisma.Decimal; count: number; firstDueDate: string }) {
+    const schedule = buildInstallmentSchedule(params.amount, params.count, params.firstDueDate);
+    const rows: { id: string }[] = [];
+    for (const installment of schedule) {
+      rows.push(await client.receivable.create({ data: { companyId: params.companyId, customerId: params.customerId, saleId: params.saleId, description: `Venda #${params.saleId.slice(0, 8)} · parcela ${installment.number}/${params.count}`, amountOriginal: installment.amount, dueDate: installment.dueDate, installmentNumber: installment.number, installmentCount: params.count, createdBy: params.userId } }));
+    }
+    return rows;
   }
 
   async list(companyId: string) {

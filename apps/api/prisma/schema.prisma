@@ -40,6 +40,15 @@ model Company {
   segment          String?
   plan             String?
   brandAccentColor String        @default("#C49A28") @map("brand_accent_color")
+  email            String?
+  phone            String?
+  currency         String        @default("BRL")
+  timezone         String        @default("America/Sao_Paulo")
+  operationStartDate DateTime?   @map("operation_start_date") @db.Date
+  allowNegativeStock Boolean     @default(false) @map("allow_negative_stock")
+  allocationMethod String        @default("proportional_value") @map("allocation_method")
+  defaultMinStock  Decimal?      @map("default_min_stock") @db.Decimal(14, 3)
+  discountLimit    Decimal?      @map("discount_limit") @db.Decimal(5, 2)
   status           CompanyStatus @default(active)
   createdAt        DateTime      @default(now()) @map("created_at")
   updatedAt        DateTime      @updatedAt @map("updated_at")
@@ -59,6 +68,8 @@ model Company {
   stockMovements          StockMovement[]
   stockAdjustments        StockAdjustment[]
   stockReservations       StockReservation[]
+  inventoryCounts         InventoryCount[]
+  inventoryCountItems     InventoryCountItem[]
   suppliers               Supplier[]
   purchases               Purchase[]
   purchaseItems           PurchaseItem[]
@@ -84,6 +95,7 @@ model Company {
   idempotencyRecords      IdempotencyRecord[]
   importJobs              ImportJob[]
   importRows              ImportRow[]
+  profitDistributionPolicies ProfitDistributionPolicy[]
 
   @@map("companies")
 }
@@ -121,6 +133,10 @@ model User {
   createdStockAdjustments        StockAdjustment[]        @relation("StockAdjustmentCreatedBy")
   approvedStockAdjustments       StockAdjustment[]        @relation("StockAdjustmentApprovedBy")
   createdStockReservations       StockReservation[]       @relation("StockReservationCreatedBy")
+  createdInventoryCounts         InventoryCount[]          @relation("InventoryCountCreatedBy")
+  completedInventoryCounts       InventoryCount[]          @relation("InventoryCountCompletedBy")
+  countedInventoryItems          InventoryCountItem[]      @relation("InventoryCountItemCountedBy")
+  createdInventoryCountItems     InventoryCountItem[]      @relation("InventoryCountItemCreatedBy")
   createdSuppliers               Supplier[]               @relation("SupplierCreatedBy")
   createdPurchases               Purchase[]               @relation("PurchaseCreatedBy")
   createdPurchaseItems           PurchaseItem[]           @relation("PurchaseItemCreatedBy")
@@ -142,6 +158,7 @@ model User {
   createdPayables                Payable[]                @relation("PayableCreatedBy")
   createdPayablePayments         PayablePayment[]         @relation("PayablePaymentCreatedBy")
   createdExpenses                Expense[]                @relation("ExpenseCreatedBy")
+  createdProfitDistributionPolicies ProfitDistributionPolicy[] @relation("ProfitPolicyCreatedBy")
   auditLogs                      AuditLog[]               @relation("AuditLogCreatedBy")
   createdImportJobs              ImportJob[]              @relation("ImportJobCreatedBy")
   revertedImportJobs             ImportJob[]              @relation("ImportJobRevertedBy")
@@ -498,6 +515,7 @@ model ProductVariant {
   purchaseReceiptItems PurchaseReceiptItem[]
   saleItems            SaleItem[]
   saleReturnItems      SaleReturnItem[]
+  inventoryCountItems InventoryCountItem[]
 
   @@unique([companyId, skuVariant])
   @@index([companyId, productId])
@@ -672,6 +690,58 @@ model StockReservation {
   @@map("stock_reservations")
 }
 
+enum InventoryCountStatus {
+  draft
+  completed
+  cancelled
+}
+
+model InventoryCount {
+  id          String               @id @default(uuid()) @db.Uuid
+  companyId   String               @map("company_id") @db.Uuid
+  status      InventoryCountStatus @default(draft)
+  notes       String?
+  completedAt DateTime?            @map("completed_at")
+  completedBy String?              @map("completed_by") @db.Uuid
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+  createdBy   String?              @map("created_by") @db.Uuid
+  deletedAt   DateTime?            @map("deleted_at")
+
+  company         Company              @relation(fields: [companyId], references: [id])
+  createdByUser   User?                @relation("InventoryCountCreatedBy", fields: [createdBy], references: [id])
+  completedByUser User?                @relation("InventoryCountCompletedBy", fields: [completedBy], references: [id])
+  items           InventoryCountItem[]
+
+  @@index([companyId, status])
+  @@map("inventory_counts")
+}
+
+model InventoryCountItem {
+  id                String    @id @default(uuid()) @db.Uuid
+  companyId         String    @map("company_id") @db.Uuid
+  inventoryCountId  String    @map("inventory_count_id") @db.Uuid
+  productVariantId  String    @map("product_variant_id") @db.Uuid
+  expectedQuantity  Decimal   @map("expected_quantity") @db.Decimal(14, 3)
+  countedQuantity   Decimal?  @map("counted_quantity") @db.Decimal(14, 3)
+  countedBy         String?   @map("counted_by") @db.Uuid
+  countedAt         DateTime? @map("counted_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  createdBy         String?   @map("created_by") @db.Uuid
+  deletedAt         DateTime? @map("deleted_at")
+
+  company        Company        @relation(fields: [companyId], references: [id])
+  inventoryCount InventoryCount @relation(fields: [inventoryCountId], references: [id])
+  productVariant ProductVariant @relation(fields: [productVariantId], references: [id])
+  countedByUser  User?          @relation("InventoryCountItemCountedBy", fields: [countedBy], references: [id])
+  createdByUser  User?          @relation("InventoryCountItemCreatedBy", fields: [createdBy], references: [id])
+
+  @@unique([inventoryCountId, productVariantId])
+  @@index([companyId, inventoryCountId])
+  @@map("inventory_count_items")
+}
+
 // ---------------------------------------------------------------------------
 // Purchasing (docs/architecture/overview.md, secao 6.4) — Fase 2 do roadmap
 // ---------------------------------------------------------------------------
@@ -733,6 +803,7 @@ model Purchase {
   createdByUser User?             @relation("PurchaseCreatedBy", fields: [createdBy], references: [id])
   items         PurchaseItem[]
   receipts      PurchaseReceipt[]
+  payables      Payable[]
 
   @@index([companyId, status])
   @@map("purchases")
@@ -1107,6 +1178,7 @@ enum FinancialTransactionType {
 
 enum FinancialTransactionOriginType {
   sale_payment
+  sale_return
   receivable_payment
   payable_payment
   expense
@@ -1177,6 +1249,8 @@ model Receivable {
   // Preparado para uma futura venda a prazo (nao usado ainda — Fase 3 e'
   // so' a vista). Ver plano da Fase 4.
   saleId         String?          @map("sale_id") @db.Uuid
+  installmentNumber Int?          @map("installment_number")
+  installmentCount  Int?          @map("installment_count")
   description    String
   amountOriginal Decimal          @map("amount_original") @db.Decimal(14, 2)
   amountReceived Decimal          @default(0) @map("amount_received") @db.Decimal(14, 2)
@@ -1195,6 +1269,7 @@ model Receivable {
   payments      ReceivablePayment[]
 
   @@index([companyId, status])
+  @@index([companyId, saleId, installmentNumber])
   @@map("receivables")
 }
 
@@ -1231,6 +1306,10 @@ model Payable {
   id             String        @id @default(uuid()) @db.Uuid
   companyId      String        @map("company_id") @db.Uuid
   supplierId     String?       @map("supplier_id") @db.Uuid
+  purchaseId     String?       @map("purchase_id") @db.Uuid
+  expenseId      String?       @map("expense_id") @db.Uuid
+  installmentNumber Int?       @map("installment_number")
+  installmentCount  Int?       @map("installment_count")
   description    String
   amountOriginal Decimal       @map("amount_original") @db.Decimal(14, 2)
   amountPaid     Decimal       @default(0) @map("amount_paid") @db.Decimal(14, 2)
@@ -1244,12 +1323,15 @@ model Payable {
 
   company       Company          @relation(fields: [companyId], references: [id])
   supplier      Supplier?        @relation(fields: [supplierId], references: [id])
-  // Lado virtual do vinculo 1:1 — o FK real (payable_id) fica em Expense.
-  expense       Expense?
+  purchase      Purchase?        @relation(fields: [purchaseId], references: [id])
+  legacyExpense Expense?       @relation("LegacyExpensePayable")
+  expenseOrigin Expense?       @relation("ExpensePayables", fields: [expenseId], references: [id])
   createdByUser User?            @relation("PayableCreatedBy", fields: [createdBy], references: [id])
   payments      PayablePayment[]
 
   @@index([companyId, status])
+  @@index([companyId, purchaseId, installmentNumber])
+  @@index([companyId, expenseId, installmentNumber])
   @@map("payables")
 }
 
@@ -1325,9 +1407,31 @@ model Expense {
   company          Company           @relation(fields: [companyId], references: [id])
   financialAccount FinancialAccount? @relation(fields: [financialAccountId], references: [id])
   createdByUser    User?             @relation("ExpenseCreatedBy", fields: [createdBy], references: [id])
-  payable          Payable?          @relation(fields: [payableId], references: [id])
+  payable          Payable?          @relation("LegacyExpensePayable", fields: [payableId], references: [id])
   payableId        String?           @unique @map("payable_id") @db.Uuid
+  payables         Payable[]         @relation("ExpensePayables")
 
   @@index([companyId, status])
   @@map("expenses")
+}
+
+model ProfitDistributionPolicy {
+  id               String    @id @default(uuid()) @db.Uuid
+  companyId        String    @map("company_id") @db.Uuid
+  effectiveFrom    DateTime  @map("effective_from") @db.Date
+  reinvestmentRate Decimal   @map("reinvestment_rate") @db.Decimal(5, 2)
+  proLaboreRate    Decimal   @map("pro_labore_rate") @db.Decimal(5, 2)
+  reserveRate      Decimal   @map("reserve_rate") @db.Decimal(5, 2)
+  marketingRate    Decimal   @map("marketing_rate") @db.Decimal(5, 2)
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  createdBy        String?   @map("created_by") @db.Uuid
+  deletedAt        DateTime? @map("deleted_at")
+
+  company       Company @relation(fields: [companyId], references: [id])
+  createdByUser User?   @relation("ProfitPolicyCreatedBy", fields: [createdBy], references: [id])
+
+  @@unique([companyId, effectiveFrom])
+  @@index([companyId, effectiveFrom])
+  @@map("profit_distribution_policies")
 }

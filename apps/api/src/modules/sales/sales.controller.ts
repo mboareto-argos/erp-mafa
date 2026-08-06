@@ -99,7 +99,8 @@ export class SalesController {
     @CurrentTenant() tenant: CurrentTenantContext,
     @Param('id') id: string,
     @Body(new ZodValidationPipe(returnSaleSchema)) dto: ReturnSaleDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.sales.returnItems(tenant, id, dto);
+    return this.idempotency.execute(tenant.companyId, `sales.return:${id}`, idempotencyKey, () => this.sales.returnItems(tenant, id, dto));
   }
 }

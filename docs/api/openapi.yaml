@@ -22,8 +22,7 @@ tags:
     description: Payments — formas de pagamento (docs/architecture/overview.md §6.6)
   - name: sales
     description: >
-      Sales — vendas só à vista nesta fase (docs/architecture/overview.md §6.5).
-      Venda a prazo/conta a receber ainda não existem.
+      Sales — vendas à vista ou parceladas, com agenda automática de contas a receber.
   - name: financial-accounts
     description: Contas financeiras — saldo calculado por agregação (docs/architecture/overview.md §6.6)
   - name: cash-flow
@@ -46,6 +45,28 @@ tags:
       inicial, clientes, fornecedores, despesas, contas a pagar/receber. Só CSV, cabeçalho fixo
       (sem mapeamento de colunas livre), processamento síncrono (sem fila).
 paths:
+  /company:
+    get:
+      tags: [auth]
+      summary: Consulta configurações operacionais da empresa ativa
+      security: [{ bearerAuth: [] }]
+      responses: { "200": { description: OK } }
+    patch:
+      tags: [auth]
+      summary: Atualiza configurações; a moeda fica bloqueada após o início das operações
+      security: [{ bearerAuth: [] }]
+      responses: { "200": { description: Configurações atualizadas } }
+  /company/profit-distribution:
+    get:
+      tags: [reporting]
+      summary: Lista políticas temporais de distribuição do lucro
+      security: [{ bearerAuth: [] }]
+      responses: { "200": { description: OK } }
+    post:
+      tags: [reporting]
+      summary: Cria ou substitui a política de uma data, cuja soma deve ser 100%
+      security: [{ bearerAuth: [] }]
+      responses: { "201": { description: Política salva } }
   /auth/register:
     post:
       tags: [auth]
@@ -583,6 +604,51 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
 
+  /inventory/counts:
+    get:
+      tags: [inventory]
+      summary: Lista inventários físicos da empresa
+      security: [{ bearerAuth: [] }]
+      responses: { "200": { description: OK } }
+    post:
+      tags: [inventory]
+      summary: Inicia inventário com uma foto do saldo esperado de todas as variantes ativas
+      security: [{ bearerAuth: [] }]
+      responses: { "201": { description: Inventário em rascunho } }
+  /inventory/counts/{id}:
+    get:
+      tags: [inventory]
+      summary: Consulta itens e contagens de um inventário
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses: { "200": { description: OK } }
+    patch:
+      tags: [inventory]
+      summary: Salva as quantidades físicas contadas no rascunho
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses: { "200": { description: Contagens salvas } }
+  /inventory/counts/{id}/complete:
+    post:
+      tags: [inventory]
+      summary: Conclui o inventário e cria movimentos/ajustes para cada divergência
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      responses: { "201": { description: Inventário concluído } }
+
   /purchasing/suppliers:
     post:
       tags: [purchasing]
@@ -872,6 +938,12 @@ paths:
                     properties:
                       type: { type: string, example: freight }
                       amount: { type: number }
+                installmentPlan:
+                  type: object
+                  description: Quando informado no recebimento final, gera contas a pagar.
+                  properties:
+                    count: { type: integer, minimum: 1, maximum: 60 }
+                    firstDueDate: { type: string, format: date }
       responses:
         "201":
           description: Recebido (compra atualizada, com status partially_received ou received)
@@ -892,9 +964,8 @@ paths:
     post:
       tags: [purchasing]
       summary: >
-        Cancela a compra — só permitido em draft/ordered. Cancelar uma compra
-        já recebida exige estorno de estoque/custo (RN 10.6.6), não
-        implementado nesta fase — retorna 409 explícito.
+        Cancela a compra antes do recebimento. Compras recebidas usam o endpoint
+        explícito de estorno para preservar a rastreabilidade.
       security: [{ bearerAuth: [] }]
       parameters:
         - name: id
@@ -913,6 +984,33 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /purchasing/purchases/{id}/reverse:
+    post:
+      tags: [purchasing]
+      summary: Estorna estoque, custo e parcelas não pagas de uma compra recebida
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        "201":
+          description: Recebimento estornado, histórico preservado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Purchase" }
 
   /customers:
     post:
@@ -1209,8 +1307,8 @@ paths:
       summary: >
         Confirma a venda: congela o custo por item, baixa estoque via
         InventoryService.releaseStock() na mesma transação (TA-ARCH-003),
-        registra os pagamentos (só à vista — a soma precisa bater exatamente
-        com o total) e calcula CMV/lucro bruto.
+        registra pagamentos imediatos e/ou agenda o saldo futuro em parcelas,
+        e calcula CMV/lucro bruto.
       security: [{ bearerAuth: [] }]
       parameters:
         - name: id
@@ -1228,13 +1326,18 @@ paths:
               properties:
                 payments:
                   type: array
-                  minItems: 1
+                  minItems: 0
                   items:
                     type: object
                     required: [paymentMethodId, amount]
                     properties:
                       paymentMethodId: { type: string, format: uuid }
                       amount: { type: number }
+                installmentPlan:
+                  type: object
+                  properties:
+                    count: { type: integer, minimum: 1, maximum: 60 }
+                    firstDueDate: { type: string, format: date }
       responses:
         "201":
           description: Confirmada
@@ -1283,7 +1386,7 @@ paths:
       summary: >
         Devolução parcial ou total (RN 10.11). Item apto restaura estoque;
         item avariado só é registrado (não volta ao estoque disponível
-        nesta fase). Recalcula receita líquida e CMV/lucro proporcionalmente.
+        nesta fase). Recalcula receita/CMV/lucro e ajusta parcelas ou caixa.
       security: [{ bearerAuth: [] }]
       parameters:
         - name: id
@@ -1713,6 +1816,7 @@ paths:
                 paidNow: { type: boolean }
                 financialAccountId: { type: string, format: uuid, description: "Obrigatório quando paidNow=true" }
                 dueDate: { type: string, format: date, description: "Obrigatório quando paidNow=false" }
+                installmentCount: { type: integer, minimum: 1, maximum: 60, default: 1 }
       responses:
         "201":
           description: Criada
@@ -2578,6 +2682,17 @@ components:
         paymentFees: { type: string }
         expenses: { type: string }
         netProfit: { type: string }
+        profitDistribution:
+          type: object
+          description: Aplicada após o lucro líquido; base zero quando o resultado não é positivo.
+          properties:
+            applied: { type: boolean }
+            effectiveFrom: { type: string, format: date, nullable: true }
+            baseAmount: { type: string }
+            reinvestment: { type: object }
+            proLabore: { type: object }
+            reserve: { type: object }
+            marketing: { type: object }
     AuditLog:
       type: object
       description: Registro de trilha de auditoria (BR §10.23) — somente leitura, append-only.

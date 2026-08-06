@@ -12,6 +12,7 @@ import { CreatePayableDto } from './dto/create-payable.schema';
 import { PayPayableDto } from './dto/pay-payable.schema';
 import { CancelPayableDto } from './dto/cancel-payable.schema';
 import { AuditService } from '../audit/audit.service';
+import { buildInstallmentSchedule } from '../../common/finance/installment-schedule';
 
 const INCLUDE_DETAILS = {
   supplier: true,
@@ -52,6 +53,15 @@ export class PayablesService {
       },
       include: INCLUDE_DETAILS,
     });
+  }
+
+  async createForPurchase(client: Prisma.TransactionClient, params: { companyId: string; userId: string; purchaseId: string; supplierId?: string | null; amount: Prisma.Decimal; count: number; firstDueDate: string }) {
+    const schedule = buildInstallmentSchedule(params.amount, params.count, params.firstDueDate);
+    const rows: { id: string }[] = [];
+    for (const installment of schedule) {
+      rows.push(await client.payable.create({ data: { companyId: params.companyId, supplierId: params.supplierId, purchaseId: params.purchaseId, description: `Compra #${params.purchaseId.slice(0, 8)} · parcela ${installment.number}/${params.count}`, amountOriginal: installment.amount, dueDate: installment.dueDate, installmentNumber: installment.number, installmentCount: params.count, createdBy: params.userId } }));
+    }
+    return rows;
   }
 
   async list(companyId: string) {

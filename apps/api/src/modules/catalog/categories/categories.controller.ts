@@ -18,6 +18,7 @@ import {
   createCategorySchema,
   type CreateCategoryDto,
 } from './dto/create-category.schema';
+import { updateCategorySchema, type UpdateCategoryDto } from './dto/update-category.schema';
 
 @Controller('catalog/categories')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -45,6 +46,18 @@ export class CategoriesController {
     @CurrentTenant() tenant: CurrentTenantContext,
     @Param('id') id: string,
   ) {
-    return this.categories.deactivate(tenant.companyId, id);
+    return this.categories.changeStatus(tenant, id, 'inactive');
+  }
+
+  @Patch(':id/reactivate')
+  @RequirePermission('manage_catalog')
+  reactivate(@CurrentTenant() tenant: CurrentTenantContext, @Param('id') id: string) {
+    return this.categories.changeStatus(tenant, id, 'active');
+  }
+
+  @Patch(':id')
+  @RequirePermission('manage_catalog')
+  update(@CurrentTenant() tenant: CurrentTenantContext, @Param('id') id: string, @Body(new ZodValidationPipe(updateCategorySchema)) dto: UpdateCategoryDto) {
+    return this.categories.update(tenant, id, dto);
   }
 }
