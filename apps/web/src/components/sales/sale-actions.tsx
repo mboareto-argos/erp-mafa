@@ -4,8 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AppIcon } from "@/components/layout/app-icon";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+
+type Method = { id: string; name: string; status: string };
 
 export type SaleListItem = {
   id: string;
@@ -88,22 +91,67 @@ function ReturnSale({ sale, open, onOpenChange }: { sale: SaleListItem; open: bo
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><div className="dialog-heading"><div><DialogTitle>Registrar devolução</DialogTitle><DialogDescription>Informe os itens e a condição. Produtos aptos voltam ao estoque; avariados ficam apenas no histórico.</DialogDescription></div><DialogClose className="dialog-close" aria-label="Fechar">×</DialogClose></div><form className="dialog-form" onSubmit={submit}><div className="return-items">{available.map(item => <div key={item.id}><div><strong>{item.productVariant?.product.name ?? "Produto"}</strong><small>Disponível para devolver: {Number(item.quantity) - Number(item.quantityReturned)}</small></div><div className="field"><label htmlFor={`return-${item.id}`}>Quantidade</label><input id={`return-${item.id}`} type="number" min="0" max={Number(item.quantity) - Number(item.quantityReturned)} step="0.001" value={quantities[item.id]} onChange={event => setQuantities(current => ({ ...current, [item.id]: event.target.value }))} /></div><div className="field"><label htmlFor={`condition-${item.id}`}>Condição</label><select id={`condition-${item.id}`} value={conditions[item.id]} onChange={event => setConditions(current => ({ ...current, [item.id]: event.target.value as "apt" | "damaged" }))}><option value="apt">Apto para voltar ao estoque</option><option value="damaged">Avariado</option></select></div></div>)}</div><div className="field"><label htmlFor="return-reason">Motivo</label><textarea id="return-reason" value={reason} onChange={event => setReason(event.target.value)} required maxLength={500} /></div>{error && <p className="form-error" role="alert">{error}</p>}<div className="dialog-actions"><DialogClose asChild><button className="button button-secondary" type="button">Cancelar</button></DialogClose><button className="button button-primary" disabled={pending}>{pending ? "Registrando…" : "Confirmar devolução"}</button></div></form></DialogContent></Dialog>;
 }
 
-export function SaleActions({ sale, canManage }: { sale: SaleListItem; canManage: boolean }) {
+function ConfirmSale({ sale, methods, open, onOpenChange }: { sale: SaleListItem; methods: Method[]; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const router = useRouter();
+  const [paymentMode, setPaymentMode] = useState<"immediate" | "installments">("immediate");
+  const [methodId, setMethodId] = useState("");
+  const [upfront, setUpfront] = useState("");
+  const [installmentCount, setInstallmentCount] = useState("2");
+  const [firstDueDate, setFirstDueDate] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string>();
+  const total = Number(sale.total);
+
+  async function confirm() {
+    setError(undefined);
+    const method = methods.find(item => item.id === methodId);
+    if (paymentMode === "immediate" && !method) return setError("Escolha a forma de pagamento.");
+    if (paymentMode === "installments" && !sale.customer) return setError("Esta venda não tem cliente vinculado — edite o rascunho e informe um cliente antes de vender a prazo.");
+    if (paymentMode === "installments" && !firstDueDate) return setError("Informe a primeira data de vencimento.");
+    const immediateAmount = paymentMode === "immediate" ? total : Math.min(Number(upfront || 0), total);
+    if (immediateAmount > 0 && !method) return setError("Escolha a forma de pagamento da entrada.");
+    setPending(true);
+    try {
+      const response = await fetch(`/api/sales/${sale.id}/confirm`, { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ payments: immediateAmount > 0 && method ? [{ paymentMethodId: method.id, amount: immediateAmount }] : [], installmentPlan: paymentMode === "installments" && immediateAmount < total ? { count: Number(installmentCount), firstDueDate } : undefined }) });
+      const result = await response.json() as { message?: string };
+      if (!response.ok) throw new Error(result.message ?? "Não foi possível confirmar a venda.");
+      onOpenChange(false); router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível confirmar a venda.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><div className="dialog-heading"><div><DialogTitle>Confirmar venda?</DialogTitle><DialogDescription>Estoque, CMV e pagamento serão registrados. A venda passa a compor o histórico operacional.</DialogDescription></div><DialogClose className="dialog-close" aria-label="Fechar">×</DialogClose></div>
+    <fieldset className="payment-options"><legend>Quando o cliente vai pagar?</legend><div><label className={`payment-option${paymentMode === "immediate" ? " selected" : ""}`}><input type="radio" checked={paymentMode === "immediate"} onChange={() => { setPaymentMode("immediate"); setUpfront(""); }} /><span className="payment-radio" /><span><strong>Receber agora</strong><small>Registra a entrada no caixa imediatamente</small></span></label><label className={`payment-option${paymentMode === "installments" ? " selected" : ""}`}><input type="radio" checked={paymentMode === "installments"} onChange={() => setPaymentMode("installments")} /><span className="payment-radio" /><span><strong>Receber a prazo</strong><small>Cria parcelas no contas a receber</small></span></label></div></fieldset>
+    {(paymentMode === "immediate" || Number(upfront || 0) > 0) && <fieldset className="payment-options"><legend>{paymentMode === "immediate" ? "Forma de pagamento" : "Forma de pagamento da entrada"}</legend><div>{methods.filter(method => method.status === "active").map(method => <label className={`payment-option${methodId === method.id ? " selected" : ""}`} key={method.id}><input type="radio" name="confirm-payment-method" checked={methodId === method.id} onChange={() => setMethodId(method.id)} /><span className="payment-radio" aria-hidden="true" /><span><strong>{method.name}</strong><small>{methodId === method.id ? "Selecionada" : "Selecionar"}</small></span></label>)}</div></fieldset>}
+    {paymentMode === "installments" && <div className="wizard-form-section"><div className="form-grid wizard-form-grid-three"><CurrencyInput label="Entrada agora" value={upfront} onValueChange={setUpfront} min={0} max={total} hint="Opcional; o restante será parcelado." /><div className="field"><label htmlFor="confirm-installments">Número de parcelas</label><input id="confirm-installments" type="number" min="1" max="60" value={installmentCount} onChange={event => setInstallmentCount(event.target.value)} /></div><div className="field"><label htmlFor="confirm-first-due">Primeiro vencimento</label><input id="confirm-first-due" type="date" value={firstDueDate} onChange={event => setFirstDueDate(event.target.value)} /></div></div></div>}
+    {error && <p className="form-error" role="alert">{error}</p>}
+    <div className="dialog-actions"><DialogClose asChild><button className="button button-secondary" type="button">Voltar</button></DialogClose><button className="button button-primary" type="button" onClick={confirm} disabled={pending}>{pending ? "Confirmando…" : "Confirmar venda"}</button></div>
+  </DialogContent></Dialog>;
+}
+
+export function SaleActions({ sale, canManage, methods }: { sale: SaleListItem; canManage: boolean; methods: Method[] }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const canEdit = canManage && sale.status === "draft";
   const canCancel = canManage && ["draft", "confirmed"].includes(sale.status);
   const canReturn = canManage && ["confirmed", "partially_returned"].includes(sale.status);
+  const canConfirm = canManage && sale.status === "draft";
 
   return <>
     <DropdownMenu><DropdownMenuTrigger asChild><button className="row-menu-trigger" type="button" aria-label={`Ações da venda ${sale.id.slice(0, 8)}`}><AppIcon name="more" /></button></DropdownMenuTrigger><DropdownMenuContent align="end" sideOffset={6}>
       <DropdownMenuItem className="dropdown-item view" onSelect={() => setDetailsOpen(true)}><span><AppIcon name="eye" /></span><div><strong>Visualizar</strong><small>Ver resumo completo</small></div></DropdownMenuItem>
       {canEdit && <DropdownMenuItem asChild><Link className="dropdown-item edit" href={`/vendas?edit=${sale.id}`}><span><AppIcon name="edit" /></span><div><strong>Editar rascunho</strong><small>Revisar antes de concluir</small></div></Link></DropdownMenuItem>}
+      {canConfirm && <DropdownMenuItem className="dropdown-item success" onSelect={() => setConfirmOpen(true)}><span><AppIcon name="shield" /></span><div><strong>Confirmar venda</strong><small>Registrar pagamento e baixar estoque</small></div></DropdownMenuItem>}
       {canReturn && <DropdownMenuItem className="dropdown-item success" onSelect={() => setReturnOpen(true)}><span><AppIcon name="inventory" /></span><div><strong>Registrar devolução</strong><small>Selecionar itens e condição</small></div></DropdownMenuItem>}
       {canCancel && <DropdownMenuItem className="dropdown-item danger" onSelect={() => setCancelOpen(true)}><span><AppIcon name="cancel" /></span><div><strong>Cancelar venda</strong><small>Preservar histórico e estornar</small></div></DropdownMenuItem>}
     </DropdownMenuContent></DropdownMenu>
     <SaleDetails sale={sale} open={detailsOpen} onOpenChange={setDetailsOpen} />
+    {canConfirm && <ConfirmSale sale={sale} methods={methods} open={confirmOpen} onOpenChange={setConfirmOpen} />}
     {canCancel && <CancelSale saleId={sale.id} open={cancelOpen} onOpenChange={setCancelOpen} />}
     {canReturn && <ReturnSale sale={sale} open={returnOpen} onOpenChange={setReturnOpen} />}
   </>;

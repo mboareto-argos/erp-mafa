@@ -26,21 +26,37 @@ export function QuickPurchaseForm({ products, suppliers, initialOpen = false, ed
   const update = (index: number, field: keyof Line, value: string) => setLines(current => current.map((line, i) => i === index ? { ...line, [field]: value } : line));
   function close() { setOpen(false); setStep(0); setError(undefined); if (editingPurchase) router.replace("/compras"); }
   function nextStep() { setError(undefined); if (step === 0 && lines.some(line => !line.productId || Number(line.quantity) <= 0 || Number(line.unitCost) < 0)) return setError("Complete os itens, as quantidades e os valores da compra."); if (step === 1 && createPayables && !supplierId) return setError("Selecione um fornecedor para registrar a compra a prazo."); if (step === 1 && createPayables && !firstDueDate) return setError("Informe o primeiro vencimento."); setStep(current => current + 1); }
+  function resetForm() { setLines([{ productId: "", quantity: "1", unitCost: "" }]); setSupplierId(""); setFreight(""); setHasFreight(false); setCreatePayables(false); setFirstDueDate(""); setIdempotencyKey(""); }
+  async function createOrUpdatePurchase() {
+    const items = lines.map(line => { const product = products.find(item => item.id === line.productId); return product?.variants[0] ? { productVariantId: product.variants[0].id, quantity: Number(line.quantity), unitCostOriginCurrency: Number(line.unitCost) } : null; });
+    if (items.some(item => !item)) throw new Error("Revise os itens antes de confirmar.");
+    const created = await fetch(editingPurchase ? `/api/purchasing/purchases/${editingPurchase.id}` : "/api/purchasing/purchases", { method: editingPurchase ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ supplierId: supplierId || undefined, items }) });
+    const purchase = await created.json() as { id?: string; items?: Array<{ id: string }>; message?: string };
+    if (!created.ok || !purchase.id || !purchase.items) throw new Error(purchase.message ?? "Não foi possível criar a compra.");
+    return purchase as { id: string; items: Array<{ id: string }> };
+  }
+  // Registra só a compra + o pedido (RN 10.6.2: pedido não altera estoque), deixando o
+  // recebimento pra depois — ação "Receber" na listagem completa esse fluxo.
+  async function saveAsOrdered() {
+    setPending(true); setError(undefined);
+    try {
+      const purchase = await createOrUpdatePurchase();
+      const ordered = await fetch(`/api/purchasing/purchases/${purchase.id}/order`, { method: "POST" });
+      if (!ordered.ok) throw new Error("Não foi possível confirmar o pedido.");
+      close(); resetForm(); router.refresh();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível salvar o pedido."); } finally { setPending(false); }
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (step !== 2) { nextStep(); return; }
     setPending(true); setError(undefined);
-    const items = lines.map(line => { const product = products.find(item => item.id === line.productId); return product?.variants[0] ? { productVariantId: product.variants[0].id, quantity: Number(line.quantity), unitCostOriginCurrency: Number(line.unitCost) } : null; });
-    if (items.some(item => !item)) { setError("Revise os itens antes de confirmar."); setPending(false); return; }
     const key = idempotencyKey || crypto.randomUUID(); setIdempotencyKey(key);
     try {
-      const created = await fetch(editingPurchase ? `/api/purchasing/purchases/${editingPurchase.id}` : "/api/purchasing/purchases", { method: editingPurchase ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ supplierId: supplierId || undefined, items }) });
-      const purchase = await created.json() as { id?: string; items?: Array<{ id: string }>; message?: string };
-      if (!created.ok || !purchase.id || !purchase.items) throw new Error(purchase.message ?? "Não foi possível criar a compra.");
+      const purchase = await createOrUpdatePurchase();
       const ordered = await fetch(`/api/purchasing/purchases/${purchase.id}/order`, { method: "POST" }); if (!ordered.ok) throw new Error("Não foi possível confirmar a compra.");
       const received = await fetch(`/api/purchasing/purchases/${purchase.id}/receive`, { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify({ items: purchase.items.map((item, index) => ({ purchaseItemId: item.id, quantityReceived: Number(lines[index].quantity) })), additionalCosts: Number(freight) > 0 ? [{ type: "frete", amount: Number(freight) }] : [], installmentPlan: createPayables ? { count: Number(installmentCount), firstDueDate } : undefined }) });
       if (!received.ok) { const result = await received.json() as { message?: string }; throw new Error(result.message ?? "Não foi possível receber a compra."); }
-      close(); setLines([{ productId: "", quantity: "1", unitCost: "" }]); setSupplierId(""); setFreight(""); setHasFreight(false); setCreatePayables(false); setFirstDueDate(""); setIdempotencyKey(""); router.refresh();
+      close(); resetForm(); router.refresh();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível registrar a compra."); } finally { setPending(false); }
   }
   if (!open) return <button className="button button-primary compact-button" onClick={() => setOpen(true)}>Nova compra</button>;
@@ -78,7 +94,7 @@ export function QuickPurchaseForm({ products, suppliers, initialOpen = false, ed
         <aside className="wizard-side-summary"><div className="wizard-summary-heading"><span>Resumo</span><h3>Resumo da compra</h3></div><dl><div><dt>Itens</dt><dd>{lines.length}</dd></div><div><dt>Unidades</dt><dd>{lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0)}</dd></div><div><dt>Fornecedor</dt><dd>{suppliers.find(supplier => supplier.id === supplierId)?.name ?? "A definir"}</dd></div><div><dt>Frete</dt><dd>{money(Number(freight || 0))}</dd></div><div><dt>Pagamento</dt><dd>{createPayables ? `${installmentCount}x a prazo` : "Não informado"}</dd></div></dl><div className="wizard-summary"><span>Total estimado</span><strong>{money(total)}</strong></div><p>{createPayables ? "As parcelas serão criadas ao confirmar o recebimento." : "O custo final será calculado ao confirmar o recebimento."}</p></aside>
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
-      <div className="wizard-actions">{step > 0 ? <button className="button button-secondary" type="button" onClick={() => setStep(current => current - 1)}>← Voltar</button> : <button className="button button-secondary" type="button" onClick={close}>Cancelar</button>}{step < 2 ? <button key="purchase-next-step" className="button button-primary" type="button" onClick={event => { event.preventDefault(); nextStep(); }}>Continuar →</button> : <button key="purchase-submit" className="button button-primary" type="submit" disabled={pending}>{pending ? "Registrando…" : "Confirmar recebimento"}</button>}</div>
+      <div className="wizard-actions">{step > 0 ? <button className="button button-secondary" type="button" onClick={() => setStep(current => current - 1)}>← Voltar</button> : <button className="button button-secondary" type="button" onClick={close}>Cancelar</button>}<button className="button button-secondary" type="button" onClick={saveAsOrdered} disabled={pending}>{pending ? "Salvando…" : "Salvar como pedido"}</button>{step < 2 ? <button key="purchase-next-step" className="button button-primary" type="button" onClick={event => { event.preventDefault(); nextStep(); }}>Continuar →</button> : <button key="purchase-submit" className="button button-primary" type="submit" disabled={pending}>{pending ? "Registrando…" : "Confirmar recebimento"}</button>}</div>
     </form>
   </section>;
 }

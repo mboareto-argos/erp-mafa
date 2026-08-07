@@ -64,6 +64,30 @@ function PurchaseDetails({ purchase, open, onOpenChange }: { purchase: PurchaseL
   </DialogContent></Dialog>;
 }
 
+function ReceivePurchase({ purchase, open, onOpenChange }: { purchase: PurchaseListItem; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string>();
+  const pendingItems = purchase.items.filter(item => Number(item.quantity) - Number(item.quantityReceived) > 0);
+
+  async function receive() {
+    setPending(true); setError(undefined);
+    try {
+      const items = pendingItems.map(item => ({ purchaseItemId: item.id, quantityReceived: Number(item.quantity) - Number(item.quantityReceived) }));
+      const response = await fetch(`/api/purchasing/purchases/${purchase.id}/receive`, { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ items }) });
+      const result = await response.json() as { message?: string };
+      if (!response.ok) throw new Error(result.message ?? "Não foi possível receber a compra.");
+      onOpenChange(false); router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível receber a compra.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><div className="dialog-heading"><div><DialogTitle>Receber compra?</DialogTitle><DialogDescription>O estoque e o custo médio serão atualizados para as quantidades ainda pendentes.</DialogDescription></div><DialogClose className="dialog-close" aria-label="Fechar">×</DialogClose></div><dl className="sale-payment-list">{pendingItems.map(item => <div key={item.id}><dt><strong>{item.productVariant?.product.name ?? "Produto"}</strong><small>SKU: {item.productVariant?.skuVariant || item.productVariant?.product.sku || "—"}</small></dt><dd>{Number(item.quantity) - Number(item.quantityReceived)} un.</dd></div>)}</dl>{error && <p className="form-error" role="alert">{error}</p>}<div className="dialog-actions"><DialogClose asChild><button className="button button-secondary" type="button">Voltar</button></DialogClose><button className="button button-primary" type="button" onClick={receive} disabled={pending}>{pending ? "Recebendo…" : "Confirmar recebimento"}</button></div></DialogContent></Dialog>;
+}
+
 function CancelPurchase({ purchaseId, open, onOpenChange }: { purchaseId: string; open: boolean; onOpenChange: (open: boolean) => void }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -112,18 +136,22 @@ export function PurchaseActions({ purchase, canManage }: { purchase: PurchaseLis
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reverseOpen, setReverseOpen] = useState(false);
+  const [receiveOpen, setReceiveOpen] = useState(false);
   const canEdit = canManage && purchase.status === "draft";
   const canCancel = canManage && ["draft", "ordered"].includes(purchase.status);
   const canReverse = canManage && ["partially_received", "received"].includes(purchase.status);
+  const canReceive = canManage && ["ordered", "partially_received"].includes(purchase.status);
 
   return <>
     <DropdownMenu><DropdownMenuTrigger asChild><button className="row-menu-trigger" type="button" aria-label={`Ações da compra ${purchase.id.slice(0, 8)}`}><AppIcon name="more" /></button></DropdownMenuTrigger><DropdownMenuContent align="end" sideOffset={6}>
       <DropdownMenuItem className="dropdown-item view" onSelect={() => setDetailsOpen(true)}><span><AppIcon name="eye" /></span><div><strong>Visualizar</strong><small>Ver resumo completo</small></div></DropdownMenuItem>
       {canEdit && <DropdownMenuItem asChild><Link className="dropdown-item edit" href={`/compras?edit=${purchase.id}`}><span><AppIcon name="edit" /></span><div><strong>Editar rascunho</strong><small>Revisar antes de receber</small></div></Link></DropdownMenuItem>}
+      {canReceive && <DropdownMenuItem className="dropdown-item success" onSelect={() => setReceiveOpen(true)}><span><AppIcon name="inventory" /></span><div><strong>Receber</strong><small>Atualizar estoque e custo</small></div></DropdownMenuItem>}
       {canCancel && <DropdownMenuItem className="dropdown-item danger" onSelect={() => setCancelOpen(true)}><span><AppIcon name="cancel" /></span><div><strong>Cancelar compra</strong><small>Preservar o histórico</small></div></DropdownMenuItem>}
       {canReverse && <DropdownMenuItem className="dropdown-item danger" onSelect={() => setReverseOpen(true)}><span><AppIcon name="cancel" /></span><div><strong>Estornar recebimento</strong><small>Reverter estoque e parcelas</small></div></DropdownMenuItem>}
     </DropdownMenuContent></DropdownMenu>
     <PurchaseDetails purchase={purchase} open={detailsOpen} onOpenChange={setDetailsOpen} />
+    {canReceive && <ReceivePurchase purchase={purchase} open={receiveOpen} onOpenChange={setReceiveOpen} />}
     {canCancel && <CancelPurchase purchaseId={purchase.id} open={cancelOpen} onOpenChange={setCancelOpen} />}
     {canReverse && <ReversePurchase purchaseId={purchase.id} open={reverseOpen} onOpenChange={setReverseOpen} />}
   </>;

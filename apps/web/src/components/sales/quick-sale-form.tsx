@@ -38,23 +38,38 @@ export function QuickSaleForm({ products, methods, customers, initialOpen = fals
     setStep(current => current + 1);
   }
   function close() { setOpen(false); setStep(0); setError(undefined); if (editingSale) router.replace("/vendas"); }
+  function resetForm() { setLines([{ productId: "", quantity: "1", price: "" }]); setCustomerId(""); setMethodId(""); setDiscount(""); setPaymentMode("immediate"); setUpfront(""); setFirstDueDate(""); setIdempotencyKey(""); }
+  async function createOrUpdateSale() {
+    const items = lines.map(line => { const product = products.find(item => item.id === line.productId); return product?.variants[0] ? { productVariantId: product.variants[0].id, quantity: Number(line.quantity), unitPrice: Number(line.price), discount: 0 } : null; });
+    if (items.some(item => !item)) throw new Error("Revise os itens da venda.");
+    const created = await fetch(editingSale ? `/api/sales/${editingSale.id}` : "/api/sales", { method: editingSale ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ customerId: customerId || undefined, channel, discount: Number(discount || 0), items }) });
+    const sale = await created.json() as { id?: string; total?: string; message?: string };
+    if (!created.ok || !sale.id || !sale.total) throw new Error(sale.message ?? "Não foi possível criar a venda.");
+    return sale as { id: string; total: string };
+  }
+  // Cria/atualiza a venda sem confirmar — sem forma de pagamento nem baixa de estoque.
+  // A ação "Confirmar venda" na listagem completa esse fluxo depois.
+  async function saveDraft() {
+    setPending(true); setError(undefined);
+    try {
+      await createOrUpdateSale();
+      close(); resetForm(); router.refresh();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível salvar o rascunho."); } finally { setPending(false); }
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (step !== 2) { nextStep(); return; }
     setPending(true); setError(undefined);
-    const items = lines.map(line => { const product = products.find(item => item.id === line.productId); return product?.variants[0] ? { productVariantId: product.variants[0].id, quantity: Number(line.quantity), unitPrice: Number(line.price), discount: 0 } : null; });
     const method = methods.find(item => item.id === methodId);
-    if (items.some(item => !item) || (paymentMode === "immediate" && !method)) { setError("Revise os itens e a forma de pagamento."); setPending(false); return; }
+    if (paymentMode === "immediate" && !method) { setError("Revise a forma de pagamento."); setPending(false); return; }
     const key = idempotencyKey || crypto.randomUUID(); setIdempotencyKey(key);
     try {
-      const created = await fetch(editingSale ? `/api/sales/${editingSale.id}` : "/api/sales", { method: editingSale ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ customerId: customerId || undefined, channel, discount: Number(discount || 0), items }) });
-      const sale = await created.json() as { id?: string; total?: string; message?: string };
-      if (!created.ok || !sale.id || !sale.total) throw new Error(sale.message ?? "Não foi possível criar a venda.");
+      const sale = await createOrUpdateSale();
       const immediateAmount = paymentMode === "immediate" ? Number(sale.total) : Math.min(Number(upfront || 0), Number(sale.total));
       const confirmed = await fetch(`/api/sales/${sale.id}/confirm`, { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify({ payments: immediateAmount > 0 && method ? [{ paymentMethodId: method.id, amount: immediateAmount }] : [], installmentPlan: paymentMode === "installments" && immediateAmount < Number(sale.total) ? { count: Number(installmentCount), firstDueDate } : undefined }) });
       const confirmation = await confirmed.json() as { message?: string };
       if (!confirmed.ok) throw new Error(confirmation.message ?? "Não foi possível confirmar a venda.");
-      close(); setLines([{ productId: "", quantity: "1", price: "" }]); setCustomerId(""); setMethodId(""); setDiscount(""); setPaymentMode("immediate"); setUpfront(""); setFirstDueDate(""); setIdempotencyKey(""); router.refresh();
+      close(); resetForm(); router.refresh();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível registrar a venda."); } finally { setPending(false); }
   }
   if (!methods.some(method => method.status === "active")) return <p className="form-error">Configure uma forma de pagamento vinculada a uma conta financeira antes de registrar uma venda.</p>;
@@ -90,7 +105,7 @@ export function QuickSaleForm({ products, methods, customers, initialOpen = fals
         <aside className="wizard-side-summary"><div className="wizard-summary-heading"><span>Resumo</span><h3>Resumo da venda</h3></div><dl><div><dt>Itens</dt><dd>{lines.length}</dd></div><div><dt>Unidades</dt><dd>{lines.reduce((total, line) => total + Number(line.quantity || 0), 0)}</dd></div><div><dt>Cliente</dt><dd>{customers.find(customer => customer.id === customerId)?.name ?? "Consumidor final"}</dd></div><div><dt>Pagamento</dt><dd>{paymentMode === "immediate" ? methods.find(method => method.id === methodId)?.name ?? "A definir" : `${installmentCount}x a prazo`}</dd></div><div><dt>Subtotal</dt><dd>{money(subtotal)}</dd></div><div><dt>Desconto</dt><dd>{money(Number(discount || 0))}</dd></div>{paymentMode === "installments" && <div><dt>Entrada</dt><dd>{money(Number(upfront || 0))}</dd></div>}</dl><div className="wizard-summary"><span>Total estimado</span><strong>{money(estimatedTotal)}</strong></div><p>{paymentMode === "installments" ? `Saldo parcelado: ${money(Math.max(0, estimatedTotal - Number(upfront || 0)))}` : "Os valores podem ser revisados até a confirmação."}</p></aside>
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
-      <div className="wizard-actions">{step > 0 ? <button className="button button-secondary" type="button" onClick={() => setStep(current => current - 1)}>← Voltar</button> : <button className="button button-secondary" type="button" onClick={close}>Cancelar</button>}{step < 2 ? <button key="sale-next-step" className="button button-primary" type="button" onClick={event => { event.preventDefault(); nextStep(); }}>Continuar →</button> : <button key="sale-submit" className="button button-primary" type="submit" disabled={pending}>{pending ? "Concluindo…" : "Concluir venda"}</button>}</div>
+      <div className="wizard-actions">{step > 0 ? <button className="button button-secondary" type="button" onClick={() => setStep(current => current - 1)}>← Voltar</button> : <button className="button button-secondary" type="button" onClick={close}>Cancelar</button>}<button className="button button-secondary" type="button" onClick={saveDraft} disabled={pending}>{pending ? "Salvando…" : "Salvar rascunho"}</button>{step < 2 ? <button key="sale-next-step" className="button button-primary" type="button" onClick={event => { event.preventDefault(); nextStep(); }}>Continuar →</button> : <button key="sale-submit" className="button button-primary" type="submit" disabled={pending}>{pending ? "Concluindo…" : "Concluir venda"}</button>}</div>
     </form>
   </section>;
 }
