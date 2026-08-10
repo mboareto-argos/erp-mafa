@@ -90,3 +90,8 @@ Registrado deliberadamente como pendência, não implementado ainda:
   os três consumidores juntos, não isoladamente.
 - **Sem testes automatizados no `apps/web`** — nenhum framework de teste (vitest/playwright)
   configurado ainda; toda a cobertura de teste do projeto está em `apps/api`.
+- **Reserva de estoque sem expiração automática**: liberar uma reserva (`POST
+  /sales/:id/cancel` numa venda `reserved`) é sempre manual — sem job/fila no projeto (mesmo
+  motivo do processamento síncrono de Importação), não há data de expiração nem rotina que
+  libere reservas esquecidas. Também não há reserva parcial de itens de uma venda multi-item —
+  `POST /sales/:id/reserve` sempre reserva a venda inteira de uma vez.

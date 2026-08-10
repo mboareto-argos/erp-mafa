@@ -26,7 +26,7 @@ describe('Inventory + Purchasing — fluxo completo (integração)', () => {
 
   const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
-  it('rascunho e pedido não alteram o estoque (RN 10.6.1/10.6.2)', async () => {
+  it('rascunho não altera o estoque; pedido só marca em trânsito (RN 10.6.1/10.6.2/RN-STK-018)', async () => {
     const { session, variantId } = await createOwnerSessionWithProduct();
 
     const purchase = await request(app.getHttpServer())
@@ -44,6 +44,12 @@ describe('Inventory + Purchasing — fluxo completo (integração)', () => {
       .expect(201);
     expect(purchase.body.status).toBe('draft');
 
+    const balancesAfterDraft = await request(app.getHttpServer())
+      .get('/api/v1/inventory/balances')
+      .set(auth(session.accessToken))
+      .expect(200);
+    expect(balancesAfterDraft.body).toHaveLength(0);
+
     await request(app.getHttpServer())
       .post(`/api/v1/purchasing/purchases/${purchase.body.id}/order`)
       .set(auth(session.accessToken))
@@ -54,7 +60,9 @@ describe('Inventory + Purchasing — fluxo completo (integração)', () => {
       .get('/api/v1/inventory/balances')
       .set(auth(session.accessToken))
       .expect(200);
-    expect(balances.body).toHaveLength(0);
+    expect(balances.body).toHaveLength(1);
+    expect(balances.body[0].quantityAvailable).toBe('0');
+    expect(balances.body[0].quantityInTransit).toBe('10');
   });
 
   it('edita somente o rascunho e preserva os itens anteriores por inativação', async () => {

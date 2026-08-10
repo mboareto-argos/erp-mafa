@@ -17,7 +17,10 @@ const INCLUDE_DETAILS = {
     include: { productVariant: { include: { product: true } } },
   },
   receipts: { include: { items: true, costAllocations: true } },
-  payables: { include: { payments: true }, orderBy: { installmentNumber: 'asc' } },
+  payables: {
+    include: { payments: true },
+    orderBy: { installmentNumber: 'asc' },
+  },
 } satisfies Prisma.PurchaseInclude;
 
 @Injectable()
@@ -208,13 +211,24 @@ export class PurchasesService {
     });
   }
 
-  // RN 10.6.2: marcada como pedido tambem nao aumenta o estoque disponivel.
+  // RN 10.6.2: marcada como pedido tambem nao aumenta o estoque disponivel
+  // — so' marca "em transito" (RN-STK-018), informativo, fora da formula
+  // disponivel = fisico - reservado.
   async order(companyId: string, id: string) {
     const purchase = await this.findByStatus(companyId, id, ['draft']);
-    return this.prisma.purchase.update({
-      where: { id: purchase.id },
-      data: { status: 'ordered' },
-      include: INCLUDE_DETAILS,
+    return this.prisma.$transaction(async (tx) => {
+      for (const item of purchase.items) {
+        await this.inventory.markInTransit(tx, {
+          companyId,
+          productVariantId: item.productVariantId,
+          quantity: item.quantity,
+        });
+      }
+      return tx.purchase.update({
+        where: { id: purchase.id },
+        data: { status: 'ordered' },
+        include: INCLUDE_DETAILS,
+      });
     });
   }
 
@@ -343,6 +357,12 @@ export class PurchasesService {
           originId: purchaseId,
           createdBy: tenant.userId,
         });
+
+        await this.inventory.clearInTransit(tx, {
+          companyId: tenant.companyId,
+          productVariantId: item.productVariantId,
+          quantity: received.quantityReceived,
+        });
       }
 
       const refreshedItems = await tx.purchaseItem.findMany({
@@ -360,14 +380,58 @@ export class PurchasesService {
         include: INCLUDE_DETAILS,
       });
       if (dto.installmentPlan) {
-        if (!fullyReceived) throw new AppError('PURCHASE_INSTALLMENTS_REQUIRE_FULL_RECEIPT', 'As parcelas devem ser geradas na conclusão do recebimento.', HttpStatus.CONFLICT, 'installmentPlan');
-        if (!purchase.supplierId) throw new AppError('SUPPLIER_REQUIRED_FOR_CREDIT', 'Selecione um fornecedor para registrar a compra a prazo.', HttpStatus.BAD_REQUEST, 'supplierId');
-        const existingPayables = await tx.payable.count({ where: { companyId: tenant.companyId, purchaseId } });
-        if (existingPayables > 0) throw new AppError('PURCHASE_PAYABLES_ALREADY_CREATED', 'As parcelas desta compra já foram geradas.', HttpStatus.CONFLICT);
-        const merchandiseOrigin = refreshedItems.reduce((sum, item) => sum.add(new Prisma.Decimal(item.quantity).mul(item.unitCostOriginCurrency)), new Prisma.Decimal(0));
-        const merchandiseBase = purchase.currency === 'BRL' ? merchandiseOrigin : merchandiseOrigin.mul(purchase.exchangeRate ?? 1);
-        const costs = await tx.purchaseCostAllocation.aggregate({ where: { companyId: tenant.companyId, purchaseReceipt: { purchaseId } }, _sum: { amount: true } });
-        await this.payables.createForPurchase(tx, { companyId: tenant.companyId, userId: tenant.userId, purchaseId, supplierId: purchase.supplierId, amount: merchandiseBase.add(costs._sum.amount ?? 0), count: dto.installmentPlan.count, firstDueDate: dto.installmentPlan.firstDueDate });
+        if (!fullyReceived)
+          throw new AppError(
+            'PURCHASE_INSTALLMENTS_REQUIRE_FULL_RECEIPT',
+            'As parcelas devem ser geradas na conclusão do recebimento.',
+            HttpStatus.CONFLICT,
+            'installmentPlan',
+          );
+        if (!purchase.supplierId)
+          throw new AppError(
+            'SUPPLIER_REQUIRED_FOR_CREDIT',
+            'Selecione um fornecedor para registrar a compra a prazo.',
+            HttpStatus.BAD_REQUEST,
+            'supplierId',
+          );
+        const existingPayables = await tx.payable.count({
+          where: { companyId: tenant.companyId, purchaseId },
+        });
+        if (existingPayables > 0)
+          throw new AppError(
+            'PURCHASE_PAYABLES_ALREADY_CREATED',
+            'As parcelas desta compra já foram geradas.',
+            HttpStatus.CONFLICT,
+          );
+        const merchandiseOrigin = refreshedItems.reduce(
+          (sum, item) =>
+            sum.add(
+              new Prisma.Decimal(item.quantity).mul(
+                item.unitCostOriginCurrency,
+              ),
+            ),
+          new Prisma.Decimal(0),
+        );
+        const merchandiseBase =
+          purchase.currency === 'BRL'
+            ? merchandiseOrigin
+            : merchandiseOrigin.mul(purchase.exchangeRate ?? 1);
+        const costs = await tx.purchaseCostAllocation.aggregate({
+          where: {
+            companyId: tenant.companyId,
+            purchaseReceipt: { purchaseId },
+          },
+          _sum: { amount: true },
+        });
+        await this.payables.createForPurchase(tx, {
+          companyId: tenant.companyId,
+          userId: tenant.userId,
+          purchaseId,
+          supplierId: purchase.supplierId,
+          amount: merchandiseBase.add(costs._sum.amount ?? 0),
+          count: dto.installmentPlan.count,
+          firstDueDate: dto.installmentPlan.firstDueDate,
+        });
       }
       await this.audit.record(tx, {
         companyId: tenant.companyId,
@@ -386,7 +450,10 @@ export class PurchasesService {
           installments: dto.installmentPlan?.count ?? 0,
         },
       });
-      return tx.purchase.findUniqueOrThrow({ where: { id: purchaseId }, include: INCLUDE_DETAILS });
+      return tx.purchase.findUniqueOrThrow({
+        where: { id: purchaseId },
+        include: INCLUDE_DETAILS,
+      });
     });
 
     return updatedPurchase;
@@ -415,6 +482,17 @@ export class PurchasesService {
       );
     }
     return this.prisma.$transaction(async (tx) => {
+      // "draft" nunca chamou order(), entao nunca incrementou em transito —
+      // so' "ordered" precisa liberar.
+      if (purchase.status === 'ordered') {
+        for (const item of purchase.items) {
+          await this.inventory.clearInTransit(tx, {
+            companyId: tenant.companyId,
+            productVariantId: item.productVariantId,
+            quantity: item.quantity,
+          });
+        }
+      }
       const cancelled = await tx.purchase.update({
         where: { id: purchase.id },
         data: { status: 'cancelled' },
@@ -435,14 +513,66 @@ export class PurchasesService {
 
   async reverse(tenant: CurrentTenantContext, id: string, reason: string) {
     const purchase = await this.get(tenant.companyId, id);
-    if (!['received', 'partially_received'].includes(purchase.status)) throw new AppError('PURCHASE_NOT_RECEIVED', 'Somente uma compra recebida pode ser estornada.', HttpStatus.CONFLICT);
-    const payables = await this.prisma.payable.findMany({ where: { companyId: tenant.companyId, purchaseId: id, status: { not: 'cancelled' } } });
-    if (payables.some(payable => new Prisma.Decimal(payable.amountPaid).greaterThan(0))) throw new AppError('PURCHASE_REVERSAL_HAS_PAYMENTS', 'Estorne os pagamentos vinculados antes de devolver a compra.', HttpStatus.CONFLICT);
-    return this.prisma.$transaction(async tx => {
-      for (const receipt of purchase.receipts) for (const item of receipt.items) await this.inventory.reversePurchaseReceipt(tx, { companyId: tenant.companyId, productVariantId: item.productVariantId, quantity: item.quantityReceived, receivedUnitCost: item.unitCostFinal, originId: id, createdBy: tenant.userId });
-      await tx.payable.updateMany({ where: { companyId: tenant.companyId, purchaseId: id, status: 'pending' }, data: { status: 'cancelled', cancelReason: reason } });
-      const reversed = await tx.purchase.update({ where: { id }, data: { status: 'cancelled' }, include: INCLUDE_DETAILS });
-      await this.audit.record(tx, { companyId: tenant.companyId, userId: tenant.userId, action: 'purchase.reversed', entityType: 'purchase', entityId: id, beforeData: { status: purchase.status }, afterData: { status: 'cancelled', reversedReceipts: purchase.receipts.length }, reason });
+    if (!['received', 'partially_received'].includes(purchase.status))
+      throw new AppError(
+        'PURCHASE_NOT_RECEIVED',
+        'Somente uma compra recebida pode ser estornada.',
+        HttpStatus.CONFLICT,
+      );
+    const payables = await this.prisma.payable.findMany({
+      where: {
+        companyId: tenant.companyId,
+        purchaseId: id,
+        status: { not: 'cancelled' },
+      },
+    });
+    if (
+      payables.some((payable) =>
+        new Prisma.Decimal(payable.amountPaid).greaterThan(0),
+      )
+    )
+      throw new AppError(
+        'PURCHASE_REVERSAL_HAS_PAYMENTS',
+        'Estorne os pagamentos vinculados antes de devolver a compra.',
+        HttpStatus.CONFLICT,
+      );
+    return this.prisma.$transaction(async (tx) => {
+      for (const receipt of purchase.receipts)
+        for (const item of receipt.items)
+          await this.inventory.reversePurchaseReceipt(tx, {
+            companyId: tenant.companyId,
+            productVariantId: item.productVariantId,
+            quantity: item.quantityReceived,
+            receivedUnitCost: item.unitCostFinal,
+            originId: id,
+            createdBy: tenant.userId,
+          });
+      await tx.payable.updateMany({
+        where: {
+          companyId: tenant.companyId,
+          purchaseId: id,
+          status: 'pending',
+        },
+        data: { status: 'cancelled', cancelReason: reason },
+      });
+      const reversed = await tx.purchase.update({
+        where: { id },
+        data: { status: 'cancelled' },
+        include: INCLUDE_DETAILS,
+      });
+      await this.audit.record(tx, {
+        companyId: tenant.companyId,
+        userId: tenant.userId,
+        action: 'purchase.reversed',
+        entityType: 'purchase',
+        entityId: id,
+        beforeData: { status: purchase.status },
+        afterData: {
+          status: 'cancelled',
+          reversedReceipts: purchase.receipts.length,
+        },
+        reason,
+      });
       return reversed;
     });
   }

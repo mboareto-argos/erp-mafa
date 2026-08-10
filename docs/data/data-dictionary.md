@@ -366,9 +366,9 @@ quantity_reserved`.
 | id | uuid PK | |
 | company_id | uuid FK → companies | |
 | product_variant_id | uuid FK → product_variants | |
-| quantity_available | numeric(14,3) | |
-| quantity_reserved | numeric(14,3) | |
-| quantity_in_transit | numeric(14,3) | ainda não usado (sem Sales/transferências) |
+| quantity_available | numeric(14,3) | reserveStock/releaseReservation deslocam pra/de `quantity_reserved` (migration `20260810141344_add_stock_reservation_transit`) |
+| quantity_reserved | numeric(14,3) | soma de `stock_reservations` `active` da variante |
+| quantity_in_transit | numeric(14,3) | soma de itens de compras `ordered` ainda não recebidos (RN-STK-018) — puramente informativo, não compõe `quantity_available` |
 | updated_at | timestamptz | |
 
 Constraints: `UNIQUE(company_id, product_variant_id)`.
@@ -383,7 +383,7 @@ ser append-only, sem `updated_at`/`deleted_at` (mesma exceção de `stock_balanc
 | id | uuid PK | |
 | company_id | uuid FK → companies | |
 | product_variant_id | uuid FK → product_variants | |
-| type | enum(in, out, adjustment, return) | |
+| type | enum(in, out, adjustment, return, reservation, release) | `reservation`/`release` adicionados na migration `20260810141344_add_stock_reservation_transit`; não alteram o físico, só documentam o deslocamento entre `quantity_available` e `quantity_reserved` |
 | quantity | numeric(14,3) | com sinal |
 | unit_cost | numeric(14,4)? | |
 | origin_type | enum(purchase, adjustment, return, sale) | `sale` adicionado na migration `20260804183648_add_sales_customers_payments` |
@@ -415,21 +415,27 @@ Complementa uma `stock_movement(type=adjustment)` com motivo (RN 10.7.9) e aprov
 Índice: `(company_id, product_variant_id)`.
 
 ### `stock_reservations`
-Modelo completo desde já (TA-DATA-004), **sem service/endpoint ainda** — quem cria uma reserva
-é o Sales (Fase 3), que ainda não existe. `sale_id` sem FK por enquanto (referência futura,
-mesmo padrão de `origin_id` em `stock_movements`).
+Reserva de estoque pra um cliente, sem confirmar a venda ainda (RN "estoque reservado deverá
+reservar estoque"/"disponível = físico - reservado"). `sale_id` ganhou FK real na migration
+`20260810141344_add_stock_reservation_transit` (era uma referência sem FK até então, porque
+`Sale` não existia quando este modelo foi criado). Criada por `SalesService.reserve()`
+(`POST /sales/:id/reserve`, exige `customerId`, só a partir de `draft`) — sempre a venda
+inteira, sem seleção parcial de item. `confirm()` de uma venda `reserved` chama
+`InventoryService.consumeReservation()` (marca `consumed`); `cancel()` chama
+`releaseReservation()` (marca `released`, devolve a quantidade pra `quantity_available`). Sem
+expiração automática — liberação só manual (sem job/fila no projeto).
 
 | Coluna | Tipo | Notas |
 |---|---|---|
 | id | uuid PK | |
 | company_id | uuid FK → companies | |
-| sale_id | uuid | sem FK (Sale não existe ainda) |
+| sale_id | uuid FK → sales | |
 | product_variant_id | uuid FK → product_variants | |
 | quantity | numeric(14,3) | |
 | status | enum(active, released, consumed) | |
 | created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
 
-Índice: `(company_id, product_variant_id)`.
+Índices: `(company_id, product_variant_id)`, `(company_id, sale_id)`.
 
 ---
 
@@ -596,7 +602,7 @@ precisar de um módulo de Reporting.
 | company_id | uuid FK → companies | |
 | customer_id | uuid? FK → customers | opcional (RN 10.9.1) |
 | channel | enum(presencial, whatsapp, instagram, catalogo, outro) | simplificado — sem `marketplace` (futuro) |
-| status | enum(draft, confirmed, cancelled, partially_returned, returned) | simplificado (doc autoriza — "poderá simplificar os status no MVP") — sem `reservada`/`paga`/`entregue` separados |
+| status | enum(draft, reserved, confirmed, cancelled, partially_returned, returned) | simplificado (doc autoriza — "poderá simplificar os status no MVP") — sem `paga`/`entregue` separados; `reserved` adicionado na migration `20260810141344_add_stock_reservation_transit` |
 | subtotal | numeric(14,2) | soma de quantidade × preço unitário |
 | discount | numeric(14,2) | só o desconto geral da venda (desconto por item fica em `sale_items.discount`) |
 | total | numeric(14,2) | receita líquida |

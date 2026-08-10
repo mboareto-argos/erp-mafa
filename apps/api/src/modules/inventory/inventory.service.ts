@@ -147,7 +147,10 @@ export class InventoryService {
     );
     const quantity = new Prisma.Decimal(params.quantity);
 
-    const company = await tx.company.findUnique({ where: { id: params.companyId }, select: { allowNegativeStock: true } });
+    const company = await tx.company.findUnique({
+      where: { id: params.companyId },
+      select: { allowNegativeStock: true },
+    });
     if (currentAvailable.lessThan(quantity) && !company?.allowNegativeStock) {
       throw new AppError(
         'STOCK_INSUFFICIENT',
@@ -182,6 +185,192 @@ export class InventoryService {
           },
         },
         data: { quantityAvailable: { decrement: quantity } },
+      }),
+    ]);
+
+    return { movement };
+  }
+
+  // Chamado pelo Sales dentro da MESMA transacao (TA-ARCH-003) quando uma
+  // venda vira "reserved" — desloca de quantityAvailable pra
+  // quantityReserved (mesmo total fisico, "estoque reservado nao pode ser
+  // considerado disponivel" pra OUTRA venda).
+  async reserveStock(
+    tx: Prisma.TransactionClient,
+    params: {
+      companyId: string;
+      productVariantId: string;
+      quantity: Prisma.Decimal.Value;
+      saleId: string;
+      createdBy?: string;
+    },
+  ) {
+    const balance = await tx.stockBalance.findUnique({
+      where: {
+        companyId_productVariantId: {
+          companyId: params.companyId,
+          productVariantId: params.productVariantId,
+        },
+      },
+    });
+
+    const currentAvailable = new Prisma.Decimal(
+      balance?.quantityAvailable ?? 0,
+    );
+    const quantity = new Prisma.Decimal(params.quantity);
+
+    if (currentAvailable.lessThan(quantity)) {
+      throw new AppError(
+        'STOCK_INSUFFICIENT',
+        'Quantidade solicitada maior que o estoque disponível.',
+        HttpStatus.BAD_REQUEST,
+        'quantity',
+        {
+          available: currentAvailable.toString(),
+          requested: quantity.toString(),
+        },
+      );
+    }
+
+    const [reservation] = await Promise.all([
+      tx.stockReservation.create({
+        data: {
+          companyId: params.companyId,
+          saleId: params.saleId,
+          productVariantId: params.productVariantId,
+          quantity,
+          createdBy: params.createdBy,
+        },
+      }),
+      tx.stockMovement.create({
+        data: {
+          companyId: params.companyId,
+          productVariantId: params.productVariantId,
+          type: 'reservation',
+          quantity,
+          originType: 'sale',
+          originId: params.saleId,
+          createdBy: params.createdBy,
+        },
+      }),
+      tx.stockBalance.update({
+        where: {
+          companyId_productVariantId: {
+            companyId: params.companyId,
+            productVariantId: params.productVariantId,
+          },
+        },
+        data: {
+          quantityAvailable: { decrement: quantity },
+          quantityReserved: { increment: quantity },
+        },
+      }),
+    ]);
+
+    return { reservation };
+  }
+
+  // Libera reservas ativas de uma venda (cancelamento antes de confirmar —
+  // RN "cancelamento deve... liberar a reserva"). Devolve pra
+  // quantityAvailable o que reserveStock tinha deslocado.
+  async releaseReservation(
+    tx: Prisma.TransactionClient,
+    params: { companyId: string; saleId: string; createdBy?: string },
+  ) {
+    const reservations = await tx.stockReservation.findMany({
+      where: {
+        companyId: params.companyId,
+        saleId: params.saleId,
+        status: 'active',
+      },
+    });
+
+    for (const reservation of reservations) {
+      await Promise.all([
+        tx.stockMovement.create({
+          data: {
+            companyId: params.companyId,
+            productVariantId: reservation.productVariantId,
+            type: 'release',
+            quantity: reservation.quantity.negated(),
+            originType: 'sale',
+            originId: params.saleId,
+            createdBy: params.createdBy,
+          },
+        }),
+        tx.stockBalance.update({
+          where: {
+            companyId_productVariantId: {
+              companyId: params.companyId,
+              productVariantId: reservation.productVariantId,
+            },
+          },
+          data: {
+            quantityAvailable: { increment: reservation.quantity },
+            quantityReserved: { decrement: reservation.quantity },
+          },
+        }),
+        tx.stockReservation.update({
+          where: { id: reservation.id },
+          data: { status: 'released' },
+        }),
+      ]);
+    }
+
+    return { reservations };
+  }
+
+  // Confirma uma venda que estava "reserved" (RN "confirmada deve...
+  // converter a reserva em saida") — reserveStock ja tinha decrementado
+  // quantityAvailable no momento da reserva, entao aqui so' baixa
+  // quantityReserved (nunca mexe em quantityAvailable de novo).
+  // Por item (nao em lote pra venda inteira) porque cada item pode ter um
+  // unitCostAtSale diferente, igual releaseStock — chamado no lugar dele
+  // quando a venda ja estava "reserved".
+  async consumeReservation(
+    tx: Prisma.TransactionClient,
+    params: {
+      companyId: string;
+      productVariantId: string;
+      saleId: string;
+      unitCost: Prisma.Decimal.Value;
+      createdBy?: string;
+    },
+  ) {
+    const reservation = await tx.stockReservation.findFirstOrThrow({
+      where: {
+        companyId: params.companyId,
+        saleId: params.saleId,
+        productVariantId: params.productVariantId,
+        status: 'active',
+      },
+    });
+
+    const [movement] = await Promise.all([
+      tx.stockMovement.create({
+        data: {
+          companyId: params.companyId,
+          productVariantId: params.productVariantId,
+          type: 'out',
+          quantity: reservation.quantity.negated(),
+          unitCost: params.unitCost,
+          originType: 'sale',
+          originId: params.saleId,
+          createdBy: params.createdBy,
+        },
+      }),
+      tx.stockBalance.update({
+        where: {
+          companyId_productVariantId: {
+            companyId: params.companyId,
+            productVariantId: params.productVariantId,
+          },
+        },
+        data: { quantityReserved: { decrement: reservation.quantity } },
+      }),
+      tx.stockReservation.update({
+        where: { id: reservation.id },
+        data: { status: 'consumed' },
       }),
     ]);
 
@@ -236,16 +425,137 @@ export class InventoryService {
 
   // Estorno controlado de recebimento: remove a quantidade disponível e
   // reverte o efeito do lote no custo médio atual, sem apagar a entrada.
-  async reversePurchaseReceipt(tx: Prisma.TransactionClient, params: { companyId: string; productVariantId: string; quantity: Prisma.Decimal.Value; receivedUnitCost: Prisma.Decimal.Value; originId: string; createdBy?: string }) {
-    const [variant, balance] = await Promise.all([tx.productVariant.findUniqueOrThrow({ where: { id: params.productVariantId } }), tx.stockBalance.findUnique({ where: { companyId_productVariantId: { companyId: params.companyId, productVariantId: params.productVariantId } } })]);
-    const available = new Prisma.Decimal(balance?.quantityAvailable ?? 0); const reserved = new Prisma.Decimal(balance?.quantityReserved ?? 0); const quantity = new Prisma.Decimal(params.quantity);
-    if (available.lessThan(quantity)) throw new AppError('PURCHASE_REVERSAL_STOCK_UNAVAILABLE', 'Não há estoque disponível suficiente para estornar este recebimento.', HttpStatus.CONFLICT, 'quantity', { available: available.toString(), required: quantity.toString() });
-    const lastPrice = await tx.productPrice.findFirst({ where: { companyId: params.companyId, productId: variant.productId, deletedAt: null }, orderBy: { effectiveFrom: 'desc' } });
-    const currentPhysical = available.add(reserved); const remainingPhysical = currentPhysical.sub(quantity); const remainingValue = currentPhysical.mul(lastPrice?.costPrice ?? 0).sub(quantity.mul(params.receivedUnitCost)); const newCost = remainingPhysical.greaterThan(0) ? Prisma.Decimal.max(remainingValue.div(remainingPhysical), 0) : new Prisma.Decimal(0);
-    const movement = await tx.stockMovement.create({ data: { companyId: params.companyId, productVariantId: params.productVariantId, type: 'out', quantity: quantity.negated(), unitCost: params.receivedUnitCost, originType: 'return', originId: params.originId, createdBy: params.createdBy } });
-    await tx.stockBalance.update({ where: { companyId_productVariantId: { companyId: params.companyId, productVariantId: params.productVariantId } }, data: { quantityAvailable: { decrement: quantity } } });
-    await this.products.appendCostHistory(tx, { companyId: params.companyId, productId: variant.productId, productVariantId: params.productVariantId, costPrice: newCost, createdBy: params.createdBy });
+  async reversePurchaseReceipt(
+    tx: Prisma.TransactionClient,
+    params: {
+      companyId: string;
+      productVariantId: string;
+      quantity: Prisma.Decimal.Value;
+      receivedUnitCost: Prisma.Decimal.Value;
+      originId: string;
+      createdBy?: string;
+    },
+  ) {
+    const [variant, balance] = await Promise.all([
+      tx.productVariant.findUniqueOrThrow({
+        where: { id: params.productVariantId },
+      }),
+      tx.stockBalance.findUnique({
+        where: {
+          companyId_productVariantId: {
+            companyId: params.companyId,
+            productVariantId: params.productVariantId,
+          },
+        },
+      }),
+    ]);
+    const available = new Prisma.Decimal(balance?.quantityAvailable ?? 0);
+    const reserved = new Prisma.Decimal(balance?.quantityReserved ?? 0);
+    const quantity = new Prisma.Decimal(params.quantity);
+    if (available.lessThan(quantity))
+      throw new AppError(
+        'PURCHASE_REVERSAL_STOCK_UNAVAILABLE',
+        'Não há estoque disponível suficiente para estornar este recebimento.',
+        HttpStatus.CONFLICT,
+        'quantity',
+        { available: available.toString(), required: quantity.toString() },
+      );
+    const lastPrice = await tx.productPrice.findFirst({
+      where: {
+        companyId: params.companyId,
+        productId: variant.productId,
+        deletedAt: null,
+      },
+      orderBy: { effectiveFrom: 'desc' },
+    });
+    const currentPhysical = available.add(reserved);
+    const remainingPhysical = currentPhysical.sub(quantity);
+    const remainingValue = currentPhysical
+      .mul(lastPrice?.costPrice ?? 0)
+      .sub(quantity.mul(params.receivedUnitCost));
+    const newCost = remainingPhysical.greaterThan(0)
+      ? Prisma.Decimal.max(remainingValue.div(remainingPhysical), 0)
+      : new Prisma.Decimal(0);
+    const movement = await tx.stockMovement.create({
+      data: {
+        companyId: params.companyId,
+        productVariantId: params.productVariantId,
+        type: 'out',
+        quantity: quantity.negated(),
+        unitCost: params.receivedUnitCost,
+        originType: 'return',
+        originId: params.originId,
+        createdBy: params.createdBy,
+      },
+    });
+    await tx.stockBalance.update({
+      where: {
+        companyId_productVariantId: {
+          companyId: params.companyId,
+          productVariantId: params.productVariantId,
+        },
+      },
+      data: { quantityAvailable: { decrement: quantity } },
+    });
+    await this.products.appendCostHistory(tx, {
+      companyId: params.companyId,
+      productId: variant.productId,
+      productVariantId: params.productVariantId,
+      costPrice: newCost,
+      createdBy: params.createdBy,
+    });
     return { movement, newCost };
+  }
+
+  // Chamado pelo Purchasing dentro da MESMA transacao (TA-ARCH-003) quando
+  // uma compra vira "ordered" — RN-STK-018: itens pedidos e nao recebidos
+  // aparecem como "em transito", sem compor quantityAvailable nem
+  // quantityReserved (e' so' informativo, fora da formula disponivel =
+  // fisico - reservado).
+  async markInTransit(
+    tx: Prisma.TransactionClient,
+    params: {
+      companyId: string;
+      productVariantId: string;
+      quantity: Prisma.Decimal.Value;
+    },
+  ) {
+    return tx.stockBalance.upsert({
+      where: {
+        companyId_productVariantId: {
+          companyId: params.companyId,
+          productVariantId: params.productVariantId,
+        },
+      },
+      create: {
+        companyId: params.companyId,
+        productVariantId: params.productVariantId,
+        quantityInTransit: params.quantity,
+      },
+      update: { quantityInTransit: { increment: params.quantity } },
+    });
+  }
+
+  // Chamado pelo Purchasing quando uma compra recebe (total ou
+  // parcialmente) ou e' cancelada a partir de "ordered" — tira a mesma
+  // quantidade de "em transito".
+  async clearInTransit(
+    tx: Prisma.TransactionClient,
+    params: {
+      companyId: string;
+      productVariantId: string;
+      quantity: Prisma.Decimal.Value;
+    },
+  ) {
+    return tx.stockBalance.update({
+      where: {
+        companyId_productVariantId: {
+          companyId: params.companyId,
+          productVariantId: params.productVariantId,
+        },
+      },
+      data: { quantityInTransit: { decrement: params.quantity } },
+    });
   }
 
   // Ajuste manual pontual (RN 10.7.9/10.7.10) — abre a propria transacao,
@@ -281,7 +591,10 @@ export class InventoryService {
     const delta = new Prisma.Decimal(dto.quantity);
     const resultingAvailable = currentAvailable.add(delta);
 
-    const company = await this.prisma.company.findUnique({ where: { id: tenant.companyId }, select: { allowNegativeStock: true } });
+    const company = await this.prisma.company.findUnique({
+      where: { id: tenant.companyId },
+      select: { allowNegativeStock: true },
+    });
     if (resultingAvailable.isNegative() && !company?.allowNegativeStock) {
       throw new AppError(
         'STOCK_INSUFFICIENT',

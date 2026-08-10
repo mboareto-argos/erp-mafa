@@ -22,7 +22,10 @@ const INCLUDE_DETAILS = {
     include: { productVariant: { include: { product: true } } },
   },
   payments: { include: { paymentMethod: true } },
-  receivables: { include: { payments: true }, orderBy: { installmentNumber: 'asc' } },
+  receivables: {
+    include: { payments: true },
+    orderBy: { installmentNumber: 'asc' },
+  },
   returns: { include: { items: true } },
 } satisfies Prisma.SaleInclude;
 
@@ -218,11 +221,62 @@ export class SalesService {
     });
   }
 
-  // Confirma a venda: congela o custo por item (RN 10.10.9), baixa estoque
-  // via InventoryService.releaseStock() (TA-ARCH-003: mesma transacao),
-  // registra os pagamentos e calcula CMV/lucro.
-  async confirm(tenant: CurrentTenantContext, id: string, dto: ConfirmSaleDto) {
+  // Reserva a venda inteira pra um cliente definido (RN "venda reservada
+  // deve reservar estoque") — nunca baixa quantityAvailable, so' desloca
+  // pra quantityReserved (InventoryService.reserveStock). Sem seleção
+  // parcial de item: reserva sempre todos os itens do rascunho.
+  async reserve(tenant: CurrentTenantContext, id: string) {
     const sale = await this.findByStatus(tenant.companyId, id, ['draft']);
+    if (!sale.customerId) {
+      throw new AppError(
+        'CUSTOMER_REQUIRED_FOR_RESERVATION',
+        'Selecione um cliente para reservar esta venda.',
+        HttpStatus.BAD_REQUEST,
+        'customerId',
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      for (const item of sale.items) {
+        await this.inventory.reserveStock(tx, {
+          companyId: tenant.companyId,
+          productVariantId: item.productVariantId,
+          quantity: item.quantity,
+          saleId: sale.id,
+          createdBy: tenant.userId,
+        });
+      }
+
+      const reserved = await tx.sale.update({
+        where: { id: sale.id },
+        data: { status: 'reserved' },
+        include: INCLUDE_DETAILS,
+      });
+      await this.audit.record(tx, {
+        companyId: tenant.companyId,
+        userId: tenant.userId,
+        action: 'sale.reserved',
+        entityType: 'sale',
+        entityId: sale.id,
+        beforeData: { status: sale.status },
+        afterData: { status: reserved.status },
+      });
+      return reserved;
+    });
+  }
+
+  // Confirma a venda: congela o custo por item (RN 10.10.9), baixa estoque
+  // via InventoryService.releaseStock() (TA-ARCH-003: mesma transacao) — ou,
+  // se a venda ja estava "reserved", converte a reserva existente em saida
+  // via consumeReservation (RN "confirmada deve... converter a reserva em
+  // saida", nunca reavalia quantityAvailable de novo) — registra os
+  // pagamentos e calcula CMV/lucro.
+  async confirm(tenant: CurrentTenantContext, id: string, dto: ConfirmSaleDto) {
+    const sale = await this.findByStatus(tenant.companyId, id, [
+      'draft',
+      'reserved',
+    ]);
+    const wasReserved = sale.status === 'reserved';
 
     const paymentsTotal = dto.payments.reduce(
       (sum, payment) => sum.add(payment.amount),
@@ -241,9 +295,31 @@ export class SalesService {
       );
     }
     const futureAmount = new Prisma.Decimal(sale.total).sub(paymentsTotal);
-    if (futureAmount.greaterThan(0) && !dto.installmentPlan) throw new AppError('PAYMENT_AMOUNT_MISMATCH', 'A soma dos pagamentos deve cobrir o total ou o saldo precisa de uma agenda de parcelas.', HttpStatus.BAD_REQUEST, 'payments', { total: sale.total.toString(), paymentsTotal: paymentsTotal.toString() });
-    if (futureAmount.isZero() && dto.installmentPlan) throw new AppError('INSTALLMENT_PLAN_NOT_APPLICABLE', 'Não há saldo futuro para parcelar.', HttpStatus.BAD_REQUEST, 'installmentPlan');
-    if (futureAmount.greaterThan(0) && !sale.customerId) throw new AppError('CUSTOMER_REQUIRED_FOR_CREDIT', 'Selecione um cliente para registrar uma venda a prazo.', HttpStatus.BAD_REQUEST, 'customerId');
+    if (futureAmount.greaterThan(0) && !dto.installmentPlan)
+      throw new AppError(
+        'PAYMENT_AMOUNT_MISMATCH',
+        'A soma dos pagamentos deve cobrir o total ou o saldo precisa de uma agenda de parcelas.',
+        HttpStatus.BAD_REQUEST,
+        'payments',
+        {
+          total: sale.total.toString(),
+          paymentsTotal: paymentsTotal.toString(),
+        },
+      );
+    if (futureAmount.isZero() && dto.installmentPlan)
+      throw new AppError(
+        'INSTALLMENT_PLAN_NOT_APPLICABLE',
+        'Não há saldo futuro para parcelar.',
+        HttpStatus.BAD_REQUEST,
+        'installmentPlan',
+      );
+    if (futureAmount.greaterThan(0) && !sale.customerId)
+      throw new AppError(
+        'CUSTOMER_REQUIRED_FOR_CREDIT',
+        'Selecione um cliente para registrar uma venda a prazo.',
+        HttpStatus.BAD_REQUEST,
+        'customerId',
+      );
 
     const paymentMethods = await Promise.all(
       dto.payments.map((payment) =>
@@ -286,15 +362,25 @@ export class SalesService {
         });
         const unitCostAtSale = new Prisma.Decimal(lastPrice?.costPrice ?? 0);
 
-        await this.inventory.releaseStock(tx, {
-          companyId: tenant.companyId,
-          productVariantId: item.productVariantId,
-          quantity: item.quantity,
-          unitCost: unitCostAtSale,
-          originType: 'sale',
-          originId: saleId,
-          createdBy: tenant.userId,
-        });
+        if (wasReserved) {
+          await this.inventory.consumeReservation(tx, {
+            companyId: tenant.companyId,
+            productVariantId: item.productVariantId,
+            saleId,
+            unitCost: unitCostAtSale,
+            createdBy: tenant.userId,
+          });
+        } else {
+          await this.inventory.releaseStock(tx, {
+            companyId: tenant.companyId,
+            productVariantId: item.productVariantId,
+            quantity: item.quantity,
+            unitCost: unitCostAtSale,
+            originType: 'sale',
+            originId: saleId,
+            createdBy: tenant.userId,
+          });
+        }
 
         await tx.saleItem.update({
           where: { id: item.id },
@@ -344,8 +430,20 @@ export class SalesService {
         }
       }
 
-      if (futureAmount.greaterThan(0) && dto.installmentPlan && sale.customerId) {
-        await this.receivables.createForSale(tx, { companyId: tenant.companyId, userId: tenant.userId, saleId, customerId: sale.customerId, amount: futureAmount, count: dto.installmentPlan.count, firstDueDate: dto.installmentPlan.firstDueDate });
+      if (
+        futureAmount.greaterThan(0) &&
+        dto.installmentPlan &&
+        sale.customerId
+      ) {
+        await this.receivables.createForSale(tx, {
+          companyId: tenant.companyId,
+          userId: tenant.userId,
+          saleId,
+          customerId: sale.customerId,
+          amount: futureAmount,
+          count: dto.installmentPlan.count,
+          firstDueDate: dto.installmentPlan.firstDueDate,
+        });
       }
 
       const { cmv, grossProfit } = calculateCmvAndProfit(costItems, sale.total);
@@ -386,11 +484,19 @@ export class SalesService {
   async cancel(tenant: CurrentTenantContext, id: string) {
     const sale = await this.findByStatus(tenant.companyId, id, [
       'draft',
+      'reserved',
       'confirmed',
     ]);
 
-    if (sale.status === 'draft') {
+    if (sale.status === 'draft' || sale.status === 'reserved') {
       return this.prisma.$transaction(async (tx) => {
+        if (sale.status === 'reserved') {
+          await this.inventory.releaseReservation(tx, {
+            companyId: tenant.companyId,
+            saleId: sale.id,
+            createdBy: tenant.userId,
+          });
+        }
         const cancelled = await tx.sale.update({
           where: { id: sale.id },
           data: { status: 'cancelled' },
@@ -448,7 +554,17 @@ export class SalesService {
         }
       }
 
-      await this.reconcileFinancialReduction(tx, tenant, sale.id, sale.id, sale.receivables.reduce((sum, receivable) => sum.add(receivable.amountOriginal), new Prisma.Decimal(0)), 'Cancelamento da venda a prazo');
+      await this.reconcileFinancialReduction(
+        tx,
+        tenant,
+        sale.id,
+        sale.id,
+        sale.receivables.reduce(
+          (sum, receivable) => sum.add(receivable.amountOriginal),
+          new Prisma.Decimal(0),
+        ),
+        'Cancelamento da venda a prazo',
+      );
 
       const cancelled = await tx.sale.update({
         where: { id: sale.id },
@@ -597,35 +713,126 @@ export class SalesService {
         },
         include: INCLUDE_DETAILS,
       });
-      await this.reconcileFinancialReduction(tx, tenant, saleId, saleReturn.id, new Prisma.Decimal(sale.total).sub(total), 'Devolução de venda');
-      await this.audit.record(tx, { companyId: tenant.companyId, userId: tenant.userId, action: 'sale.returned', entityType: 'sale', entityId: saleId, beforeData: { status: sale.status, total: sale.total.toString() }, afterData: { status: returnedSale.status, total: returnedSale.total.toString(), returnId: saleReturn.id, items: dto.items }, reason: dto.reason });
+      await this.reconcileFinancialReduction(
+        tx,
+        tenant,
+        saleId,
+        saleReturn.id,
+        new Prisma.Decimal(sale.total).sub(total),
+        'Devolução de venda',
+      );
+      await this.audit.record(tx, {
+        companyId: tenant.companyId,
+        userId: tenant.userId,
+        action: 'sale.returned',
+        entityType: 'sale',
+        entityId: saleId,
+        beforeData: { status: sale.status, total: sale.total.toString() },
+        afterData: {
+          status: returnedSale.status,
+          total: returnedSale.total.toString(),
+          returnId: saleReturn.id,
+          items: dto.items,
+        },
+        reason: dto.reason,
+      });
       return returnedSale;
     });
 
     return updatedSale;
   }
 
-  private async reconcileFinancialReduction(tx: Prisma.TransactionClient, tenant: CurrentTenantContext, saleId: string, originId: string, reductionValue: Prisma.Decimal, description: string) {
+  private async reconcileFinancialReduction(
+    tx: Prisma.TransactionClient,
+    tenant: CurrentTenantContext,
+    saleId: string,
+    originId: string,
+    reductionValue: Prisma.Decimal,
+    description: string,
+  ) {
     let reduction = new Prisma.Decimal(reductionValue);
     if (reduction.lessThanOrEqualTo(0)) return;
-    const receivables = await tx.receivable.findMany({ where: { companyId: tenant.companyId, saleId, status: { not: 'cancelled' } }, orderBy: [{ installmentNumber: 'desc' }, { dueDate: 'desc' }] });
+    const receivables = await tx.receivable.findMany({
+      where: {
+        companyId: tenant.companyId,
+        saleId,
+        status: { not: 'cancelled' },
+      },
+      orderBy: [{ installmentNumber: 'desc' }, { dueDate: 'desc' }],
+    });
     for (const receivable of receivables) {
       if (reduction.lessThanOrEqualTo(0)) break;
-      const open = new Prisma.Decimal(receivable.amountOriginal).sub(receivable.amountReceived);
+      const open = new Prisma.Decimal(receivable.amountOriginal).sub(
+        receivable.amountReceived,
+      );
       const applied = Prisma.Decimal.min(open, reduction);
       if (applied.lessThanOrEqualTo(0)) continue;
-      const amountOriginal = new Prisma.Decimal(receivable.amountOriginal).sub(applied);
+      const amountOriginal = new Prisma.Decimal(receivable.amountOriginal).sub(
+        applied,
+      );
       const amountReceived = new Prisma.Decimal(receivable.amountReceived);
-      const status = amountOriginal.isZero() ? 'cancelled' : amountReceived.greaterThanOrEqualTo(amountOriginal) ? 'received' : amountReceived.greaterThan(0) ? 'partially_received' : 'pending';
-      await tx.receivable.update({ where: { id: receivable.id }, data: { amountOriginal, status, cancelReason: status === 'cancelled' ? description : undefined } });
+      const status = amountOriginal.isZero()
+        ? 'cancelled'
+        : amountReceived.greaterThanOrEqualTo(amountOriginal)
+          ? 'received'
+          : amountReceived.greaterThan(0)
+            ? 'partially_received'
+            : 'pending';
+      await tx.receivable.update({
+        where: { id: receivable.id },
+        data: {
+          amountOriginal,
+          status,
+          cancelReason: status === 'cancelled' ? description : undefined,
+        },
+      });
       reduction = reduction.sub(applied);
     }
     if (reduction.lessThanOrEqualTo(0)) return;
-    const incoming = await tx.financialTransaction.findFirst({ where: { companyId: tenant.companyId, type: 'in', OR: [{ originType: 'sale_payment', originId: { in: (await tx.salePayment.findMany({ where: { saleId }, select: { id: true } })).map(item => item.id) } }, { originType: 'receivable_payment', originId: { in: (await tx.receivablePayment.findMany({ where: { receivable: { saleId } }, select: { id: true } })).map(item => item.id) } }] }, orderBy: { occurredAt: 'desc' } });
+    const incoming = await tx.financialTransaction.findFirst({
+      where: {
+        companyId: tenant.companyId,
+        type: 'in',
+        OR: [
+          {
+            originType: 'sale_payment',
+            originId: {
+              in: (
+                await tx.salePayment.findMany({
+                  where: { saleId },
+                  select: { id: true },
+                })
+              ).map((item) => item.id),
+            },
+          },
+          {
+            originType: 'receivable_payment',
+            originId: {
+              in: (
+                await tx.receivablePayment.findMany({
+                  where: { receivable: { saleId } },
+                  select: { id: true },
+                })
+              ).map((item) => item.id),
+            },
+          },
+        ],
+      },
+      orderBy: { occurredAt: 'desc' },
+    });
     // Formas legadas podem não ter conta financeira vinculada; nesse caso a
     // confirmação também não criou caixa, portanto não há lançamento a estornar.
     if (!incoming) return;
-    await this.cashFlow.recordTransaction(tx, { companyId: tenant.companyId, financialAccountId: incoming.financialAccountId, type: 'out', amount: reduction.negated(), originType: 'sale_return', originId, description, createdBy: tenant.userId });
+    await this.cashFlow.recordTransaction(tx, {
+      companyId: tenant.companyId,
+      financialAccountId: incoming.financialAccountId,
+      type: 'out',
+      amount: reduction.negated(),
+      originType: 'sale_return',
+      originId,
+      description,
+      createdBy: tenant.userId,
+    });
   }
 
   private async findByStatus(

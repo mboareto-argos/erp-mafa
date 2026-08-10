@@ -599,6 +599,8 @@ enum StockMovementType {
   out
   adjustment
   return
+  reservation
+  release
 }
 
 // origin_type: 'purchase' | 'adjustment' | 'return' (futuro: 'sale')
@@ -666,10 +668,11 @@ enum StockReservationStatus {
   consumed
 }
 
-// Modelo completo desde ja (TA-DATA-004), mas SEM service/endpoint nesta
-// fase — quem cria uma reserva e' o Sales (Fase 3), que ainda nao existe.
-// saleId fica sem FK por enquanto (referencia futura), como origin_id em
-// StockMovement.
+// Uma venda "reserved" reserva estoque sem baixar disponível (RN "estoque
+// reservado nao pode ser considerado disponivel"); confirmar converte a
+// reserva em saida (consumeReservation), cancelar libera (releaseReservation).
+// saleId agora tem FK real — o comentario antigo dizia "referencia futura"
+// porque Sales nao existia quando este modelo foi criado.
 model StockReservation {
   id               String                 @id @default(uuid()) @db.Uuid
   companyId        String                 @map("company_id") @db.Uuid
@@ -683,10 +686,12 @@ model StockReservation {
   deletedAt        DateTime?              @map("deleted_at")
 
   company        Company        @relation(fields: [companyId], references: [id])
+  sale           Sale           @relation(fields: [saleId], references: [id])
   productVariant ProductVariant @relation(fields: [productVariantId], references: [id])
   createdByUser  User?          @relation("StockReservationCreatedBy", fields: [createdBy], references: [id])
 
   @@index([companyId, productVariantId])
+  @@index([companyId, saleId])
   @@map("stock_reservations")
 }
 
@@ -992,6 +997,7 @@ enum SalesChannel {
 
 enum SaleStatus {
   draft
+  reserved
   confirmed
   cancelled
   partially_returned
@@ -1017,10 +1023,11 @@ model Sale {
   company       Company       @relation(fields: [companyId], references: [id])
   customer      Customer?     @relation(fields: [customerId], references: [id])
   createdByUser User?         @relation("SaleCreatedBy", fields: [createdBy], references: [id])
-  items         SaleItem[]
-  payments      SalePayment[]
-  returns       SaleReturn[]
-  receivables   Receivable[]
+  items             SaleItem[]
+  payments          SalePayment[]
+  returns           SaleReturn[]
+  receivables       Receivable[]
+  stockReservations StockReservation[]
 
   @@index([companyId, status])
   @@map("sales")

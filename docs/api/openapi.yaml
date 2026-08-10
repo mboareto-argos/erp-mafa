@@ -1301,14 +1301,50 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /sales/{id}/reserve:
+    post:
+      tags: [sales]
+      summary: >
+        Reserva a venda inteira (só a partir de draft, exige customerId) —
+        InventoryService.reserveStock() desloca a quantidade de cada item de
+        quantityAvailable pra quantityReserved na mesma transação
+        (TA-ARCH-003), sem baixar o físico. Cria um StockReservation `active`
+        por item. Não permite reserva parcial de itens.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      responses:
+        "201":
+          description: Reservada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Sale" }
+        "400":
+          description: >
+            Sem cliente definido (CUSTOMER_REQUIRED_FOR_RESERVATION) ou
+            estoque disponível insuficiente (STOCK_INSUFFICIENT)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: Venda não está em rascunho
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
   /sales/{id}/confirm:
     post:
       tags: [sales]
       summary: >
         Confirma a venda: congela o custo por item, baixa estoque via
-        InventoryService.releaseStock() na mesma transação (TA-ARCH-003),
-        registra pagamentos imediatos e/ou agenda o saldo futuro em parcelas,
-        e calcula CMV/lucro bruto.
+        InventoryService.releaseStock() na mesma transação (TA-ARCH-003) —
+        ou, se a venda já estava reserved, converte a reserva existente em
+        saída via consumeReservation() em vez de decrementar disponível de
+        novo —, registra pagamentos imediatos e/ou agenda o saldo futuro em
+        parcelas, e calcula CMV/lucro bruto.
       security: [{ bearerAuth: [] }]
       parameters:
         - name: id
@@ -1350,7 +1386,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
         "409":
-          description: Venda não está em rascunho
+          description: Venda não está em rascunho nem reservada
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -1358,10 +1394,11 @@ paths:
     post:
       tags: [sales]
       summary: >
-        Cancela a venda — permitido em draft (sem efeito) e confirmed
-        (restaura o estoque ainda não devolvido e registra saída de estorno
-        para cada entrada financeira original). Bloqueado se já
-        returned/partially_returned/cancelled.
+        Cancela a venda — permitido em draft (sem efeito), reserved (libera
+        a reserva via releaseReservation(), devolvendo a quantidade pra
+        quantityAvailable) e confirmed (restaura o estoque ainda não
+        devolvido e registra saída de estorno para cada entrada financeira
+        original). Bloqueado se já returned/partially_returned/cancelled.
       security: [{ bearerAuth: [] }]
       parameters:
         - name: id
@@ -1922,7 +1959,7 @@ paths:
           schema: { type: string, enum: [presencial, whatsapp, instagram, catalogo, outro] }
         - name: status
           in: query
-          schema: { type: string, enum: [draft, confirmed, cancelled, partially_returned, returned] }
+          schema: { type: string, enum: [draft, reserved, confirmed, cancelled, partially_returned, returned] }
       responses:
         "200":
           description: OK
@@ -2340,16 +2377,16 @@ components:
         id: { type: string, format: uuid }
         companyId: { type: string, format: uuid }
         productVariantId: { type: string, format: uuid }
-        quantityAvailable: { type: string }
-        quantityReserved: { type: string }
-        quantityInTransit: { type: string }
+        quantityAvailable: { type: string, description: Disponível pra nova venda; já descontado o que está reservado. }
+        quantityReserved: { type: string, description: Reservado pra uma venda específica (StockReservation ativa) — deslocado de quantityAvailable, não soma no físico. }
+        quantityInTransit: { type: string, description: Pedido a fornecedor (compra em status ordered) ainda não recebido; puramente informativo, não compõe quantityAvailable (RN-STK-018). }
     StockMovement:
       type: object
       properties:
         id: { type: string, format: uuid }
         companyId: { type: string, format: uuid }
         productVariantId: { type: string, format: uuid }
-        type: { type: string, enum: [in, out, adjustment, return] }
+        type: { type: string, enum: [in, out, adjustment, return, reservation, release], description: reservation/release não alteram o físico (in/out/adjustment/return), só documentam o deslocamento entre quantityAvailable e quantityReserved. }
         quantity: { type: string }
         unitCost: { type: string, nullable: true }
         originType: { type: string, enum: [purchase, adjustment, return, sale] }
@@ -2509,7 +2546,7 @@ components:
         companyId: { type: string, format: uuid }
         customerId: { type: string, format: uuid, nullable: true }
         channel: { type: string, enum: [presencial, whatsapp, instagram, catalogo, outro] }
-        status: { type: string, enum: [draft, confirmed, cancelled, partially_returned, returned] }
+        status: { type: string, enum: [draft, reserved, confirmed, cancelled, partially_returned, returned] }
         subtotal: { type: string }
         discount: { type: string }
         total: { type: string }

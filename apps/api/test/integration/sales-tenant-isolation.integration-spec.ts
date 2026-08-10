@@ -71,6 +71,11 @@ describe('Isolamento multiempresa — Sales', () => {
       .post(`/api/v1/sales/${sale.body.id}/cancel`)
       .set(auth(companyB.accessToken))
       .expect(404);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/sales/${sale.body.id}/reserve`)
+      .set(auth(companyB.accessToken))
+      .expect(404);
   });
 
   it('empresa B não consegue vender uma variante da empresa A nem usar o cliente/forma de pagamento de A', async () => {

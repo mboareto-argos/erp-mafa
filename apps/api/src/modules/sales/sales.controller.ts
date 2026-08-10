@@ -62,6 +62,21 @@ export class SalesController {
     return this.sales.get(tenant.companyId, id);
   }
 
+  @Post(':id/reserve')
+  @RequirePermission('manage_sales')
+  reserve(
+    @CurrentTenant() tenant: CurrentTenantContext,
+    @Param('id') id: string,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.idempotency.execute(
+      tenant.companyId,
+      `sales.reserve:${id}`,
+      idempotencyKey,
+      () => this.sales.reserve(tenant, id),
+    );
+  }
+
   @Post(':id/confirm')
   @RequirePermission('manage_sales')
   confirm(
@@ -101,6 +116,11 @@ export class SalesController {
     @Body(new ZodValidationPipe(returnSaleSchema)) dto: ReturnSaleDto,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
-    return this.idempotency.execute(tenant.companyId, `sales.return:${id}`, idempotencyKey, () => this.sales.returnItems(tenant, id, dto));
+    return this.idempotency.execute(
+      tenant.companyId,
+      `sales.return:${id}`,
+      idempotencyKey,
+      () => this.sales.returnItems(tenant, id, dto),
+    );
   }
 }

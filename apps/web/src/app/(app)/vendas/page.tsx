@@ -10,7 +10,7 @@ type Customer = { id: string; name: string; status: string };
 
 const money = (value: string | number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value));
 const dateTime = (value: string) => new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
-const saleStatus: Record<string, string> = { draft: "Rascunho", confirmed: "Confirmada", cancelled: "Cancelada", partially_returned: "Devolvida parcialmente", returned: "Devolvida" };
+const saleStatus: Record<string, string> = { draft: "Rascunho", reserved: "Reservada", confirmed: "Confirmada", cancelled: "Cancelada", partially_returned: "Devolvida parcialmente", returned: "Devolvida" };
 
 export default async function SalesPage({ searchParams }: { searchParams: Promise<{ new?: string; edit?: string }> }) {
   const [sales, products, methods, customers, session] = await Promise.all([
