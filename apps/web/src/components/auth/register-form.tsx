@@ -1,9 +1,87 @@
-"use client";
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+'use client';
+import { FormEvent, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 export function RegisterForm() {
-  const router = useRouter(); const [pending, setPending] = useState(false); const [error, setError] = useState<string>();
-  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setPending(true); setError(undefined); const form = new FormData(event.currentTarget); try { const response = await fetch("/api/session/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: form.get("name"), companyName: form.get("companyName"), email: form.get("email"), password: form.get("password") }) }); const result = await response.json() as { message?: string }; if (!response.ok) throw new Error(result.message ?? "Não foi possível criar sua conta."); router.replace("/inicio"); router.refresh(); } catch (caught) { setError(caught instanceof Error ? caught.message : "Não foi possível criar sua conta."); } finally { setPending(false); } }
-  return <form onSubmit={submit} noValidate><div className="field"><label htmlFor="name">Seu nome</label><input id="name" name="name" autoComplete="name" required /></div><div className="field"><label htmlFor="companyName">Nome da empresa</label><input id="companyName" name="companyName" autoComplete="organization" required /></div><div className="field"><label htmlFor="email">E-mail</label><input id="email" name="email" type="email" autoComplete="email" required /></div><div className="field"><label htmlFor="password">Senha</label><input id="password" name="password" type="password" autoComplete="new-password" minLength={8} required /><small>Use pelo menos 8 caracteres.</small></div>{error && <p className="form-error" role="alert">{error}</p>}<button className="button button-primary" disabled={pending}>{pending ? "Criando sua conta…" : "Criar conta"}</button></form>;
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string>();
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending(true);
+    setError(undefined);
+    const form = new FormData(event.currentTarget);
+    try {
+      const response = await fetch('/api/session/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: form.get('name'),
+          companyName: form.get('companyName'),
+          email: form.get('email'),
+          password: form.get('password'),
+        }),
+      });
+      const result = (await response.json()) as { message?: string };
+      if (!response.ok)
+        throw new Error(result.message ?? 'Não foi possível criar sua conta.');
+      router.replace('/inicio');
+      router.refresh();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : 'Não foi possível criar sua conta.',
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+  return (
+    <form onSubmit={submit} noValidate>
+      <div className="field">
+        <label htmlFor="name">Seu nome</label>
+        <input id="name" name="name" autoComplete="name" required />
+      </div>
+      <div className="field">
+        <label htmlFor="companyName">Nome da empresa</label>
+        <input
+          id="companyName"
+          name="companyName"
+          autoComplete="organization"
+          required
+        />
+      </div>
+      <div className="field">
+        <label htmlFor="email">E-mail</label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          required
+        />
+      </div>
+      <div className="field">
+        <label htmlFor="password">Senha</label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="new-password"
+          minLength={8}
+          required
+        />
+        <small>Use pelo menos 8 caracteres.</small>
+      </div>
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+      <button className="button button-primary" disabled={pending}>
+        {pending ? 'Criando sua conta…' : 'Criar conta'}
+      </button>
+    </form>
+  );
 }

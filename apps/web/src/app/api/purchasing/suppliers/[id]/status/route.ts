@@ -1,16 +1,31 @@
-import { NextResponse } from "next/server";
-import { ApiRequestError, backendAuthenticatedRequest } from "@/lib/session";
+import { NextResponse } from 'next/server';
+import { ApiRequestError, backendAuthenticatedRequest } from '@/lib/session';
 
-export async function PATCH(request: Request, context: RouteContext<"/api/purchasing/suppliers/[id]/status">) {
+export async function PATCH(
+  request: Request,
+  context: RouteContext<'/api/purchasing/suppliers/[id]/status'>,
+) {
   const { id } = await context.params;
   try {
-    const { action } = (await request.json()) as { action: "activate" | "deactivate" };
-    const step = action === "activate" ? "reactivate" : "deactivate";
+    const { action } = (await request.json()) as {
+      action: 'activate' | 'deactivate';
+    };
+    const step = action === 'activate' ? 'reactivate' : 'deactivate';
     return NextResponse.json(
-      await backendAuthenticatedRequest(`/purchasing/suppliers/${id}/${step}`, { method: "PATCH" }),
+      await backendAuthenticatedRequest(`/purchasing/suppliers/${id}/${step}`, {
+        method: 'PATCH',
+      }),
     );
   } catch (error) {
     const status = error instanceof ApiRequestError ? error.status : 502;
-    return NextResponse.json({ message: error instanceof Error ? error.message : "Não foi possível atualizar o status do fornecedor." }, { status });
+    return NextResponse.json(
+      {
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Não foi possível atualizar o status do fornecedor.',
+      },
+      { status },
+    );
   }
 }

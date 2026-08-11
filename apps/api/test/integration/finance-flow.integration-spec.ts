@@ -122,10 +122,30 @@ describe('Financeiro — fluxo completo (integração)', () => {
 
   it('despesa parcelada gera várias contas a pagar vinculadas à mesma origem', async () => {
     const session = await registerCompany(app);
-    const expense = await request(app.getHttpServer()).post('/api/v1/expenses').set(auth(session.accessToken)).send({ description: 'Equipamento', category: 'manutencao', amount: 100, competenceDate: '2026-08-04', paidNow: false, dueDate: '2026-09-30', installmentCount: 3 }).expect(201);
+    const expense = await request(app.getHttpServer())
+      .post('/api/v1/expenses')
+      .set(auth(session.accessToken))
+      .send({
+        description: 'Equipamento',
+        category: 'manutencao',
+        amount: 100,
+        competenceDate: '2026-08-04',
+        paidNow: false,
+        dueDate: '2026-09-30',
+        installmentCount: 3,
+      })
+      .expect(201);
     expect(expense.body.payables).toHaveLength(3);
-    expect(expense.body.payables.map((item: { amountOriginal: string }) => item.amountOriginal)).toEqual(['33.33', '33.33', '33.34']);
-    expect(expense.body.payables.map((item: { dueDate: string }) => item.dueDate.slice(0, 10))).toEqual(['2026-09-30', '2026-10-30', '2026-11-30']);
+    expect(
+      expense.body.payables.map(
+        (item: { amountOriginal: string }) => item.amountOriginal,
+      ),
+    ).toEqual(['33.33', '33.33', '33.34']);
+    expect(
+      expense.body.payables.map((item: { dueDate: string }) =>
+        item.dueDate.slice(0, 10),
+      ),
+    ).toEqual(['2026-09-30', '2026-10-30', '2026-11-30']);
   });
 
   it('receivable pago parcialmente não pode receber além do saldo em aberto', async () => {

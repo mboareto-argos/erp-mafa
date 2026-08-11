@@ -1,12 +1,12 @@
-import "server-only";
+import 'server-only';
 
-import { cookies } from "next/headers";
+import { cookies } from 'next/headers';
 
-export const ACCESS_TOKEN_COOKIE = "erp_mafa_access";
-export const REFRESH_TOKEN_COOKIE = "erp_mafa_refresh";
-export const PREAUTH_TOKEN_COOKIE = "erp_mafa_preauth";
+export const ACCESS_TOKEN_COOKIE = 'erp_mafa_access';
+export const REFRESH_TOKEN_COOKIE = 'erp_mafa_refresh';
+export const PREAUTH_TOKEN_COOKIE = 'erp_mafa_preauth';
 
-const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001/api/v1";
+const apiBaseUrl = process.env.API_BASE_URL ?? 'http://localhost:3001/api/v1';
 
 export type SessionTokens = { accessToken: string; refreshToken: string };
 
@@ -16,7 +16,10 @@ export type ApiErrorPayload = {
 };
 
 export class ApiRequestError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
     super(message);
   }
 }
@@ -24,15 +27,19 @@ export class ApiRequestError extends Error {
 export async function backendRequest(path: string, init?: RequestInit) {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
-    cache: "no-store",
+    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    cache: 'no-store',
   });
 
   if (!response.ok) {
-    const payload = (await response.json().catch(() => ({}))) as ApiErrorPayload;
+    const payload = (await response
+      .json()
+      .catch(() => ({}))) as ApiErrorPayload;
     throw new ApiRequestError(
       response.status,
-      payload.error?.message ?? payload.message ?? "Não foi possível concluir esta ação.",
+      payload.error?.message ??
+        payload.message ??
+        'Não foi possível concluir esta ação.',
     );
   }
 
@@ -43,9 +50,9 @@ export async function backendRequest(path: string, init?: RequestInit) {
 export function sessionCookieOptions(maxAge: number) {
   return {
     httpOnly: true,
-    sameSite: "lax" as const,
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
+    sameSite: 'lax' as const,
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
     maxAge,
   };
 }
@@ -59,7 +66,7 @@ export async function getSession() {
   if (!accessToken) return null;
 
   try {
-    return await backendRequest("/auth/me", {
+    return await backendRequest('/auth/me', {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
   } catch (error) {
@@ -68,8 +75,15 @@ export async function getSession() {
   }
 }
 
-export async function backendAuthenticatedRequest(path: string, init?: RequestInit) {
+export async function backendAuthenticatedRequest(
+  path: string,
+  init?: RequestInit,
+) {
   const accessToken = await readAccessToken();
-  if (!accessToken) throw new ApiRequestError(401, "Sessão expirada. Faça login novamente.");
-  return backendRequest(path, { ...init, headers: { ...init?.headers, Authorization: `Bearer ${accessToken}` } });
+  if (!accessToken)
+    throw new ApiRequestError(401, 'Sessão expirada. Faça login novamente.');
+  return backendRequest(path, {
+    ...init,
+    headers: { ...init?.headers, Authorization: `Bearer ${accessToken}` },
+  });
 }

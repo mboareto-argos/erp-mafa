@@ -19,10 +19,12 @@ export const receivePurchaseSchema = z.object({
     .array(receivePurchaseItemSchema)
     .min(1, 'Informe ao menos um item recebido.'),
   additionalCosts: z.array(additionalCostSchema).default([]),
-  installmentPlan: z.object({
-    count: z.number().int().min(1).max(60),
-    firstDueDate: z.string().date('Informe a primeira data de vencimento.'),
-  }).optional(),
+  installmentPlan: z
+    .object({
+      count: z.number().int().min(1).max(60),
+      firstDueDate: z.string().date('Informe a primeira data de vencimento.'),
+    })
+    .optional(),
 });
 
 export type ReceivePurchaseDto = z.infer<typeof receivePurchaseSchema>;

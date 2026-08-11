@@ -1,11 +1,11 @@
-import type { Config } from "tailwindcss";
-import tokens from "@erp-mafa/design-tokens/tokens.json";
+import type { Config } from 'tailwindcss';
+import tokens from '@erp-mafa/design-tokens/tokens.json';
 
 // Tema do Tailwind derivado diretamente de packages/design-tokens/tokens.json —
 // nenhum valor de cor/espaçamento/tipografia é redigitado aqui (ver
 // packages/design-tokens/README.md e docs/product/design-system.md, secao 4).
 const config: Config = {
-  content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
+  content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
   theme: {
     extend: {
       colors: {
@@ -16,13 +16,13 @@ const config: Config = {
         info: tokens.color.info,
         brand: {
           accent: tokens.color.brand.accent,
-          "accent-hover": tokens.color.brand.accentHover,
-          "accent-subtle": tokens.color.brand.accentSubtle,
+          'accent-hover': tokens.color.brand.accentHover,
+          'accent-subtle': tokens.color.brand.accentSubtle,
         },
       },
       fontFamily: {
-        sans: tokens.font.family.sans.split(", "),
-        mono: tokens.font.family.mono.split(", "),
+        sans: tokens.font.family.sans.split(', '),
+        mono: tokens.font.family.mono.split(', '),
       },
       fontSize: tokens.font.size,
       spacing: tokens.space,

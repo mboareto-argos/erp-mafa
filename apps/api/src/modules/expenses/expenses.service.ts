@@ -10,7 +10,10 @@ import { buildInstallmentSchedule } from '../../common/finance/installment-sched
 const INCLUDE_DETAILS = {
   financialAccount: true,
   payable: { include: { payments: true } },
-  payables: { include: { payments: true }, orderBy: { installmentNumber: 'asc' as const } },
+  payables: {
+    include: { payments: true },
+    orderBy: { installmentNumber: 'asc' as const },
+  },
 } satisfies Prisma.ExpenseInclude;
 
 @Injectable()
@@ -82,13 +85,32 @@ export class ExpensesService {
           createdBy: tenant.userId,
         },
       });
-      const schedule = buildInstallmentSchedule(dto.amount, dto.installmentCount, dto.dueDate!);
+      const schedule = buildInstallmentSchedule(
+        dto.amount,
+        dto.installmentCount,
+        dto.dueDate!,
+      );
       let firstPayableId: string | undefined;
       for (const installment of schedule) {
-        const payable = await tx.payable.create({ data: { companyId: tenant.companyId, expenseId: expense.id, description: `${dto.description} · parcela ${installment.number}/${dto.installmentCount}`, amountOriginal: installment.amount, dueDate: installment.dueDate, installmentNumber: installment.number, installmentCount: dto.installmentCount, createdBy: tenant.userId } });
+        const payable = await tx.payable.create({
+          data: {
+            companyId: tenant.companyId,
+            expenseId: expense.id,
+            description: `${dto.description} · parcela ${installment.number}/${dto.installmentCount}`,
+            amountOriginal: installment.amount,
+            dueDate: installment.dueDate,
+            installmentNumber: installment.number,
+            installmentCount: dto.installmentCount,
+            createdBy: tenant.userId,
+          },
+        });
         firstPayableId ??= payable.id;
       }
-      return tx.expense.update({ where: { id: expense.id }, data: { payableId: firstPayableId }, include: INCLUDE_DETAILS });
+      return tx.expense.update({
+        where: { id: expense.id },
+        data: { payableId: firstPayableId },
+        include: INCLUDE_DETAILS,
+      });
     });
   }
 
@@ -133,7 +155,11 @@ export class ExpensesService {
     return this.prisma.$transaction(async (tx) => {
       if (expense.payables.length) {
         await tx.payable.updateMany({
-          where: { companyId: tenant.companyId, expenseId: expense.id, status: 'pending' },
+          where: {
+            companyId: tenant.companyId,
+            expenseId: expense.id,
+            status: 'pending',
+          },
           data: {
             status: 'cancelled',
             cancelReason: 'Despesa vinculada cancelada',

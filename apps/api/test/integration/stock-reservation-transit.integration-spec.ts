@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument -- respostas HTTP de supertest/Nest não são tipadas neste nível de teste de integração */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return -- respostas HTTP de supertest/Nest não são tipadas neste nível de teste de integração */
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { createTestApp } from './utils/test-app';
@@ -42,7 +42,13 @@ describe('Estoque reservado + em trânsito (integração)', () => {
     const paymentMethod = await createPaymentMethod(app, session.accessToken, {
       financialAccountId: account.body.id,
     });
-    return { session, variantId, customer, paymentMethod, account: account.body };
+    return {
+      session,
+      variantId,
+      customer,
+      paymentMethod,
+      account: account.body,
+    };
   }
 
   async function getBalance(session: { accessToken: string }) {
@@ -112,7 +118,9 @@ describe('Estoque reservado + em trânsito (integração)', () => {
         .post(`/api/v1/sales/${sale.body.id}/reserve`)
         .set(auth(session.accessToken))
         .expect(400);
-      expect(response.body.error.code).toBe('CUSTOMER_REQUIRED_FOR_RESERVATION');
+      expect(response.body.error.code).toBe(
+        'CUSTOMER_REQUIRED_FOR_RESERVATION',
+      );
     });
 
     it('não reserva quantidade acima do disponível', async () => {
@@ -124,7 +132,9 @@ describe('Estoque reservado + em trânsito (integração)', () => {
         .send({
           channel: 'presencial',
           customerId: customer.id,
-          items: [{ productVariantId: variantId, quantity: 999, unitPrice: 100 }],
+          items: [
+            { productVariantId: variantId, quantity: 999, unitPrice: 100 },
+          ],
         })
         .expect(201);
 
@@ -159,7 +169,9 @@ describe('Estoque reservado + em trânsito (integração)', () => {
       const confirmed = await request(app.getHttpServer())
         .post(`/api/v1/sales/${sale.body.id}/confirm`)
         .set(auth(session.accessToken))
-        .send({ payments: [{ paymentMethodId: paymentMethod.id, amount: 300 }] })
+        .send({
+          payments: [{ paymentMethodId: paymentMethod.id, amount: 300 }],
+        })
         .expect(201);
       expect(confirmed.body.status).toBe('confirmed');
       expect(confirmed.body.items[0].unitCostAtSale).toBe('50');
@@ -221,7 +233,11 @@ describe('Estoque reservado + em trânsito (integração)', () => {
         .set(auth(session.accessToken))
         .send({
           items: [
-            { productVariantId: variantId, quantity: 5, unitCostOriginCurrency: 50 },
+            {
+              productVariantId: variantId,
+              quantity: 5,
+              unitCostOriginCurrency: 50,
+            },
           ],
         })
         .expect(201);
@@ -249,7 +265,11 @@ describe('Estoque reservado + em trânsito (integração)', () => {
         .set(auth(session.accessToken))
         .send({
           items: [
-            { productVariantId: variantId, quantity: 5, unitCostOriginCurrency: 50 },
+            {
+              productVariantId: variantId,
+              quantity: 5,
+              unitCostOriginCurrency: 50,
+            },
           ],
         })
         .expect(201);
@@ -281,7 +301,11 @@ describe('Estoque reservado + em trânsito (integração)', () => {
         .set(auth(session.accessToken))
         .send({
           items: [
-            { productVariantId: variantId, quantity: 10, unitCostOriginCurrency: 50 },
+            {
+              productVariantId: variantId,
+              quantity: 10,
+              unitCostOriginCurrency: 50,
+            },
           ],
         })
         .expect(201);
@@ -313,7 +337,11 @@ describe('Estoque reservado + em trânsito (integração)', () => {
         .set(auth(session.accessToken))
         .send({
           items: [
-            { productVariantId: variantId, quantity: 5, unitCostOriginCurrency: 50 },
+            {
+              productVariantId: variantId,
+              quantity: 5,
+              unitCostOriginCurrency: 50,
+            },
           ],
         })
         .expect(201);

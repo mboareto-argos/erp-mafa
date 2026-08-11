@@ -1,15 +1,180 @@
-"use client";
+'use client';
 
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
-import { AppIcon } from "@/components/layout/app-icon";
-import { CurrencyInput } from "@/components/ui/currency-input";
+import { FormEvent, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { AppIcon } from '@/components/layout/app-icon';
+import { CurrencyInput } from '@/components/ui/currency-input';
 
-export function OpenItemForm({ kind, initialOpen = false }: { kind: "receivables" | "payables"; initialOpen?: boolean }) {
-  const router = useRouter(); const [open, setOpen] = useState(initialOpen); const [pending, setPending] = useState(false); const [error, setError] = useState<string>();
-  const receivable = kind === "receivables"; const label = receivable ? "conta a receber" : "conta a pagar"; const today = new Date().toISOString().slice(0, 10);
-  function close() { setOpen(false); router.replace(`/financeiro?tab=${kind}`, { scroll: false }); }
-  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const values = new FormData(event.currentTarget); setPending(true); setError(undefined); try { const response = await fetch(`/api/finance/${kind}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ description: values.get("description"), amountOriginal: Number(values.get("amount")), dueDate: values.get("dueDate") }) }); const body = await response.json().catch(() => ({})) as { message?: string }; if (!response.ok) throw new Error(body.message ?? `Não foi possível criar a ${label}.`); close(); router.refresh(); } catch (cause) { setError(cause instanceof Error ? cause.message : `Não foi possível criar a ${label}.`); } finally { setPending(false); } }
-  if (!open) return <button className="button button-primary compact-button" type="button" onClick={() => setOpen(true)}>Nova {label}</button>;
-  return <section className="wizard-card finance-entry-workspace"><div className="wizard-heading"><div><button className="wizard-back-link" type="button" onClick={close}>← Voltar para {receivable ? "contas a receber" : "contas a pagar"}</button><h2>Nova {label}</h2><p>{receivable ? "Registre um valor que a empresa espera receber." : "Registre um compromisso financeiro futuro."}</p></div><button className="close-button" type="button" onClick={close} aria-label="Fechar">×</button></div><form onSubmit={submit}><div className="finance-entry-layout"><main className="wizard-main"><div className="wizard-stage-heading"><span>1</span><div><h3>Dados do lançamento</h3><p>O valor ficará no previsto até que uma baixa seja registrada.</p></div></div><section className="wizard-form-section"><div className="form-grid"><div className="field"><label htmlFor={`open-description-${kind}`}>Descrição</label><input id={`open-description-${kind}`} name="description" required maxLength={500} placeholder={receivable ? "Ex.: parcela a receber do cliente" : "Ex.: serviço contratado para o mês"} /></div><CurrencyInput label="Valor original" name="amount" required min={0.01} /><div className="field"><label htmlFor={`open-due-${kind}`}>Vencimento</label><input id={`open-due-${kind}`} name="dueDate" type="date" min={today} required /></div></div></section>{error && <p className="form-error" role="alert">{error}</p>}</main><aside className="wizard-side-summary"><div className="wizard-summary-heading"><span>Resultado esperado</span><h3>{receivable ? "Entrada prevista" : "Saída prevista"}</h3></div><div className="sale-detail-state draft"><AppIcon name="finance" /><p>Nenhuma movimentação realizada será criada agora. O caixa só muda quando o {receivable ? "recebimento" : "pagamento"} for confirmado.</p></div><p>Depois de salvar, você poderá registrar baixas parciais, juros e descontos pelo menu de ações.</p></aside></div><div className="wizard-actions"><button className="button button-secondary" type="button" onClick={close}>Cancelar</button><button className="button button-primary compact-button" disabled={pending}>{pending ? "Salvando…" : `Salvar ${label}`}</button></div></form></section>;
+export function OpenItemForm({
+  kind,
+  initialOpen = false,
+}: {
+  kind: 'receivables' | 'payables';
+  initialOpen?: boolean;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(initialOpen);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string>();
+  const receivable = kind === 'receivables';
+  const label = receivable ? 'conta a receber' : 'conta a pagar';
+  const today = new Date().toISOString().slice(0, 10);
+  function close() {
+    setOpen(false);
+    router.replace(`/financeiro?tab=${kind}`, { scroll: false });
+  }
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const values = new FormData(event.currentTarget);
+    setPending(true);
+    setError(undefined);
+    try {
+      const response = await fetch(`/api/finance/${kind}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description: values.get('description'),
+          amountOriginal: Number(values.get('amount')),
+          dueDate: values.get('dueDate'),
+        }),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        message?: string;
+      };
+      if (!response.ok)
+        throw new Error(body.message ?? `Não foi possível criar a ${label}.`);
+      close();
+      router.refresh();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : `Não foi possível criar a ${label}.`,
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+  if (!open)
+    return (
+      <button
+        className="button button-primary compact-button"
+        type="button"
+        onClick={() => setOpen(true)}
+      >
+        Nova {label}
+      </button>
+    );
+  return (
+    <section className="wizard-card finance-entry-workspace">
+      <div className="wizard-heading">
+        <div>
+          <button className="wizard-back-link" type="button" onClick={close}>
+            ← Voltar para {receivable ? 'contas a receber' : 'contas a pagar'}
+          </button>
+          <h2>Nova {label}</h2>
+          <p>
+            {receivable
+              ? 'Registre um valor que a empresa espera receber.'
+              : 'Registre um compromisso financeiro futuro.'}
+          </p>
+        </div>
+        <button
+          className="close-button"
+          type="button"
+          onClick={close}
+          aria-label="Fechar"
+        >
+          ×
+        </button>
+      </div>
+      <form onSubmit={submit}>
+        <div className="finance-entry-layout">
+          <main className="wizard-main">
+            <div className="wizard-stage-heading">
+              <span>1</span>
+              <div>
+                <h3>Dados do lançamento</h3>
+                <p>
+                  O valor ficará no previsto até que uma baixa seja registrada.
+                </p>
+              </div>
+            </div>
+            <section className="wizard-form-section">
+              <div className="form-grid">
+                <div className="field">
+                  <label htmlFor={`open-description-${kind}`}>Descrição</label>
+                  <input
+                    id={`open-description-${kind}`}
+                    name="description"
+                    required
+                    maxLength={500}
+                    placeholder={
+                      receivable
+                        ? 'Ex.: parcela a receber do cliente'
+                        : 'Ex.: serviço contratado para o mês'
+                    }
+                  />
+                </div>
+                <CurrencyInput
+                  label="Valor original"
+                  name="amount"
+                  required
+                  min={0.01}
+                />
+                <div className="field">
+                  <label htmlFor={`open-due-${kind}`}>Vencimento</label>
+                  <input
+                    id={`open-due-${kind}`}
+                    name="dueDate"
+                    type="date"
+                    min={today}
+                    required
+                  />
+                </div>
+              </div>
+            </section>
+            {error && (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            )}
+          </main>
+          <aside className="wizard-side-summary">
+            <div className="wizard-summary-heading">
+              <span>Resultado esperado</span>
+              <h3>{receivable ? 'Entrada prevista' : 'Saída prevista'}</h3>
+            </div>
+            <div className="sale-detail-state draft">
+              <AppIcon name="finance" />
+              <p>
+                Nenhuma movimentação realizada será criada agora. O caixa só
+                muda quando o {receivable ? 'recebimento' : 'pagamento'} for
+                confirmado.
+              </p>
+            </div>
+            <p>
+              Depois de salvar, você poderá registrar baixas parciais, juros e
+              descontos pelo menu de ações.
+            </p>
+          </aside>
+        </div>
+        <div className="wizard-actions">
+          <button
+            className="button button-secondary"
+            type="button"
+            onClick={close}
+          >
+            Cancelar
+          </button>
+          <button
+            className="button button-primary compact-button"
+            disabled={pending}
+          >
+            {pending ? 'Salvando…' : `Salvar ${label}`}
+          </button>
+        </div>
+      </form>
+    </section>
+  );
 }

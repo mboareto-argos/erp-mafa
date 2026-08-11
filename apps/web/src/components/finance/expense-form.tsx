@@ -1,32 +1,32 @@
-"use client";
+'use client';
 
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
-import { AppIcon } from "@/components/layout/app-icon";
-import { CurrencyInput } from "@/components/ui/currency-input";
-import { SelectField } from "@/components/ui/select-field";
+import { FormEvent, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { AppIcon } from '@/components/layout/app-icon';
+import { CurrencyInput } from '@/components/ui/currency-input';
+import { SelectField } from '@/components/ui/select-field';
 
 type Account = { id: string; name: string; status: string };
 const categories = [
-  ["mercadorias", "Mercadorias"],
-  ["frete", "Frete"],
-  ["embalagem", "Embalagem"],
-  ["publicidade", "Publicidade"],
-  ["plataforma", "Plataforma"],
-  ["telefone", "Telefone"],
-  ["internet", "Internet"],
-  ["aluguel", "Aluguel"],
-  ["energia", "Energia"],
-  ["transporte", "Transporte"],
-  ["combustivel", "Combustível"],
-  ["taxa", "Taxa"],
-  ["imposto", "Imposto"],
-  ["manutencao", "Manutenção"],
-  ["pro_labore", "Pró-labore"],
-  ["retirada", "Retirada"],
-  ["despesa_administrativa", "Despesa administrativa"],
-  ["perda", "Perda"],
-  ["outra", "Outra"],
+  ['mercadorias', 'Mercadorias'],
+  ['frete', 'Frete'],
+  ['embalagem', 'Embalagem'],
+  ['publicidade', 'Publicidade'],
+  ['plataforma', 'Plataforma'],
+  ['telefone', 'Telefone'],
+  ['internet', 'Internet'],
+  ['aluguel', 'Aluguel'],
+  ['energia', 'Energia'],
+  ['transporte', 'Transporte'],
+  ['combustivel', 'Combustível'],
+  ['taxa', 'Taxa'],
+  ['imposto', 'Imposto'],
+  ['manutencao', 'Manutenção'],
+  ['pro_labore', 'Pró-labore'],
+  ['retirada', 'Retirada'],
+  ['despesa_administrativa', 'Despesa administrativa'],
+  ['perda', 'Perda'],
+  ['outra', 'Outra'],
 ];
 
 export function ExpenseForm({
@@ -45,7 +45,7 @@ export function ExpenseForm({
   const today = new Date().toISOString().slice(0, 10);
   function close() {
     setOpen(false);
-    router.replace("/financeiro?tab=expenses", { scroll: false });
+    router.replace('/financeiro?tab=expenses', { scroll: false });
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -53,22 +53,22 @@ export function ExpenseForm({
     setPending(true);
     setError(undefined);
     try {
-      const response = await fetch("/api/finance/expenses", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": key },
+      const response = await fetch('/api/finance/expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
         body: JSON.stringify({
-          description: data.get("description"),
-          category: data.get("category"),
-          amount: Number(data.get("amount")),
-          competenceDate: data.get("competenceDate"),
+          description: data.get('description'),
+          category: data.get('category'),
+          amount: Number(data.get('amount')),
+          competenceDate: data.get('competenceDate'),
           paidNow,
           financialAccountId: paidNow
-            ? data.get("account") || undefined
+            ? data.get('account') || undefined
             : undefined,
-          dueDate: paidNow ? undefined : data.get("dueDate"),
+          dueDate: paidNow ? undefined : data.get('dueDate'),
           installmentCount: paidNow
             ? 1
-            : Number(data.get("installmentCount") || 1),
+            : Number(data.get('installmentCount') || 1),
         }),
       });
       const body = (await response.json().catch(() => ({}))) as {
@@ -76,7 +76,7 @@ export function ExpenseForm({
       };
       if (!response.ok)
         throw new Error(
-          body.message ?? "Não foi possível registrar a despesa.",
+          body.message ?? 'Não foi possível registrar a despesa.',
         );
       close();
       router.refresh();
@@ -84,7 +84,7 @@ export function ExpenseForm({
       setError(
         cause instanceof Error
           ? cause.message
-          : "Não foi possível registrar a despesa.",
+          : 'Não foi possível registrar a despesa.',
       );
     } finally {
       setPending(false);
@@ -136,7 +136,7 @@ export function ExpenseForm({
               </div>
             </div>
             <div className="finance-payment-choice">
-              <label className={paidNow ? "selected" : ""}>
+              <label className={paidNow ? 'selected' : ''}>
                 <input
                   type="radio"
                   name="paymentMoment"
@@ -149,7 +149,7 @@ export function ExpenseForm({
                   <small>Cria uma saída no caixa realizado agora.</small>
                 </span>
               </label>
-              <label className={!paidNow ? "selected" : ""}>
+              <label className={!paidNow ? 'selected' : ''}>
                 <input
                   type="radio"
                   name="paymentMoment"
@@ -214,26 +214,40 @@ export function ExpenseForm({
                       Selecione a conta
                     </option>
                     {accounts
-                      .filter((account) => account.status === "active")
+                      .filter((account) => account.status === 'active')
                       .map((account) => (
                         <option key={account.id} value={account.id}>
                           {account.name}
                         </option>
                       ))}
                   </SelectField>
-              ) : (
-                <>
-                  <div className="field">
-                    <label htmlFor="expense-due">Primeiro vencimento</label>
-                    <input id="expense-due" name="dueDate" type="date" min={today} required />
-                  </div>
-                  <div className="field">
-                    <label htmlFor="expense-installments">Parcelas</label>
-                    <input id="expense-installments" name="installmentCount" type="number" min="1" max="60" defaultValue="1" required />
-                    <small>Os próximos vencimentos serão mensais.</small>
-                  </div>
-                </>
-              )}
+                ) : (
+                  <>
+                    <div className="field">
+                      <label htmlFor="expense-due">Primeiro vencimento</label>
+                      <input
+                        id="expense-due"
+                        name="dueDate"
+                        type="date"
+                        min={today}
+                        required
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="expense-installments">Parcelas</label>
+                      <input
+                        id="expense-installments"
+                        name="installmentCount"
+                        type="number"
+                        min="1"
+                        max="60"
+                        defaultValue="1"
+                        required
+                      />
+                      <small>Os próximos vencimentos serão mensais.</small>
+                    </div>
+                  </>
+                )}
               </div>
             </section>
             {error && (
@@ -245,14 +259,14 @@ export function ExpenseForm({
           <aside className="wizard-side-summary">
             <div className="wizard-summary-heading">
               <span>Efeito da operação</span>
-              <h3>{paidNow ? "Caixa realizado" : "Caixa previsto"}</h3>
+              <h3>{paidNow ? 'Caixa realizado' : 'Caixa previsto'}</h3>
             </div>
-            <div className={`sale-detail-state ${paidNow ? "" : "draft"}`}>
+            <div className={`sale-detail-state ${paidNow ? '' : 'draft'}`}>
               <AppIcon name="finance" />
               <p>
                 {paidNow
-                  ? "Uma saída será criada na conta selecionada e a despesa passará a compor o resultado realizado."
-                  : "As parcelas serão criadas como contas a pagar. Nenhuma saída acontecerá até registrar cada pagamento."}
+                  ? 'Uma saída será criada na conta selecionada e a despesa passará a compor o resultado realizado.'
+                  : 'As parcelas serão criadas como contas a pagar. Nenhuma saída acontecerá até registrar cada pagamento.'}
               </p>
             </div>
             <p>
@@ -273,7 +287,7 @@ export function ExpenseForm({
             className="button button-primary compact-button"
             disabled={pending}
           >
-            {pending ? "Registrando…" : "Registrar despesa"}
+            {pending ? 'Registrando…' : 'Registrar despesa'}
           </button>
         </div>
       </form>

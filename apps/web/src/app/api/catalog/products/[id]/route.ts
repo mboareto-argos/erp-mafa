@@ -1,27 +1,51 @@
-import { NextResponse } from "next/server";
-import { ApiRequestError, backendAuthenticatedRequest } from "@/lib/session";
+import { NextResponse } from 'next/server';
+import { ApiRequestError, backendAuthenticatedRequest } from '@/lib/session';
 
-export async function GET(_request: Request, context: RouteContext<"/api/catalog/products/[id]">) {
+export async function GET(
+  _request: Request,
+  context: RouteContext<'/api/catalog/products/[id]'>,
+) {
   const { id } = await context.params;
   try {
-    return NextResponse.json(await backendAuthenticatedRequest(`/catalog/products/${id}`));
+    return NextResponse.json(
+      await backendAuthenticatedRequest(`/catalog/products/${id}`),
+    );
   } catch (error) {
     const status = error instanceof ApiRequestError ? error.status : 502;
-    return NextResponse.json({ message: error instanceof Error ? error.message : "Não foi possível carregar o produto." }, { status });
+    return NextResponse.json(
+      {
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Não foi possível carregar o produto.',
+      },
+      { status },
+    );
   }
 }
 
-export async function PATCH(request: Request, context: RouteContext<"/api/catalog/products/[id]">) {
+export async function PATCH(
+  request: Request,
+  context: RouteContext<'/api/catalog/products/[id]'>,
+) {
   const { id } = await context.params;
   try {
     return NextResponse.json(
       await backendAuthenticatedRequest(`/catalog/products/${id}`, {
-        method: "PATCH",
+        method: 'PATCH',
         body: JSON.stringify(await request.json()),
       }),
     );
   } catch (error) {
     const status = error instanceof ApiRequestError ? error.status : 502;
-    return NextResponse.json({ message: error instanceof Error ? error.message : "Não foi possível editar o produto." }, { status });
+    return NextResponse.json(
+      {
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Não foi possível editar o produto.',
+      },
+      { status },
+    );
   }
 }

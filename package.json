@@ -12,6 +12,7 @@
     "db:migrate": "turbo run db:migrate"
   },
   "devDependencies": {
+    "prettier": "^3.4.2",
     "turbo": "^2.0.0"
   },
   "packageManager": "pnpm@9.0.0",

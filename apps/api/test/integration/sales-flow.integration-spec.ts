@@ -42,7 +42,13 @@ describe('Sales — fluxo completo à vista (integração)', () => {
     const paymentMethod = await createPaymentMethod(app, session.accessToken, {
       financialAccountId: account.body.id,
     });
-    return { session, variantId, customer, paymentMethod, account: account.body };
+    return {
+      session,
+      variantId,
+      customer,
+      paymentMethod,
+      account: account.body,
+    };
   }
 
   it('rascunho não altera o estoque (RN 10.10.1)', async () => {
@@ -71,13 +77,21 @@ describe('Sales — fluxo completo à vista (integração)', () => {
     const sale = await request(app.getHttpServer())
       .post('/api/v1/sales')
       .set(auth(session.accessToken))
-      .send({ channel: 'presencial', items: [{ productVariantId: variantId, quantity: 2, unitPrice: 100 }] })
+      .send({
+        channel: 'presencial',
+        items: [{ productVariantId: variantId, quantity: 2, unitPrice: 100 }],
+      })
       .expect(201);
 
     const updated = await request(app.getHttpServer())
       .patch(`/api/v1/sales/${sale.body.id}`)
       .set(auth(session.accessToken))
-      .send({ channel: 'whatsapp', customerId: customer.id, discount: 10, items: [{ productVariantId: variantId, quantity: 3, unitPrice: 120 }] })
+      .send({
+        channel: 'whatsapp',
+        customerId: customer.id,
+        discount: 10,
+        items: [{ productVariantId: variantId, quantity: 3, unitPrice: 120 }],
+      })
       .expect(200);
 
     expect(updated.body.status).toBe('draft');
@@ -169,10 +183,33 @@ describe('Sales — fluxo completo à vista (integração)', () => {
 
   it('confirma venda a prazo e gera a agenda de recebíveis sem diferença de centavos', async () => {
     const { session, variantId, customer } = await setup();
-    const sale = await request(app.getHttpServer()).post('/api/v1/sales').set(auth(session.accessToken)).send({ channel: 'presencial', customerId: customer.id, items: [{ productVariantId: variantId, quantity: 1, unitPrice: 100 }] }).expect(201);
-    const confirmed = await request(app.getHttpServer()).post(`/api/v1/sales/${sale.body.id}/confirm`).set(auth(session.accessToken)).send({ payments: [], installmentPlan: { count: 3, firstDueDate: '2026-09-10' } }).expect(201);
-    expect(confirmed.body.receivables.map((item: { amountOriginal: string }) => item.amountOriginal)).toEqual(['33.33', '33.33', '33.34']);
-    expect(confirmed.body.receivables.map((item: { dueDate: string }) => item.dueDate.slice(0, 10))).toEqual(['2026-09-10', '2026-10-10', '2026-11-10']);
+    const sale = await request(app.getHttpServer())
+      .post('/api/v1/sales')
+      .set(auth(session.accessToken))
+      .send({
+        channel: 'presencial',
+        customerId: customer.id,
+        items: [{ productVariantId: variantId, quantity: 1, unitPrice: 100 }],
+      })
+      .expect(201);
+    const confirmed = await request(app.getHttpServer())
+      .post(`/api/v1/sales/${sale.body.id}/confirm`)
+      .set(auth(session.accessToken))
+      .send({
+        payments: [],
+        installmentPlan: { count: 3, firstDueDate: '2026-09-10' },
+      })
+      .expect(201);
+    expect(
+      confirmed.body.receivables.map(
+        (item: { amountOriginal: string }) => item.amountOriginal,
+      ),
+    ).toEqual(['33.33', '33.33', '33.34']);
+    expect(
+      confirmed.body.receivables.map((item: { dueDate: string }) =>
+        item.dueDate.slice(0, 10),
+      ),
+    ).toEqual(['2026-09-10', '2026-10-10', '2026-11-10']);
   });
 
   it('cancelar venda confirmada restaura estoque e estorna o caixa (RN 10.10.15)', async () => {

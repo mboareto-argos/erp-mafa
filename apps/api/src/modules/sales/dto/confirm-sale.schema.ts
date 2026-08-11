@@ -7,10 +7,12 @@ const salePaymentSchema = z.object({
 
 export const confirmSaleSchema = z.object({
   payments: z.array(salePaymentSchema).default([]),
-  installmentPlan: z.object({
-    count: z.number().int().min(1).max(60),
-    firstDueDate: z.string().date('Informe a primeira data de vencimento.'),
-  }).optional(),
+  installmentPlan: z
+    .object({
+      count: z.number().int().min(1).max(60),
+      firstDueDate: z.string().date('Informe a primeira data de vencimento.'),
+    })
+    .optional(),
 });
 
 export type ConfirmSaleDto = z.infer<typeof confirmSaleSchema>;

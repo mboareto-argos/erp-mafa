@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
-import { AppIcon } from "@/components/layout/app-icon";
-import { CurrencyInput } from "@/components/ui/currency-input";
+import { FormEvent, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { AppIcon } from '@/components/layout/app-icon';
+import { CurrencyInput } from '@/components/ui/currency-input';
 import {
   Dialog,
   DialogClose,
@@ -11,14 +11,14 @@ import {
   DialogDescription,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
+} from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { SelectField } from "@/components/ui/select-field";
+} from '@/components/ui/dropdown-menu';
+import { SelectField } from '@/components/ui/select-field';
 
 type Account = { id: string; name: string; status: string; balance?: string };
 type Method = {
@@ -31,17 +31,17 @@ type Method = {
   feeFixed?: string | null;
 };
 const money = (value: string | number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
     Number(value),
   );
 const methodType: Record<string, string> = {
-  cash: "Dinheiro",
-  pix: "PIX",
-  debit_card: "Cartão de débito",
-  credit_card: "Cartão de crédito",
-  bank_transfer: "Transferência",
-  store_credit: "Crédito da loja",
-  other: "Outro",
+  cash: 'Dinheiro',
+  pix: 'PIX',
+  debit_card: 'Cartão de débito',
+  credit_card: 'Cartão de crédito',
+  bank_transfer: 'Transferência',
+  store_credit: 'Crédito da loja',
+  other: 'Outro',
 };
 
 function CreateAccount({ onCreated }: { onCreated: () => void }) {
@@ -53,25 +53,25 @@ function CreateAccount({ onCreated }: { onCreated: () => void }) {
     setPending(true);
     setError(undefined);
     try {
-      const response = await fetch("/api/financial-accounts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const response = await fetch('/api/financial-accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: new FormData(event.currentTarget).get("name"),
+          name: new FormData(event.currentTarget).get('name'),
         }),
       });
       const body = (await response.json().catch(() => ({}))) as {
         message?: string;
       };
       if (!response.ok)
-        throw new Error(body.message ?? "Não foi possível criar a conta.");
+        throw new Error(body.message ?? 'Não foi possível criar a conta.');
       setOpen(false);
       onCreated();
     } catch (cause) {
       setError(
         cause instanceof Error
           ? cause.message
-          : "Não foi possível criar a conta.",
+          : 'Não foi possível criar a conta.',
       );
     } finally {
       setPending(false);
@@ -122,7 +122,7 @@ function CreateAccount({ onCreated }: { onCreated: () => void }) {
               className="button button-primary compact-button"
               disabled={pending}
             >
-              {pending ? "Criando…" : "Criar conta"}
+              {pending ? 'Criando…' : 'Criar conta'}
             </button>
           </div>
         </form>
@@ -147,18 +147,18 @@ function CreateMethod({
     setPending(true);
     setError(undefined);
     try {
-      const response = await fetch("/api/payments/methods", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const response = await fetch('/api/payments/methods', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: data.get("type"),
-          name: data.get("name"),
-          financialAccountId: data.get("account") || undefined,
-          feeRate: data.get("feeRate")
-            ? Number(data.get("feeRate"))
+          type: data.get('type'),
+          name: data.get('name'),
+          financialAccountId: data.get('account') || undefined,
+          feeRate: data.get('feeRate')
+            ? Number(data.get('feeRate'))
             : undefined,
-          feeFixed: data.get("feeFixed")
-            ? Number(data.get("feeFixed"))
+          feeFixed: data.get('feeFixed')
+            ? Number(data.get('feeFixed'))
             : undefined,
         }),
       });
@@ -166,14 +166,14 @@ function CreateMethod({
         message?: string;
       };
       if (!response.ok)
-        throw new Error(body.message ?? "Não foi possível criar a forma.");
+        throw new Error(body.message ?? 'Não foi possível criar a forma.');
       setOpen(false);
       onCreated();
     } catch (cause) {
       setError(
         cause instanceof Error
           ? cause.message
-          : "Não foi possível criar a forma.",
+          : 'Não foi possível criar a forma.',
       );
     } finally {
       setPending(false);
@@ -225,7 +225,7 @@ function CreateMethod({
             <SelectField label="Conta de destino" name="account">
               <option value="">Sem conta vinculada</option>
               {accounts
-                .filter((account) => account.status === "active")
+                .filter((account) => account.status === 'active')
                 .map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.name}
@@ -261,7 +261,7 @@ function CreateMethod({
               className="button button-primary compact-button"
               disabled={pending}
             >
-              {pending ? "Criando…" : "Criar forma"}
+              {pending ? 'Criando…' : 'Criar forma'}
             </button>
           </div>
         </form>
@@ -276,7 +276,7 @@ function DeactivateAction({
   name,
   onChanged,
 }: {
-  resource: "financial-accounts" | "payments/methods";
+  resource: 'financial-accounts' | 'payments/methods';
   id: string;
   name: string;
   onChanged: () => void;
@@ -289,18 +289,18 @@ function DeactivateAction({
     setError(undefined);
     try {
       const response = await fetch(`/api/${resource}/${id}/deactivate`, {
-        method: "PATCH",
+        method: 'PATCH',
       });
       const body = (await response.json().catch(() => ({}))) as {
         message?: string;
       };
       if (!response.ok)
-        throw new Error(body.message ?? "Não foi possível inativar.");
+        throw new Error(body.message ?? 'Não foi possível inativar.');
       setOpen(false);
       onChanged();
     } catch (cause) {
       setError(
-        cause instanceof Error ? cause.message : "Não foi possível inativar.",
+        cause instanceof Error ? cause.message : 'Não foi possível inativar.',
       );
     } finally {
       setPending(false);
@@ -364,7 +364,7 @@ function DeactivateAction({
               disabled={pending}
               onClick={deactivate}
             >
-              {pending ? "Inativando…" : "Confirmar inativação"}
+              {pending ? 'Inativando…' : 'Confirmar inativação'}
             </button>
           </div>
         </DialogContent>
@@ -431,7 +431,7 @@ export function FinancialSetup({
                     </td>
                     <td data-label="Status">
                       <span className={`status-badge ${account.status}`}>
-                        {account.status === "active" ? "Ativa" : "Inativa"}
+                        {account.status === 'active' ? 'Ativa' : 'Inativa'}
                       </span>
                     </td>
                     <td data-label="Saldo" className="number">
@@ -443,11 +443,11 @@ export function FinancialSetup({
                           (method) => method.financialAccountId === account.id,
                         )
                         .map((method) => method.name)
-                        .join(", ") || "Nenhuma"}
+                        .join(', ') || 'Nenhuma'}
                     </td>
                     {canManageAccounts && (
                       <td className="table-actions-cell" data-label="Ações">
-                        {account.status === "active" && (
+                        {account.status === 'active' && (
                           <DeactivateAction
                             resource="financial-accounts"
                             id={account.id}
@@ -514,22 +514,22 @@ export function FinancialSetup({
                     <td data-label="Conta">
                       {accounts.find(
                         (account) => account.id === method.financialAccountId,
-                      )?.name ?? "Sem vínculo"}
+                      )?.name ?? 'Sem vínculo'}
                     </td>
                     <td data-label="Taxas" className="number">
                       {method.feeRate
-                        ? `${Number(method.feeRate).toLocaleString("pt-BR")}%`
-                        : "0%"}
-                      {method.feeFixed ? ` + ${money(method.feeFixed)}` : ""}
+                        ? `${Number(method.feeRate).toLocaleString('pt-BR')}%`
+                        : '0%'}
+                      {method.feeFixed ? ` + ${money(method.feeFixed)}` : ''}
                     </td>
                     <td data-label="Status">
                       <span className={`status-badge ${method.status}`}>
-                        {method.status === "active" ? "Ativa" : "Inativa"}
+                        {method.status === 'active' ? 'Ativa' : 'Inativa'}
                       </span>
                     </td>
                     {canManageMethods && (
                       <td className="table-actions-cell" data-label="Ações">
-                        {method.status === "active" && (
+                        {method.status === 'active' && (
                           <DeactivateAction
                             resource="payments/methods"
                             id={method.id}

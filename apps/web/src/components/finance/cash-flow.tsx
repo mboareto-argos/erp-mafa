@@ -1,26 +1,326 @@
-"use client";
+'use client';
 
-import { FormEvent, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { AppIcon } from "@/components/layout/app-icon";
-import { CurrencyInput } from "@/components/ui/currency-input";
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { SelectField } from "@/components/ui/select-field";
+import { FormEvent, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { AppIcon } from '@/components/layout/app-icon';
+import { CurrencyInput } from '@/components/ui/currency-input';
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { SelectField } from '@/components/ui/select-field';
 
 type Account = { id: string; name: string; status: string; balance?: string };
-export type Transaction = { id: string; financialAccountId: string; type: string; amount: string; originType: string; description?: string | null; occurredAt: string };
-const money = (value: string | number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value));
-const dateTime = (value: string) => new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
-const origin: Record<string, string> = { sale_payment: "Venda", receivable_payment: "Recebimento", payable_payment: "Pagamento", expense: "Despesa", transfer: "Transferência", adjustment: "Ajuste" };
+export type Transaction = {
+  id: string;
+  financialAccountId: string;
+  type: string;
+  amount: string;
+  originType: string;
+  description?: string | null;
+  occurredAt: string;
+};
+const money = (value: string | number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+    Number(value),
+  );
+const dateTime = (value: string) =>
+  new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(new Date(value));
+const origin: Record<string, string> = {
+  sale_payment: 'Venda',
+  receivable_payment: 'Recebimento',
+  payable_payment: 'Pagamento',
+  expense: 'Despesa',
+  transfer: 'Transferência',
+  adjustment: 'Ajuste',
+};
 
 function TransferDialog({ accounts }: { accounts: Account[] }) {
-  const router = useRouter(); const [open, setOpen] = useState(false); const [pending, setPending] = useState(false); const [error, setError] = useState<string>(); const [key, setKey] = useState(() => crypto.randomUUID());
-  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); setPending(true); setError(undefined); try { const response = await fetch("/api/finance/cash-flow/transfers", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify({ fromAccountId: data.get("from"), toAccountId: data.get("to"), amount: Number(data.get("amount")), reason: data.get("reason") || undefined }) }); const body = await response.json().catch(() => ({})) as { message?: string }; if (!response.ok) throw new Error(body.message ?? "Não foi possível transferir."); setKey(crypto.randomUUID()); setOpen(false); router.refresh(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível transferir."); } finally { setPending(false); } }
-  return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><button className="button button-primary compact-button" type="button"><AppIcon name="finance" /> Transferir entre contas</button></DialogTrigger><DialogContent><div className="dialog-heading"><div><DialogTitle>Transferir entre contas</DialogTitle><DialogDescription>A transferência gera uma saída e uma entrada, sem alterar receitas ou despesas.</DialogDescription></div><DialogClose className="dialog-close" aria-label="Fechar">×</DialogClose></div><form className="dialog-form" onSubmit={submit}><div className="form-grid"><SelectField label="Conta de origem" name="from" required defaultValue=""><option value="" disabled>Selecione</option>{accounts.filter(item => item.status === "active").map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectField><SelectField label="Conta de destino" name="to" required defaultValue=""><option value="" disabled>Selecione</option>{accounts.filter(item => item.status === "active").map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectField></div><CurrencyInput label="Valor da transferência" name="amount" required min={0.01} /><div className="field"><label htmlFor="transfer-reason">Motivo (opcional)</label><textarea id="transfer-reason" name="reason" maxLength={500} placeholder="Ex.: reforço de caixa da loja" /></div>{error && <p className="form-error" role="alert">{error}</p>}<div className="dialog-actions"><DialogClose asChild><button className="button button-secondary" type="button">Voltar</button></DialogClose><button className="button button-primary compact-button" disabled={pending}>{pending ? "Transferindo…" : "Confirmar transferência"}</button></div></form></DialogContent></Dialog>;
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string>();
+  const [key, setKey] = useState(() => crypto.randomUUID());
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    setPending(true);
+    setError(undefined);
+    try {
+      const response = await fetch('/api/finance/cash-flow/transfers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
+        body: JSON.stringify({
+          fromAccountId: data.get('from'),
+          toAccountId: data.get('to'),
+          amount: Number(data.get('amount')),
+          reason: data.get('reason') || undefined,
+        }),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        message?: string;
+      };
+      if (!response.ok)
+        throw new Error(body.message ?? 'Não foi possível transferir.');
+      setKey(crypto.randomUUID());
+      setOpen(false);
+      router.refresh();
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : 'Não foi possível transferir.',
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <button className="button button-primary compact-button" type="button">
+          <AppIcon name="finance" /> Transferir entre contas
+        </button>
+      </DialogTrigger>
+      <DialogContent>
+        <div className="dialog-heading">
+          <div>
+            <DialogTitle>Transferir entre contas</DialogTitle>
+            <DialogDescription>
+              A transferência gera uma saída e uma entrada, sem alterar receitas
+              ou despesas.
+            </DialogDescription>
+          </div>
+          <DialogClose className="dialog-close" aria-label="Fechar">
+            ×
+          </DialogClose>
+        </div>
+        <form className="dialog-form" onSubmit={submit}>
+          <div className="form-grid">
+            <SelectField
+              label="Conta de origem"
+              name="from"
+              required
+              defaultValue=""
+            >
+              <option value="" disabled>
+                Selecione
+              </option>
+              {accounts
+                .filter((item) => item.status === 'active')
+                .map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+            </SelectField>
+            <SelectField
+              label="Conta de destino"
+              name="to"
+              required
+              defaultValue=""
+            >
+              <option value="" disabled>
+                Selecione
+              </option>
+              {accounts
+                .filter((item) => item.status === 'active')
+                .map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+            </SelectField>
+          </div>
+          <CurrencyInput
+            label="Valor da transferência"
+            name="amount"
+            required
+            min={0.01}
+          />
+          <div className="field">
+            <label htmlFor="transfer-reason">Motivo (opcional)</label>
+            <textarea
+              id="transfer-reason"
+              name="reason"
+              maxLength={500}
+              placeholder="Ex.: reforço de caixa da loja"
+            />
+          </div>
+          {error && (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          )}
+          <div className="dialog-actions">
+            <DialogClose asChild>
+              <button className="button button-secondary" type="button">
+                Voltar
+              </button>
+            </DialogClose>
+            <button
+              className="button button-primary compact-button"
+              disabled={pending}
+            >
+              {pending ? 'Transferindo…' : 'Confirmar transferência'}
+            </button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
-export function CashFlow({ transactions, accounts, canTransfer }: { transactions: Transaction[]; accounts: Account[]; canTransfer: boolean }) {
-  const [account, setAccount] = useState("all"); const [type, setType] = useState("all");
-  const filtered = useMemo(() => transactions.filter(item => (account === "all" || item.financialAccountId === account) && (type === "all" || item.type === type)), [transactions, account, type]);
-  return <><section className="finance-account-grid">{accounts.map(item => <article key={item.id}><span className="finance-account-icon"><AppIcon name="finance" /></span><div><small>{item.status === "active" ? "Conta ativa" : "Conta inativa"}</small><strong>{item.name}</strong><p>{money(item.balance ?? 0)}</p></div></article>)}</section><section className="data-card finance-ledger"><div className="data-card-heading"><div><h2>Fluxo de caixa realizado</h2><p>Entradas, saídas e transferências efetivadas; valores previstos ficam nas contas em aberto.</p></div>{canTransfer && accounts.filter(item => item.status === "active").length >= 2 && <TransferDialog accounts={accounts} />}</div><div className="listing-search finance-cash-filters"><SelectField label="Conta" value={account} onChange={event => setAccount(event.target.value)}><option value="all">Todas as contas</option>{accounts.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</SelectField><SelectField label="Movimento" value={type} onChange={event => setType(event.target.value)}><option value="all">Todos os movimentos</option><option value="in">Entradas</option><option value="out">Saídas</option><option value="transfer">Transferências</option><option value="adjustment">Ajustes</option></SelectField></div><div className="table-wrap"><table><thead><tr><th>Data</th><th>Origem</th><th>Descrição</th><th>Conta</th><th>Tipo</th><th className="number">Valor</th></tr></thead><tbody>{filtered.length === 0 ? <tr className="table-empty-row"><td className="table-empty-cell" colSpan={6}><span className="table-empty-icon"><AppIcon name="finance" /></span><strong>Nenhuma movimentação encontrada</strong><p>As baixas de vendas, despesas e contas aparecerão aqui automaticamente.</p></td></tr> : filtered.map(item => <tr key={item.id}><td data-label="Data">{dateTime(item.occurredAt)}</td><td data-label="Origem">{origin[item.originType] ?? item.originType}</td><td data-label="Descrição">{item.description || "Movimentação automática"}</td><td data-label="Conta">{accounts.find(accountItem => accountItem.id === item.financialAccountId)?.name ?? "Conta histórica"}</td><td data-label="Tipo"><span className={`status-badge ${item.type === "in" ? "active" : item.type === "out" ? "cancelled" : "pending"}`}>{item.type === "in" ? "Entrada" : item.type === "out" ? "Saída" : item.type === "transfer" ? "Transferência" : "Ajuste"}</span></td><td data-label="Valor" className={`number ${Number(item.amount) < 0 ? "negative" : "positive"}`}><strong>{money(item.amount)}</strong></td></tr>)}</tbody></table></div></section></>;
+export function CashFlow({
+  transactions,
+  accounts,
+  canTransfer,
+}: {
+  transactions: Transaction[];
+  accounts: Account[];
+  canTransfer: boolean;
+}) {
+  const [account, setAccount] = useState('all');
+  const [type, setType] = useState('all');
+  const filtered = useMemo(
+    () =>
+      transactions.filter(
+        (item) =>
+          (account === 'all' || item.financialAccountId === account) &&
+          (type === 'all' || item.type === type),
+      ),
+    [transactions, account, type],
+  );
+  return (
+    <>
+      <section className="finance-account-grid">
+        {accounts.map((item) => (
+          <article key={item.id}>
+            <span className="finance-account-icon">
+              <AppIcon name="finance" />
+            </span>
+            <div>
+              <small>
+                {item.status === 'active' ? 'Conta ativa' : 'Conta inativa'}
+              </small>
+              <strong>{item.name}</strong>
+              <p>{money(item.balance ?? 0)}</p>
+            </div>
+          </article>
+        ))}
+      </section>
+      <section className="data-card finance-ledger">
+        <div className="data-card-heading">
+          <div>
+            <h2>Fluxo de caixa realizado</h2>
+            <p>
+              Entradas, saídas e transferências efetivadas; valores previstos
+              ficam nas contas em aberto.
+            </p>
+          </div>
+          {canTransfer &&
+            accounts.filter((item) => item.status === 'active').length >= 2 && (
+              <TransferDialog accounts={accounts} />
+            )}
+        </div>
+        <div className="listing-search finance-cash-filters">
+          <SelectField
+            label="Conta"
+            value={account}
+            onChange={(event) => setAccount(event.target.value)}
+          >
+            <option value="all">Todas as contas</option>
+            {accounts.map((item) => (
+              <option value={item.id} key={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField
+            label="Movimento"
+            value={type}
+            onChange={(event) => setType(event.target.value)}
+          >
+            <option value="all">Todos os movimentos</option>
+            <option value="in">Entradas</option>
+            <option value="out">Saídas</option>
+            <option value="transfer">Transferências</option>
+            <option value="adjustment">Ajustes</option>
+          </SelectField>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Origem</th>
+                <th>Descrição</th>
+                <th>Conta</th>
+                <th>Tipo</th>
+                <th className="number">Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr className="table-empty-row">
+                  <td className="table-empty-cell" colSpan={6}>
+                    <span className="table-empty-icon">
+                      <AppIcon name="finance" />
+                    </span>
+                    <strong>Nenhuma movimentação encontrada</strong>
+                    <p>
+                      As baixas de vendas, despesas e contas aparecerão aqui
+                      automaticamente.
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((item) => (
+                  <tr key={item.id}>
+                    <td data-label="Data">{dateTime(item.occurredAt)}</td>
+                    <td data-label="Origem">
+                      {origin[item.originType] ?? item.originType}
+                    </td>
+                    <td data-label="Descrição">
+                      {item.description || 'Movimentação automática'}
+                    </td>
+                    <td data-label="Conta">
+                      {accounts.find(
+                        (accountItem) =>
+                          accountItem.id === item.financialAccountId,
+                      )?.name ?? 'Conta histórica'}
+                    </td>
+                    <td data-label="Tipo">
+                      <span
+                        className={`status-badge ${item.type === 'in' ? 'active' : item.type === 'out' ? 'cancelled' : 'pending'}`}
+                      >
+                        {item.type === 'in'
+                          ? 'Entrada'
+                          : item.type === 'out'
+                            ? 'Saída'
+                            : item.type === 'transfer'
+                              ? 'Transferência'
+                              : 'Ajuste'}
+                      </span>
+                    </td>
+                    <td
+                      data-label="Valor"
+                      className={`number ${Number(item.amount) < 0 ? 'negative' : 'positive'}`}
+                    >
+                      <strong>{money(item.amount)}</strong>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
+  );
 }

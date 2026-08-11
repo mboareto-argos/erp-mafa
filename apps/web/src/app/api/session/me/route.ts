@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
+import { NextResponse } from 'next/server';
+import { getSession } from '@/lib/session';
 
 export async function GET() {
   const session = await getSession();
-  if (!session) return NextResponse.json({ message: "Sessão expirada." }, { status: 401 });
+  if (!session)
+    return NextResponse.json({ message: 'Sessão expirada.' }, { status: 401 });
   return NextResponse.json(session);
 }

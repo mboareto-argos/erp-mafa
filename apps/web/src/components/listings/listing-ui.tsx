@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { AppIcon, type IconName } from "@/components/layout/app-icon";
+import type { ReactNode } from 'react';
+import { AppIcon, type IconName } from '@/components/layout/app-icon';
 
 type SearchProps = {
   id: string;
@@ -13,7 +13,12 @@ export function ListingSearch({ id, label, placeholder, query }: SearchProps) {
     <form method="GET" className="listing-search">
       <div className="field">
         <label htmlFor={id}>{label}</label>
-        <input id={id} name="q" defaultValue={query} placeholder={placeholder} />
+        <input
+          id={id}
+          name="q"
+          defaultValue={query}
+          placeholder={placeholder}
+        />
       </div>
       <button className="button button-secondary compact-button" type="submit">
         Buscar
@@ -43,8 +48,32 @@ export function ListingTable({
   );
 }
 
-export function ListingMetrics({ metrics }: { metrics: Array<{ label: string; value: string | number; detail: string; icon: IconName }> }) {
-  return <section className="listing-metrics" aria-label="Resumo da listagem">{metrics.map(metric => <article className="listing-metric" key={metric.label}><span className="listing-metric-icon"><AppIcon name={metric.icon} /></span><div><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.detail}</small></div></article>)}</section>;
+export function ListingMetrics({
+  metrics,
+}: {
+  metrics: Array<{
+    label: string;
+    value: string | number;
+    detail: string;
+    icon: IconName;
+  }>;
+}) {
+  return (
+    <section className="listing-metrics" aria-label="Resumo da listagem">
+      {metrics.map((metric) => (
+        <article className="listing-metric" key={metric.label}>
+          <span className="listing-metric-icon">
+            <AppIcon name={metric.icon} />
+          </span>
+          <div>
+            <span>{metric.label}</span>
+            <strong>{metric.value}</strong>
+            <small>{metric.detail}</small>
+          </div>
+        </article>
+      ))}
+    </section>
+  );
 }
 
 export function ListingEmptyState({
@@ -86,7 +115,7 @@ export function ListingPagination({
 
   const hrefFor = (nextPage: number) => {
     const params = new URLSearchParams({ page: String(nextPage) });
-    if (query) params.set("q", query);
+    if (query) params.set('q', query);
     Object.entries(extraParams ?? {}).forEach(([key, value]) => {
       if (value) params.set(key, value);
     });
@@ -96,7 +125,10 @@ export function ListingPagination({
   return (
     <nav className="page-actions listing-pagination" aria-label="Paginação">
       {page > 1 && (
-        <a className="button button-secondary compact-button" href={hrefFor(page - 1)}>
+        <a
+          className="button button-secondary compact-button"
+          href={hrefFor(page - 1)}
+        >
           Anterior
         </a>
       )}
@@ -104,7 +136,10 @@ export function ListingPagination({
         Página {page} de {totalPages}
       </span>
       {page < totalPages && (
-        <a className="button button-secondary compact-button" href={hrefFor(page + 1)}>
+        <a
+          className="button button-secondary compact-button"
+          href={hrefFor(page + 1)}
+        >
           Próxima
         </a>
       )}
@@ -114,7 +149,11 @@ export function ListingPagination({
 
 export function ListingSkeleton() {
   return (
-    <section className="data-card" aria-label="Carregando lista" aria-busy="true">
+    <section
+      className="data-card"
+      aria-label="Carregando lista"
+      aria-busy="true"
+    >
       <div className="skeleton-table">
         <span />
         <span />
