@@ -29,6 +29,5 @@
     "eslint-plugin-prettier": "^5.2.2",
     "tailwindcss": "^4",
     "typescript": "^5"
-  },
-  "packageManager": "pnpm@9.15.9"
+  }
 }
