@@ -1,10 +1,14 @@
 -- TA-DATA-005: defesa em profundidade por empresa. A aplicação usa o papel
 -- erp_mafa_app (sem BYPASSRLS) e define app.current_company_id dentro da
 -- transação de cada requisição autenticada.
+-- Senha abaixo é só o padrão de bootstrap local/teste — provedores gerenciados
+-- (Neon, RDS etc.) rejeitam senha fraca na criação do papel, e mesmo que
+-- aceitassem, runbook.md exige trocar por uma senha própria do ambiente antes
+-- do primeiro deploy real (nunca reaproveitar esta).
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'erp_mafa_app') THEN
-    CREATE ROLE erp_mafa_app LOGIN PASSWORD 'erp_mafa_app' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+    CREATE ROLE erp_mafa_app LOGIN PASSWORD 'ErpMafaApp!2026Local' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
   END IF;
 END $$;
 
