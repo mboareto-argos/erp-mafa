@@ -11,6 +11,7 @@ import {
   Eye,
   HandCoins,
   House,
+  Megaphone,
   Menu,
   Package,
   PackageOpen,
@@ -56,6 +57,7 @@ const icons = {
   more: Ellipsis,
   menu: Menu,
   list: ClipboardList,
+  campaigns: Megaphone,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof icons;

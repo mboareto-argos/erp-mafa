@@ -71,6 +71,8 @@ model Company {
   inventoryCounts            InventoryCount[]
   productKitComponents       ProductKitComponent[]
   kitAssemblies              KitAssembly[]
+  campaigns                  Campaign[]
+  campaignDeliveries         CampaignDelivery[]
   inventoryCountItems        InventoryCountItem[]
   suppliers                  Supplier[]
   purchases                  Purchase[]
@@ -135,6 +137,8 @@ model User {
   createdStockAdjustments           StockAdjustment[]          @relation("StockAdjustmentCreatedBy")
   createdProductKitComponents       ProductKitComponent[]      @relation("ProductKitComponentCreatedBy")
   createdKitAssemblies              KitAssembly[]              @relation("KitAssemblyCreatedBy")
+  createdCampaigns                  Campaign[]                 @relation("CampaignCreatedBy")
+  sentCampaignDeliveries            CampaignDelivery[]         @relation("CampaignDeliverySentBy")
   approvedStockAdjustments          StockAdjustment[]          @relation("StockAdjustmentApprovedBy")
   createdStockReservations          StockReservation[]         @relation("StockReservationCreatedBy")
   createdInventoryCounts            InventoryCount[]           @relation("InventoryCountCreatedBy")
@@ -432,9 +436,10 @@ model Brand {
   createdBy String?     @map("created_by") @db.Uuid
   deletedAt DateTime?   @map("deleted_at")
 
-  company       Company   @relation(fields: [companyId], references: [id])
-  createdByUser User?     @relation("BrandCreatedBy", fields: [createdBy], references: [id])
+  company       Company    @relation(fields: [companyId], references: [id])
+  createdByUser User?      @relation("BrandCreatedBy", fields: [createdBy], references: [id])
   products      Product[]
+  campaigns     Campaign[]
 
   @@unique([companyId, name])
   @@index([companyId, status])
@@ -996,27 +1001,95 @@ enum CustomerStatus {
 }
 
 model Customer {
-  id        String         @id @default(uuid()) @db.Uuid
-  companyId String         @map("company_id") @db.Uuid
-  name      String
-  whatsapp  String?
-  phone     String?
-  email     String?
-  instagram String?
-  birthDate DateTime?      @map("birth_date")
-  status    CustomerStatus @default(active)
-  createdAt DateTime       @default(now()) @map("created_at")
-  updatedAt DateTime       @updatedAt @map("updated_at")
-  createdBy String?        @map("created_by") @db.Uuid
-  deletedAt DateTime?      @map("deleted_at")
+  id                     String                  @id @default(uuid()) @db.Uuid
+  companyId              String                  @map("company_id") @db.Uuid
+  name                   String
+  whatsapp               String?
+  phone                  String?
+  email                  String?
+  instagram              String?
+  birthDate              DateTime?               @map("birth_date")
+  // Consentimento de marketing (BR §10.9, regra 9): aceite com data e
+  // origem; sair grava marketing_opt_out_at. Só recebe campanha quem tem
+  // consent_at e não tem opt_out_at. Cada mudança vai para audit_logs.
+  marketingConsentAt     DateTime?               @map("marketing_consent_at")
+  marketingConsentSource MarketingConsentSource? @map("marketing_consent_source")
+  marketingOptOutAt      DateTime?               @map("marketing_opt_out_at")
+  status                 CustomerStatus          @default(active)
+  createdAt              DateTime                @default(now()) @map("created_at")
+  updatedAt              DateTime                @updatedAt @map("updated_at")
+  createdBy              String?                 @map("created_by") @db.Uuid
+  deletedAt              DateTime?               @map("deleted_at")
 
-  company       Company      @relation(fields: [companyId], references: [id])
-  createdByUser User?        @relation("CustomerCreatedBy", fields: [createdBy], references: [id])
-  sales         Sale[]
-  receivables   Receivable[]
+  company            Company            @relation(fields: [companyId], references: [id])
+  createdByUser      User?              @relation("CustomerCreatedBy", fields: [createdBy], references: [id])
+  sales              Sale[]
+  receivables        Receivable[]
+  campaignDeliveries CampaignDelivery[]
 
   @@index([companyId, status])
   @@map("customers")
+}
+
+enum MarketingConsentSource {
+  in_person
+  whatsapp
+  instagram
+  other
+}
+
+enum CampaignAudience {
+  all
+  birthdays
+  brand
+  inactive
+}
+
+// Campanha (BR §10.9, regra 10). O público é calculado na hora, sempre
+// entre clientes ativos com consentimento (regra 9). Arquivar usa
+// deleted_at — nunca apaga o histórico de envios.
+model Campaign {
+  id                   String           @id @default(uuid()) @db.Uuid
+  companyId            String           @map("company_id") @db.Uuid
+  title                String
+  message              String
+  // Foto opcional (ADR-0003): mesma origem aceita para fotos de produto.
+  imageUrl             String?          @map("image_url")
+  audience             CampaignAudience
+  audienceBrandId      String?          @map("audience_brand_id") @db.Uuid
+  audienceInactiveDays Int?             @map("audience_inactive_days")
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+  createdBy            String?          @map("created_by") @db.Uuid
+  deletedAt            DateTime?        @map("deleted_at")
+
+  company       Company            @relation(fields: [companyId], references: [id])
+  audienceBrand Brand?             @relation(fields: [audienceBrandId], references: [id])
+  createdByUser User?              @relation("CampaignCreatedBy", fields: [createdBy], references: [id])
+  deliveries    CampaignDelivery[]
+
+  @@index([companyId, createdAt])
+  @@map("campaigns")
+}
+
+// Envio 1 a 1 marcado pelo usuário (BR §10.9, regra 11): uma linha por
+// cliente por campanha. Append-only.
+model CampaignDelivery {
+  id         String   @id @default(uuid()) @db.Uuid
+  companyId  String   @map("company_id") @db.Uuid
+  campaignId String   @map("campaign_id") @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  sentAt     DateTime @default(now()) @map("sent_at")
+  sentBy     String?  @map("sent_by") @db.Uuid
+
+  company    Company  @relation(fields: [companyId], references: [id])
+  campaign   Campaign @relation(fields: [campaignId], references: [id])
+  customer   Customer @relation(fields: [customerId], references: [id])
+  sentByUser User?    @relation("CampaignDeliverySentBy", fields: [sentBy], references: [id])
+
+  @@unique([campaignId, customerId])
+  @@index([companyId, campaignId])
+  @@map("campaign_deliveries")
 }
 
 enum PaymentMethodType {

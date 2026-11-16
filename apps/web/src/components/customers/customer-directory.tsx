@@ -1,4 +1,5 @@
 'use client';
+import { CONSENT_SOURCE_LABEL, type ConsentSource } from '@/lib/campaigns';
 
 import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -27,7 +28,14 @@ export type CustomerListItem = {
   instagram: string | null;
   birthDate: string | null;
   status: 'active' | 'inactive';
+  marketingConsentAt?: string | null;
+  marketingConsentSource?: ConsentSource | null;
+  marketingOptOutAt?: string | null;
 };
+
+/** Aceite de ofertas vigente (BR §10.9, regra 9). */
+const acceptsOffers = (customer?: CustomerListItem) =>
+  Boolean(customer?.marketingConsentAt && !customer.marketingOptOutAt);
 
 type CustomerDetail = CustomerListItem & {
   summary: {
@@ -141,6 +149,9 @@ function CustomerForm({
     try {
       const optional = (name: string) =>
         formData.get(name)?.toString().trim() || null;
+      const wantsOffers = formData.get('marketingConsent') === 'on';
+      const source = (formData.get('marketingConsentSource')?.toString() ||
+        'in_person') as ConsentSource;
       const response = await fetch(
         customer ? `/api/customers/${customer.id}` : '/api/customers',
         {
@@ -153,6 +164,9 @@ function CustomerForm({
             email: optional('email'),
             instagram: optional('instagram'),
             birthDate: optional('birthDate'),
+            ...(!customer && wantsOffers
+              ? { marketingConsentSource: source }
+              : {}),
           }),
         },
       );
@@ -162,6 +176,28 @@ function CustomerForm({
           result.message ??
             `Não foi possível ${customer ? 'editar' : 'cadastrar'} o cliente.`,
         );
+      // Na edição, o aceite tem rota própria: a data é sempre a do servidor
+      // e cada mudança vai para a auditoria.
+      if (customer && wantsOffers !== acceptsOffers(customer)) {
+        const consent = await fetch(
+          `/api/customers/${customer.id}/marketing-consent`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(
+              wantsOffers ? { granted: true, source } : { granted: false },
+            ),
+          },
+        );
+        if (!consent.ok) {
+          const body = (await consent.json().catch(() => ({}))) as {
+            message?: string;
+          };
+          throw new Error(
+            body.message ?? 'Não foi possível salvar o aceite de ofertas.',
+          );
+        }
+      }
       onClose();
       if (initialOpen) router.replace('/clientes');
       router.refresh();
@@ -292,6 +328,38 @@ function CustomerForm({
             </div>
           </div>
         </section>
+        <section className="wizard-form-section">
+          <h3>Ofertas</h3>
+          <label className="flex items-start gap-3 text-sm text-neutral-900">
+            <input
+              type="checkbox"
+              name="marketingConsent"
+              defaultChecked={acceptsOffers(customer)}
+              className="mt-1 size-5 accent-brand-accent"
+            />
+            <span>
+              <strong className="block">Aceita receber ofertas</strong>
+              <span className="text-neutral-500">
+                Só quem aceitou entra nas campanhas. Pergunte ao cliente; ele
+                pode sair quando quiser.
+              </span>
+            </span>
+          </label>
+          <div className="field mt-3">
+            <label htmlFor="customer-consent-source">Onde aceitou</label>
+            <select
+              id="customer-consent-source"
+              name="marketingConsentSource"
+              defaultValue={customer?.marketingConsentSource ?? 'in_person'}
+            >
+              {Object.entries(CONSENT_SOURCE_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </section>
         <div className="customer-privacy-note">
           <AppIcon name="shield" />
           <p>
@@ -419,6 +487,18 @@ function CustomerDetails({
               <div>
                 <span>Instagram</span>
                 <strong>{customer.instagram || 'Não informado'}</strong>
+              </div>
+              <div>
+                <span>Ofertas</span>
+                <strong>
+                  {acceptsOffers(customer) && customer.marketingConsentAt
+                    ? `Aceita desde ${civilDate(customer.marketingConsentAt)}${
+                        customer.marketingConsentSource
+                          ? ` · ${CONSENT_SOURCE_LABEL[customer.marketingConsentSource]}`
+                          : ''
+                      }`
+                    : 'Não recebe ofertas'}
+                </strong>
               </div>
             </section>
             <section className="sale-detail-card sale-detail-section">
