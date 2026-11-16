@@ -540,7 +540,9 @@ export function ProductRow({
   return (
     <tr>
       <td data-label="Produto">
-        <strong>{product.name}</strong>
+        <Link className="text-link" href={`/produtos/${product.id}`}>
+          <strong>{product.name}</strong>
+        </Link>
         <small className="table-detail">Unidade: {product.unit}</small>
       </td>
       <td data-label="SKU">{product.sku}</td>

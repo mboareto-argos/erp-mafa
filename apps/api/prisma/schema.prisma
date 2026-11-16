@@ -497,6 +497,9 @@ model ProductVariant {
   companyId  String    @map("company_id") @db.Uuid
   productId  String    @map("product_id") @db.Uuid
   skuVariant String    @map("sku_variant")
+  // Código de barras (EAN/UPC/QR) da variação — BR §10.3: único na empresa
+  // quando informado. Opcional: produtos antigos não têm.
+  barcode    String?
   attributes Json
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
@@ -518,6 +521,7 @@ model ProductVariant {
   inventoryCountItems InventoryCountItem[]
 
   @@unique([companyId, skuVariant])
+  @@unique([companyId, barcode])
   @@index([companyId, productId])
   @@map("product_variants")
 }

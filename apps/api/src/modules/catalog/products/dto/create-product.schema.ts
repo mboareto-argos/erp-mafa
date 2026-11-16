@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+export const barcodeSchema = z
+  .string()
+  .trim()
+  .min(1, 'Informe o código de barras.')
+  .max(128, 'Código de barras muito longo.');
+
 export const createProductSchema = z
   .object({
     sku: z.string().min(1, 'Informe o SKU.').max(60),
@@ -11,6 +17,8 @@ export const createProductSchema = z
     // Inventory (RN 10.7.8).
     minStock: z.number().nonnegative().optional(),
     salePrice: z.number().nonnegative().optional(),
+    // BR §10.3: código de barras (EAN/UPC ou conteúdo do QR) da variação.
+    barcode: barcodeSchema.optional(),
   })
   .strict();
 

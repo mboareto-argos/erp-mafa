@@ -1,16 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Banknote,
   CreditCard,
   HandCoins,
-  PackageSearch,
   Plus,
   QrCode,
-  ScanBarcode,
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
@@ -19,6 +17,11 @@ import { CurrencyInput } from '@/components/ui/currency-input';
 import { notify } from '@/components/ui/toaster';
 import { centsToDecimal, formatCents, toCents } from '@/lib/money';
 import { cn } from '@/lib/utils';
+import { BarcodeScanner } from '@/components/scanner/barcode-scanner';
+import { ProductSheet } from '@/components/scanner/product-sheet';
+import { ScanSearchField } from '@/components/scanner/scan-search-field';
+import { UnknownCodeSheet } from '@/components/scanner/unknown-code-sheet';
+import { findByCode } from '@/lib/catalog';
 import {
   CalculatedBox,
   Stepper,
@@ -90,12 +93,14 @@ const plural = (count: number, one: string, many: string) =>
 // total e a ação principal sempre visíveis no rodapé. Tudo o que a venda vai
 // gerar (estoque, recebimento, parcelas) aparece antes de confirmar.
 export function NewSaleFlow({
-  products,
+  products: initialProducts,
   methods,
   customers: initialCustomers,
   stock,
   accounts,
   canCreateCustomer,
+  canManageCatalog = false,
+  initialAdd,
   draft,
 }: {
   products: CatalogProduct[];
@@ -104,14 +109,32 @@ export function NewSaleFlow({
   stock: Record<string, number> | null;
   accounts: Record<string, string>;
   canCreateCustomer: boolean;
+  /** Pode vincular código de barras a produto ou cadastrar produto (manage_catalog). */
+  canManageCatalog?: boolean;
+  /** Variação a colocar no carrinho ao abrir (ex.: "Vender" na página do produto). */
+  initialAdd?: string;
   draft: Draft | null;
 }) {
   const router = useRouter();
   const [step, setStep] = useState(0);
+  const [products, setProducts] = useState(initialProducts);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanned, setScanned] = useState<CatalogProduct | null>(null);
+  const [unknownCode, setUnknownCode] = useState<string | null>(null);
+  const withInitialAdd = (lines: CartLine[]) => {
+    const product = initialAdd
+      ? initialProducts.find((candidate) =>
+          candidate.variants.some((variant) => variant.id === initialAdd),
+        )
+      : undefined;
+    return product && !lines.some((line) => line.variantId === initialAdd)
+      ? addToCart(lines, product)
+      : lines;
+  };
   const [cart, setCart] = useState<CartLine[]>(() =>
     draft
       ? draft.items.flatMap((item) => {
-          const product = products.find((candidate) =>
+          const product = initialProducts.find((candidate) =>
             candidate.variants.some(
               (variant) => variant.id === item.productVariantId,
             ),
@@ -129,7 +152,7 @@ export function NewSaleFlow({
               ]
             : [];
         })
-      : [],
+      : withInitialAdd([]),
   );
   const [query, setQuery] = useState('');
   const [customers, setCustomers] = useState(initialCustomers);
@@ -160,8 +183,10 @@ export function NewSaleFlow({
       // servidor, então não dá para usar como estado inicial sem quebrar a
       // hidratação.
       /* eslint-disable react-hooks/set-state-in-effect */
-      if (saved?.cart?.length) {
-        setCart(saved.cart);
+      // Só conta como "recuperado" se havia algo além do produto que veio
+      // pela página do produto (?adicionar=).
+      if (saved?.cart?.some((line) => line.variantId !== initialAdd)) {
+        setCart(withInitialAdd(saved.cart));
         setCustomerId(saved.customerId ?? '');
         setChannel(saved.channel ?? 'presencial');
         setDiscountCents(saved.discountCents ?? 0);
@@ -171,6 +196,7 @@ export function NewSaleFlow({
     } catch {
       // armazenamento indisponível (aba privada etc.): segue sem rascunho
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restaura só ao montar
   }, [draft]);
 
   useEffect(() => {
@@ -206,15 +232,39 @@ export function NewSaleFlow({
     setError(undefined);
   }
 
-  function onSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    // Leitor de código de barras USB/Bluetooth "digita" o código + Enter:
-    // adiciona direto o primeiro resultado (SKU exato vem primeiro).
-    if (event.key !== 'Enter') return;
-    event.preventDefault();
+  // Leitor de código de barras USB/Bluetooth "digita" o código + Enter:
+  // adiciona direto o primeiro resultado (código exato vem primeiro).
+  function addFirstResult() {
     if (query.trim() && results[0]) {
       add(results[0]);
       setQuery('');
     }
+  }
+
+  // Câmera: produto conhecido abre a ficha com preço/estoque e "Adicionar
+  // ao carrinho"; código desconhecido oferece vincular ou cadastrar.
+  function onScanned(code: string) {
+    setScannerOpen(false);
+    const product = findByCode(products, code);
+    if (product) setScanned(product);
+    else setUnknownCode(code);
+  }
+
+  function addScanned(product: CatalogProduct, quantity: number) {
+    setCart((current) => {
+      const withProduct = addToCart(current, product);
+      const line = withProduct.find(
+        (item) => item.variantId === product.variants[0].id,
+      )!;
+      return setQuantity(
+        withProduct,
+        line.variantId,
+        line.quantity - 1 + quantity,
+      );
+    });
+    setScanned(null);
+    setError(undefined);
+    notify.success('Adicionado ao carrinho', `${quantity} × ${product.name}`);
   }
 
   function choose(next: Payment) {
@@ -522,26 +572,13 @@ export function NewSaleFlow({
                     ? 'Adicionar mais produtos'
                     : 'O que o cliente está levando?'}
                 </h2>
-                <div className="relative">
-                  <PackageSearch
-                    className="pointer-events-none absolute top-1/2 left-3 size-5 -translate-y-1/2 text-neutral-300"
-                    aria-hidden="true"
-                  />
-                  <input
-                    type="search"
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    onKeyDown={onSearchKeyDown}
-                    placeholder="Buscar por nome ou código"
-                    aria-label="Buscar produto por nome ou código"
-                    autoComplete="off"
-                    className="h-12 w-full rounded-md border border-neutral-200 bg-neutral-0 pr-11 pl-10 text-md text-neutral-900 focus:border-brand-accent focus:outline-none"
-                  />
-                  <ScanBarcode
-                    className="pointer-events-none absolute top-1/2 right-3 size-5 -translate-y-1/2 text-neutral-300"
-                    aria-hidden="true"
-                  />
-                </div>
+                <ScanSearchField
+                  value={query}
+                  onChange={setQuery}
+                  onEnter={addFirstResult}
+                  onScan={() => setScannerOpen(true)}
+                  placeholder="Buscar por nome ou código"
+                />
                 <ul
                   className="grid grid-cols-1 gap-2 sm:grid-cols-2"
                   aria-label="Produtos"
@@ -1011,6 +1048,51 @@ export function NewSaleFlow({
           </div>
         </aside>
       </div>
+
+      <BarcodeScanner
+        open={scannerOpen}
+        onOpenChange={setScannerOpen}
+        onDetected={onScanned}
+      />
+      <ProductSheet
+        product={scanned}
+        stock={
+          scanned && stock ? (stock[scanned.variants[0].id] ?? 0) : undefined
+        }
+        inCart={
+          scanned
+            ? (cart.find((line) => line.variantId === scanned.variants[0].id)
+                ?.quantity ?? 0)
+            : 0
+        }
+        onOpenChange={(open) => !open && setScanned(null)}
+        onAdd={addScanned}
+        onScanNext={() => {
+          setScanned(null);
+          setScannerOpen(true);
+        }}
+      />
+      <UnknownCodeSheet
+        code={unknownCode}
+        products={products}
+        canManageCatalog={canManageCatalog}
+        onOpenChange={(open) => !open && setUnknownCode(null)}
+        onResolved={(product, how) => {
+          setProducts((current) =>
+            how === 'created'
+              ? [...current, product]
+              : current.map((item) =>
+                  item.id === product.id ? product : item,
+                ),
+          );
+          setUnknownCode(null);
+          setScanned(product);
+          notify.success(
+            how === 'created' ? 'Produto cadastrado' : 'Código vinculado',
+            product.name,
+          );
+        }}
+      />
 
       <TaskFlowFooter
         error={error}

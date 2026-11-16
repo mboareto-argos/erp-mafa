@@ -33,3 +33,38 @@ pnpm --filter @erp-mafa/api test:integration
 
 O cenário `rls-database-enforcement.integration-spec.ts` comprova a política no
 PostgreSQL sem depender apenas do filtro da aplicação.
+
+## Aplicar migrations em produção (Neon)
+
+O deploy do Vercel **não** é a fonte de verdade das migrations: confira em Vercel → projeto
+da API → Settings → Build & Deployment → *Build Command* se há `prisma migrate deploy`. Se não
+houver, as migrations são aplicadas manualmente, seguindo esta ordem.
+
+**Regra de ordem:** migration primeiro, código depois. Migrations deste projeto são aditivas
+(colunas opcionais, tabelas e índices novos), então o código antigo continua funcionando com o
+banco já migrado; o contrário (código novo com banco antigo) quebra as telas que leem a coluna
+nova.
+
+1. **Ver o que já foi aplicado.** No SQL Editor do Neon (banco de produção):
+   ```sql
+   select migration_name, finished_at
+   from _prisma_migrations
+   order by finished_at desc
+   limit 5;
+   ```
+   Compare com as pastas em `apps/api/prisma/migrations/`. As que não aparecem são as pendentes.
+2. **Backup instantâneo.** No Neon: Branches → *Create branch* a partir de `main` (produção),
+   nome `backup-antes-<migration>`. É uma cópia do banco naquele instante; dá para voltar a ela
+   se algo der errado.
+3. **Aplicar.** Com o ambiente local de pé (`docker compose up -d`), usando a connection string
+   **administrativa** do Neon (a mesma de `DIRECT_URL`, nunca a do papel `erp_mafa_app`):
+   ```bash
+   docker compose exec app sh -c 'cd apps/api && DATABASE_URL="<url-admin-neon>" DIRECT_URL="<url-admin-neon>" npx prisma migrate deploy'
+   ```
+   A saída lista cada migration aplicada e termina com *All migrations have been successfully applied*.
+4. **Conferir.** Repita o passo 1: a migration nova deve aparecer com `finished_at` preenchido.
+5. **Publicar o código.** Só agora faça o merge do PR (o Vercel publica a API e o web).
+6. **Limpar.** Depois de alguns dias sem problemas, apague a branch de backup no Neon.
+
+Se o passo 3 falhar no meio, nada do código novo foi publicado ainda: corrija e rode de novo
+(`migrate deploy` só aplica o que falta) ou restaure a branch de backup.

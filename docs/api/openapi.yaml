@@ -358,6 +358,12 @@ paths:
                 salePrice:
                   type: number
                   description: Preço de venda padrão inicial, opcional.
+                barcode:
+                  type: string
+                  maxLength: 128
+                  description: >
+                    Código de barras (EAN/UPC) ou conteúdo do QR da variação padrão.
+                    Opcional; único na empresa quando informado (BR §10.3).
       responses:
         "201":
           description: Criado
@@ -370,7 +376,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
         "409":
-          description: SKU já em uso nesta empresa
+          description: SKU (SKU_IN_USE) ou código de barras (BARCODE_IN_USE) já em uso nesta empresa
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -441,6 +447,10 @@ paths:
                 categoryId: { type: string, format: uuid, nullable: true }
                 brandId: { type: string, format: uuid, nullable: true }
                 minStock: { type: number, nullable: true }
+                barcode:
+                  type: string
+                  nullable: true
+                  description: Código de barras da variação padrão; null remove (BR §10.3).
       responses:
         "200":
           description: OK
@@ -2354,6 +2364,7 @@ components:
             properties:
               id: { type: string, format: uuid }
               skuVariant: { type: string }
+              barcode: { type: string, nullable: true }
         prices:
           type: array
           description: Na listagem contém somente o preço vigente; no detalhe contém o histórico completo, do mais recente ao mais antigo.

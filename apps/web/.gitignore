@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# decodificador de código de barras copiado do pacote zxing-wasm (scripts/copy-zxing-wasm.mjs)
+/public/vendor/zxing/

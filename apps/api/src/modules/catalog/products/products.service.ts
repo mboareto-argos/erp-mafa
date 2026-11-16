@@ -11,14 +11,18 @@ import { RepriceProductDto } from './dto/reprice-product.schema';
 const PRODUCT_INCLUDE = {
   category: true,
   brand: true,
-  variants: { select: { id: true, skuVariant: true } as const },
+  variants: {
+    select: { id: true, skuVariant: true, barcode: true } as const,
+  },
   prices: { orderBy: { effectiveFrom: 'desc' as const }, take: 1 },
 } satisfies Prisma.ProductInclude;
 
 const PRODUCT_DETAIL_INCLUDE = {
   category: true,
   brand: true,
-  variants: { select: { id: true, skuVariant: true } as const },
+  variants: {
+    select: { id: true, skuVariant: true, barcode: true } as const,
+  },
   prices: {
     where: { deletedAt: null },
     orderBy: { effectiveFrom: 'desc' as const },
@@ -48,6 +52,7 @@ export class ProductsService {
       tenant.companyId,
     );
     await this.assertBelongsToCompany('brand', dto.brandId, tenant.companyId);
+    await this.assertBarcodeAvailable(tenant.companyId, dto.barcode);
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -72,6 +77,7 @@ export class ProductsService {
             companyId: tenant.companyId,
             productId: product.id,
             skuVariant: dto.sku,
+            barcode: dto.barcode,
             attributes: {},
             createdBy: tenant.userId,
           },
@@ -104,18 +110,7 @@ export class ProductsService {
         });
       });
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        throw new AppError(
-          'SKU_IN_USE',
-          'Já existe um produto com este SKU.',
-          HttpStatus.CONFLICT,
-          'sku',
-        );
-      }
-      throw error;
+      throw uniqueConflict(error, dto.barcode);
     }
   }
 
@@ -182,26 +177,55 @@ export class ProductsService {
     if (dto.brandId) {
       await this.assertBelongsToCompany('brand', dto.brandId, companyId);
     }
+    const { barcode, ...productData } = dto;
+    await this.assertBarcodeAvailable(companyId, barcode, id);
     try {
-      return await this.prisma.product.update({
-        where: { id },
-        data: dto,
-        include: PRODUCT_INCLUDE,
+      return await this.prisma.$transaction(async (tx) => {
+        // Produto simples tem uma única variação "padrão": o código de
+        // barras é dela (BR §10.3, variações).
+        if (barcode !== undefined) {
+          await tx.productVariant.updateMany({
+            where: { companyId, productId: id, deletedAt: null },
+            data: { barcode },
+          });
+        }
+        return tx.product.update({
+          where: { id },
+          data: productData,
+          include: PRODUCT_INCLUDE,
+        });
       });
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        throw new AppError(
-          'SKU_IN_USE',
-          'Já existe um produto com este SKU.',
-          HttpStatus.CONFLICT,
-          'sku',
-        );
-      }
-      throw error;
+      throw uniqueConflict(error, barcode);
     }
+  }
+
+  // BR §10.3: código de barras único na empresa. Conferido ANTES de gravar
+  // porque, dentro da transação por requisição (RLS), um erro de unicidade
+  // aborta a transação e o Prisma não informa qual índice conflitou
+  // (meta.target = null com o papel restrito). O índice único continua
+  // sendo a garantia final em caso de corrida.
+  private async assertBarcodeAvailable(
+    companyId: string,
+    barcode: string | null | undefined,
+    exceptProductId?: string,
+  ) {
+    if (!barcode) return;
+    const taken = await this.prisma.productVariant.findFirst({
+      where: {
+        companyId,
+        barcode,
+        ...(exceptProductId ? { NOT: { productId: exceptProductId } } : {}),
+      },
+      select: { id: true },
+    });
+    if (taken)
+      throw new AppError(
+        'BARCODE_IN_USE',
+        'Este código de barras já está em outro produto.',
+        HttpStatus.CONFLICT,
+        'barcode',
+      );
   }
 
   // Nunca apaga — so inativa (RN 10.3.3/10.3.4 do Documento de Negocio).
@@ -357,4 +381,23 @@ export class ProductsService {
       );
     }
   }
+}
+
+// P2002 que escapou da conferência prévia (corrida entre dois cadastros):
+// sem saber qual índice conflitou, a mensagem cobre os dois campos quando
+// havia código de barras na requisição.
+function uniqueConflict(error: unknown, barcode: string | null | undefined) {
+  if (
+    !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+    error.code !== 'P2002'
+  )
+    return error;
+  return new AppError(
+    'SKU_IN_USE',
+    barcode
+      ? 'Já existe um produto com este SKU ou código de barras.'
+      : 'Já existe um produto com este SKU.',
+    HttpStatus.CONFLICT,
+    'sku',
+  );
 }

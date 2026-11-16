@@ -27,7 +27,7 @@ const optional = <T,>(request: Promise<unknown>, fallback: T) =>
 export default async function NewPurchasePage({
   searchParams,
 }: {
-  searchParams: Promise<{ rascunho?: string }>;
+  searchParams: Promise<{ rascunho?: string; adicionar?: string }>;
 }) {
   const session = (await getSession()) as { permissions: string[] } | null;
   const permissions = session?.permissions ?? [];
@@ -36,7 +36,7 @@ export default async function NewPurchasePage({
   if (!permissions.includes('manage_purchasing')) redirect('/compras');
   const canPay = permissions.includes('manage_payables');
 
-  const { rascunho } = await searchParams;
+  const { rascunho, adicionar } = await searchParams;
   const [products, suppliers, accounts, draft] = await Promise.all([
     backendAuthenticatedRequest('/catalog/products') as Promise<
       CatalogProduct[]
@@ -67,6 +67,7 @@ export default async function NewPurchasePage({
       canCreateProduct={permissions.includes('manage_catalog')}
       canCreateSupplier={permissions.includes('manage_purchasing')}
       canPay={canPay}
+      initialAdd={adicionar}
       draft={
         editableDraft
           ? {

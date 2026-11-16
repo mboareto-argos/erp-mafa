@@ -7,7 +7,7 @@ import {
   paymentProblem,
   purchaseTotals,
   receivePayload,
-  suggestedSku,
+  suggestedFields,
   updateLine,
   type PurchaseLine,
 } from './purchase-math';
@@ -137,10 +137,22 @@ describe('pagamento e corpo do recebimento', () => {
   });
 });
 
-describe('código sugerido para produto novo', () => {
-  it('usa o que foi buscado/bipado quando parece código', () => {
-    expect(suggestedSku('6291108730515')).toBe('6291108730515');
-    expect(suggestedSku('lat-yara-100')).toBe('LAT-YARA-100');
-    expect(suggestedSku('Yara rosa')).toBe('');
+describe('campos sugeridos para produto novo', () => {
+  it('dígitos viram código de barras; código com letras vira SKU; texto vira nome', () => {
+    expect(suggestedFields('6291108730515')).toEqual({
+      barcode: '6291108730515',
+      sku: '',
+      name: '',
+    });
+    expect(suggestedFields('lat-yara-100')).toEqual({
+      barcode: '',
+      sku: 'LAT-YARA-100',
+      name: '',
+    });
+    expect(suggestedFields('Yara rosa')).toEqual({
+      barcode: '',
+      sku: '',
+      name: 'Yara rosa',
+    });
   });
 });

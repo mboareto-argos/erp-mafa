@@ -53,14 +53,28 @@ beforeEach(() => router.push.mockReset());
 afterEach(() => vi.unstubAllGlobals());
 
 describe('NewPurchaseFlow', () => {
-  it('código desconhecido + Enter abre o cadastro do produto já com o código', async () => {
+  it('código de barras desconhecido + Enter oferece vincular ou cadastrar', async () => {
     renderFlow();
     await userEvent.type(
       screen.getByRole('searchbox', { name: /Buscar produto/ }),
       '6291108730515{Enter}',
     );
-    expect(screen.getByText('Novo produto')).toBeInTheDocument();
-    expect(screen.getByLabelText(/Código/)).toHaveValue('6291108730515');
+    expect(screen.getByText('Código não encontrado')).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole('button', { name: /Cadastrar produto novo/ }),
+    );
+    expect(screen.getByLabelText(/Código de barras/)).toHaveValue(
+      '6291108730515',
+    );
+  });
+
+  it('nome que não existe + Enter abre o cadastro com o nome', async () => {
+    renderFlow();
+    await userEvent.type(
+      screen.getByRole('searchbox', { name: /Buscar produto/ }),
+      'Hayaati{Enter}',
+    );
+    expect(screen.getByLabelText('Nome')).toHaveValue('Hayaati');
   });
 
   it('sem permissão de catálogo, não oferece cadastrar produto (DS-PERM-001)', async () => {

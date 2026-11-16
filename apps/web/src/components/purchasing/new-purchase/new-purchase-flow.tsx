@@ -1,15 +1,13 @@
 'use client';
 
-import { useMemo, useState, type KeyboardEvent } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   CircleSlash,
   Landmark,
   PackageCheck,
   PackagePlus,
-  PackageSearch,
   Plus,
-  ScanBarcode,
   Truck,
   WalletCards,
   type LucideIcon,
@@ -31,7 +29,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { CurrencyInput } from '@/components/ui/currency-input';
 import { notify } from '@/components/ui/toaster';
-import { searchProducts, type CatalogProduct } from '@/lib/catalog';
+import { findByCode, searchProducts, type CatalogProduct } from '@/lib/catalog';
+import { BarcodeScanner } from '@/components/scanner/barcode-scanner';
+import { ScanSearchField } from '@/components/scanner/scan-search-field';
+import { UnknownCodeSheet } from '@/components/scanner/unknown-code-sheet';
 import { installmentSchedule } from '@/lib/installments';
 import { centsToDecimal, formatCents, toCents } from '@/lib/money';
 import { cn } from '@/lib/utils';
@@ -42,7 +43,8 @@ import {
   paymentProblem,
   purchaseTotals,
   receivePayload,
-  suggestedSku,
+  looksLikeBarcode,
+  suggestedFields,
   updateLine,
   type Arrival,
   type PurchaseLine,
@@ -98,6 +100,7 @@ export function NewPurchaseFlow({
   canCreateProduct,
   canCreateSupplier,
   canPay,
+  initialAdd,
   draft,
 }: {
   products: CatalogProduct[];
@@ -106,6 +109,8 @@ export function NewPurchaseFlow({
   canCreateProduct: boolean;
   canCreateSupplier: boolean;
   canPay: boolean;
+  /** Variação a colocar na compra ao abrir (ex.: "Comprar mais" na página do produto). */
+  initialAdd?: string;
   draft: Draft | null;
 }) {
   const router = useRouter();
@@ -134,10 +139,20 @@ export function NewPurchaseFlow({
               ]
             : [];
         })
-      : [],
+      : (() => {
+          const product = initialAdd
+            ? initialProducts.find((candidate) =>
+                candidate.variants.some((variant) => variant.id === initialAdd),
+              )
+            : undefined;
+          return product ? addToPurchase([], product) : [];
+        })(),
   );
   const [query, setQuery] = useState('');
   const [creatingProduct, setCreatingProduct] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [lastRead, setLastRead] = useState<string>();
+  const [unknownCode, setUnknownCode] = useState<string | null>(null);
   const [arrival, setArrival] = useState<Arrival | null>(null);
   const [freightCents, setFreightCents] = useState(0);
   const [payment, setPayment] = useState<PurchasePayment | null>(null);
@@ -176,16 +191,33 @@ export function NewPurchaseFlow({
     setError(undefined);
   }
 
-  function onSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    // Leitor de código de barras: código + Enter. Produto conhecido entra na
-    // compra; código desconhecido abre o cadastro já com o código preenchido.
-    if (event.key !== 'Enter' || !query.trim()) return;
-    event.preventDefault();
+  // Leitor de código USB/Bluetooth (código + Enter) ou busca digitada:
+  // produto conhecido entra na compra; código de barras desconhecido oferece
+  // vincular a um produto existente ou cadastrar; texto vira cadastro.
+  function addFirstResult() {
+    if (!query.trim()) return;
     if (results[0]) {
       add(results[0]);
       setQuery('');
+    } else if (looksLikeBarcode(query)) {
+      setUnknownCode(query.trim());
     } else if (canCreateProduct) {
       setCreatingProduct(true);
+    }
+  }
+
+  // Câmera em modo contínuo: cada frasco bipado soma 1 na compra.
+  function onScanned(code: string) {
+    const product = findByCode(products, code);
+    if (product) {
+      const already =
+        lines.find((line) => line.variantId === product.variants[0].id)
+          ?.quantity ?? 0;
+      add(product);
+      setLastRead(`+1 ${product.name} (${already + 1} na compra)`);
+    } else {
+      setScannerOpen(false);
+      setUnknownCode(code);
     }
   }
 
@@ -501,35 +533,26 @@ export function NewPurchaseFlow({
                     ? 'Adicionar mais produtos'
                     : 'O que você comprou?'}
                 </h2>
-                <div className="relative">
-                  <PackageSearch
-                    className="pointer-events-none absolute top-1/2 left-3 size-5 -translate-y-1/2 text-neutral-300"
-                    aria-hidden="true"
-                  />
-                  <input
-                    type="search"
-                    value={query}
-                    onChange={(event) => {
-                      setQuery(event.target.value);
-                      setCreatingProduct(false);
-                    }}
-                    onKeyDown={onSearchKeyDown}
-                    placeholder="Buscar ou bipar o código"
-                    aria-label="Buscar produto por nome ou código"
-                    autoComplete="off"
-                    className="h-12 w-full rounded-md border border-neutral-200 bg-neutral-0 pr-11 pl-10 text-md text-neutral-900 focus:border-brand-accent focus:outline-none"
-                  />
-                  <ScanBarcode
-                    className="pointer-events-none absolute top-1/2 right-3 size-5 -translate-y-1/2 text-neutral-300"
-                    aria-hidden="true"
-                  />
-                </div>
+                <ScanSearchField
+                  value={query}
+                  onChange={(value) => {
+                    setQuery(value);
+                    setCreatingProduct(false);
+                  }}
+                  onEnter={addFirstResult}
+                  onScan={() => {
+                    setLastRead(undefined);
+                    setScannerOpen(true);
+                  }}
+                  placeholder="Buscar ou bipar o código"
+                />
 
                 {creatingProduct ? (
                   <QuickProductForm
                     key={query}
-                    initialSku={suggestedSku(query)}
-                    initialName={suggestedSku(query) ? '' : query.trim()}
+                    initialBarcode={suggestedFields(query).barcode}
+                    initialSku={suggestedFields(query).sku}
+                    initialName={suggestedFields(query).name}
                     onCancel={() => setCreatingProduct(false)}
                     onCreated={(product) => {
                       setProducts((current) => [...current, product]);
@@ -1014,6 +1037,37 @@ export function NewPurchaseFlow({
           </div>
         </aside>
       </div>
+
+      <BarcodeScanner
+        open={scannerOpen}
+        onOpenChange={setScannerOpen}
+        onDetected={onScanned}
+        continuous
+        lastRead={lastRead}
+        title="Bipe os produtos que chegaram"
+      />
+      <UnknownCodeSheet
+        code={unknownCode}
+        products={products}
+        canManageCatalog={canCreateProduct}
+        onOpenChange={(open) => !open && setUnknownCode(null)}
+        onResolved={(product, how) => {
+          setProducts((current) =>
+            how === 'created'
+              ? [...current, product]
+              : current.map((item) =>
+                  item.id === product.id ? product : item,
+                ),
+          );
+          add(product);
+          setUnknownCode(null);
+          setQuery('');
+          notify.success(
+            how === 'created' ? 'Produto cadastrado' : 'Código vinculado',
+            `${product.name} entrou na compra`,
+          );
+        }}
+      />
 
       <TaskFlowFooter
         error={error}
