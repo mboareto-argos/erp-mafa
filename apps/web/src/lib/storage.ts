@@ -3,10 +3,12 @@ import 'server-only';
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join, normalize } from 'node:path';
 import { del, put } from '@vercel/blob';
+import { blobConfigured } from './storage-config';
 
 // Armazenamento de arquivos do app (ADR-0003).
-// - Produção: Vercel Blob público (precisa de BLOB_READ_WRITE_TOKEN no
-//   projeto web do Vercel — criado ao conectar um Blob store).
+// - Produção: Vercel Blob público. Ao conectar um store ao projeto web, o
+//   Vercel cria BLOB_STORE_ID (autenticação OIDC automática) ou, em stores
+//   antigos, BLOB_READ_WRITE_TOKEN — ver storage-config.ts.
 // - Desenvolvimento local sem token: grava em public/uploads/ e serve pelo
 //   próprio Next. Nunca usado no Vercel (lá o disco é só leitura).
 
@@ -21,7 +23,7 @@ export class StorageNotConfiguredError extends Error {
 }
 
 function blobEnabled() {
-  if (process.env.BLOB_READ_WRITE_TOKEN) return true;
+  if (blobConfigured()) return true;
   if (process.env.VERCEL) throw new StorageNotConfiguredError();
   return false;
 }

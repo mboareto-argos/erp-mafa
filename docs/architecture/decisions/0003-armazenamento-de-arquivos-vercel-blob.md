@@ -21,12 +21,14 @@ Usar o **Vercel Blob** (store público) para as fotos de produto:
 - A API só aceita `imageUrl` do domínio `*.public.blob.vercel-storage.com` (ou `/uploads/`
   no ambiente local) — nunca uma URL externa arbitrária.
 - Ao trocar ou remover a foto, o arquivo antigo é apagado do Blob.
-- Sem `BLOB_READ_WRITE_TOKEN` (ambiente local em container), o web grava em
+- Credenciais: ao conectar o store ao projeto web, o Vercel cria `BLOB_STORE_ID` e o SDK
+  autentica pelo token OIDC do deploy (sem segredo de longa duração); stores antigos usavam
+  `BLOB_READ_WRITE_TOKEN`. Os dois formatos são aceitos.
+- Sem store conectado (ambiente local em container), o web grava em
   `apps/web/public/uploads/` com a mesma interface — só para desenvolvimento.
 
 ## Consequências
-- Zero infraestrutura nova: o store é criado no painel do Vercel e o token entra como
-  variável de ambiente do projeto web.
+- Zero infraestrutura nova: o store é criado no painel do Vercel e conectado ao projeto web.
 - As URLs são públicas (qualquer pessoa com o link vê a foto). Aceitável para foto de
   produto; **não** usar este store para documentos sensíveis (notas, comprovantes) — esses
   pedirão store privado ou URLs assinadas num ADR próprio.
