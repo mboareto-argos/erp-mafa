@@ -4,17 +4,9 @@ import {
   PurchaseActions,
   type PurchaseListItem,
 } from '@/components/purchasing/purchase-actions';
-import { QuickPurchaseForm } from '@/components/purchasing/quick-purchase-form';
+import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { backendAuthenticatedRequest, getSession } from '@/lib/session';
-
-type Product = {
-  id: string;
-  name: string;
-  sku: string;
-  status: string;
-  variants: Array<{ id: string }>;
-};
-type Supplier = { id: string; name: string; status: string };
 
 const purchaseStatus: Record<string, string> = {
   draft: 'Rascunho',
@@ -45,21 +37,18 @@ export default async function PurchasesPage({
 }: {
   searchParams: Promise<{ new?: string; edit?: string }>;
 }) {
-  const [purchases, products, suppliers, session] = await Promise.all([
+  // Links antigos (?new=purchase, ?edit=ID) levam para a Nova compra em tela cheia.
+  const { new: newAction, edit: editId } = await searchParams;
+  if (editId) redirect(`/compras/nova?rascunho=${editId}`);
+  if (newAction === 'purchase') redirect('/compras/nova');
+
+  const [purchases, session] = await Promise.all([
     backendAuthenticatedRequest('/purchasing/purchases') as Promise<
       PurchaseListItem[]
     >,
-    backendAuthenticatedRequest('/catalog/products') as Promise<Product[]>,
-    backendAuthenticatedRequest('/purchasing/suppliers') as Promise<Supplier[]>,
     getSession() as Promise<{ permissions: string[] } | null>,
   ]);
   const canManage = session?.permissions.includes('manage_purchasing') ?? false;
-  const { new: newAction, edit: editId } = await searchParams;
-  const editingPurchase = canManage
-    ? purchases.find(
-        (purchase) => purchase.id === editId && purchase.status === 'draft',
-      )
-    : undefined;
   const received = purchases.filter(
     (purchase) => purchase.status === 'received',
   );
@@ -78,29 +67,14 @@ export default async function PurchasesPage({
           <p>Registre o recebimento para atualizar estoque e custo.</p>
         </div>
       </div>
-      {canManage && products.length > 0 && (
+      {canManage && (
         <div className="page-workspace-action">
-          <QuickPurchaseForm
-            key={
-              editingPurchase
-                ? `edit-${editingPurchase.id}`
-                : newAction === 'purchase'
-                  ? 'new-purchase'
-                  : 'closed-purchase'
-            }
-            products={products}
-            suppliers={suppliers}
-            initialOpen={newAction === 'purchase' || Boolean(editingPurchase)}
-            editingPurchase={
-              editingPurchase
-                ? {
-                    id: editingPurchase.id,
-                    supplierId: editingPurchase.supplier?.id,
-                    items: editingPurchase.items,
-                  }
-                : undefined
-            }
-          />
+          <Link
+            className="button button-primary compact-button"
+            href="/compras/nova"
+          >
+            Nova compra
+          </Link>
         </div>
       )}
       <ListingMetrics
@@ -146,16 +120,19 @@ export default async function PurchasesPage({
                       <span>
                         <AppIcon name="purchases" />
                       </span>
-                      <strong>
-                        {products.length === 0
-                          ? 'Cadastre um produto antes de registrar uma compra'
-                          : 'Nenhuma compra registrada ainda'}
-                      </strong>
+                      <strong>Nenhuma compra registrada ainda</strong>
                       <p>
-                        {products.length === 0
-                          ? 'O produto é a referência que mantém compras, estoque e vendas conectados.'
-                          : 'Quando uma compra for criada, ela aparecerá nesta listagem.'}
+                        Registre a primeira compra: dá para cadastrar os
+                        produtos e o fornecedor ali mesmo.
                       </p>
+                      {canManage && (
+                        <Link
+                          className="button button-primary compact-button"
+                          href="/compras/nova"
+                        >
+                          Registrar primeira compra
+                        </Link>
+                      )}
                     </div>
                   </td>
                 </tr>

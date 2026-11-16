@@ -797,7 +797,7 @@ td .status-badge { margin-top: 6px; }
   /* No celular a ação rápida mora no botão flutuante (+), não no topo. */
   .header-new-button { display: none; }
   /* Tela cheia de tarefa (Nova venda): sem barra inferior, rodapé próprio. */
-  .app-shell:has(.new-sale-flow) { padding-bottom: 0; }
+  .app-shell:has(.task-flow) { padding-bottom: 0; }
   .sidebar { display: none; }
   .topbar { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; min-height: 60px; margin: 0; border-width: 0 0 1px; border-radius: 0; padding: 0 18px; box-shadow: none; }
   .header-brand { font-size: 16px; }.header-brand .brand-mark { width: 30px; height: 30px; flex-basis: 30px; font-size: 17px; }

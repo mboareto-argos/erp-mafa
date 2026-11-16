@@ -3,46 +3,72 @@
 import { useId, useMemo, useState } from 'react';
 import { Check, UserPlus, UserRound, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { formatPhone } from '@/lib/phone';
 import { cn } from '@/lib/utils';
 
-export type PickerCustomer = {
+export type PickerContact = {
   id: string;
   name: string;
   whatsapp?: string | null;
 };
 
-/** Máscara de celular BR: só dígitos, até 11 (DDD + 9 dígitos) → (11) 98888-7777. */
-export function formatPhone(value: string) {
-  const digits = value.replace(/\D/g, '').slice(0, 11);
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-  if (digits.length <= 10)
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
-  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
-}
+type Kind = 'customer' | 'supplier';
+const TEXT: Record<
+  Kind,
+  {
+    noun: string;
+    plural: string;
+    endpoint: string;
+    whatsappHint: string;
+    requiredHint: string;
+  }
+> = {
+  customer: {
+    noun: 'cliente',
+    plural: 'Clientes',
+    endpoint: '/api/customers',
+    whatsappHint: 'opcional — usado para cobrar o fiado',
+    requiredHint: 'obrigatório no fiado',
+  },
+  supplier: {
+    noun: 'fornecedor',
+    plural: 'Fornecedores',
+    endpoint: '/api/purchasing/suppliers',
+    whatsappHint: 'opcional',
+    requiredHint: 'obrigatório na compra a prazo',
+  },
+};
 
 const normalize = (text: string) =>
-  text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
 
-// Escolher o cliente sem sair da venda — e cadastrar ali mesmo quando ele
-// ainda não existe (antes era preciso ir em Clientes e voltar). O cadastro
-// rápido pede só nome e WhatsApp; o resto se completa depois em Clientes.
-export function CustomerPicker({
-  customers,
+// Escolher o cliente/fornecedor sem sair da venda ou da compra — e
+// cadastrar ali mesmo quando ele ainda não existe (antes era preciso ir na
+// tela de cadastro e voltar). O cadastro rápido pede só nome e WhatsApp; o
+// resto se completa depois na tela própria.
+export function ContactPicker({
+  kind,
+  contacts: customers,
   value,
   onChange,
   onCreated,
   canCreate,
   required,
 }: {
-  customers: PickerCustomer[];
+  kind: Kind;
+  contacts: PickerContact[];
   value: string;
   onChange: (id: string) => void;
-  onCreated: (customer: PickerCustomer) => void;
+  onCreated: (contact: PickerContact) => void;
   canCreate: boolean;
   required?: boolean;
 }) {
   const id = useId();
+  const text = TEXT[kind];
   const [query, setQuery] = useState('');
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
@@ -60,11 +86,11 @@ export function CustomerPicker({
   }, [customers, query]);
 
   async function create() {
-    if (!name.trim()) return setError('Informe o nome do cliente.');
+    if (!name.trim()) return setError(`Informe o nome do ${text.noun}.`);
     setPending(true);
     setError(undefined);
     try {
-      const response = await fetch('/api/customers', {
+      const response = await fetch(text.endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -72,12 +98,12 @@ export function CustomerPicker({
           ...(whatsapp.trim() ? { whatsapp: whatsapp.trim() } : {}),
         }),
       });
-      const body = (await response.json()) as PickerCustomer & {
+      const body = (await response.json()) as PickerContact & {
         message?: string;
       };
       if (!response.ok || !body.id)
         throw new Error(
-          body.message ?? 'Não foi possível cadastrar o cliente.',
+          body.message ?? `Não foi possível cadastrar o ${text.noun}.`,
         );
       onCreated(body);
       onChange(body.id);
@@ -89,7 +115,7 @@ export function CustomerPicker({
       setError(
         cause instanceof Error
           ? cause.message
-          : 'Não foi possível cadastrar o cliente.',
+          : `Não foi possível cadastrar o ${text.noun}.`,
       );
     } finally {
       setPending(false);
@@ -117,7 +143,7 @@ export function CustomerPicker({
           variant="tertiary"
           size="sm"
           onClick={() => onChange('')}
-          aria-label={`Trocar cliente (${selected.name})`}
+          aria-label={`Trocar ${text.noun} (${selected.name})`}
         >
           <X aria-hidden="true" />
           Trocar
@@ -129,7 +155,7 @@ export function CustomerPicker({
     return (
       <div className="grid gap-3 rounded-lg border border-neutral-100 bg-neutral-0 p-3">
         <strong className="text-sm font-semibold text-neutral-900">
-          Novo cliente
+          Novo {text.noun}
         </strong>
         <label
           className="grid gap-1 text-sm font-semibold text-neutral-700"
@@ -153,7 +179,7 @@ export function CustomerPicker({
         >
           WhatsApp{' '}
           <span className="font-normal text-neutral-500">
-            (opcional — usado para cobrar o fiado)
+            ({text.whatsappHint})
           </span>
           <input
             id={`${id}-whatsapp`}
@@ -198,7 +224,7 @@ export function CustomerPicker({
   return (
     <div className="grid gap-2">
       <label className="sr-only" htmlFor={`${id}-search`}>
-        Buscar cliente
+        Buscar {text.noun}
       </label>
       <input
         id={`${id}-search`}
@@ -206,14 +232,14 @@ export function CustomerPicker({
         className="h-12 rounded-md border border-neutral-200 bg-neutral-0 px-3 text-md text-neutral-900 focus:border-brand-accent focus:outline-none"
         placeholder={
           required
-            ? 'Buscar cliente (obrigatório no fiado)'
-            : 'Buscar cliente pelo nome'
+            ? `Buscar ${text.noun} (${text.requiredHint})`
+            : `Buscar ${text.noun} pelo nome`
         }
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         autoComplete="off"
       />
-      <ul className="grid gap-1" aria-label="Clientes encontrados">
+      <ul className="grid gap-1" aria-label={`${text.plural} encontrados`}>
         {matches.map((customer) => (
           <li key={customer.id}>
             <button
@@ -233,7 +259,7 @@ export function CustomerPicker({
         ))}
         {matches.length === 0 && (
           <li className="px-3 py-2 text-sm text-neutral-500">
-            Nenhum cliente com &quot;{query}&quot;.
+            Nenhum {text.noun} com &quot;{query}&quot;.
           </li>
         )}
       </ul>
@@ -252,7 +278,7 @@ export function CustomerPicker({
           <UserPlus className="size-5" aria-hidden="true" />
           {query.trim()
             ? `Cadastrar "${query.trim()}"`
-            : 'Cadastrar novo cliente'}
+            : `Cadastrar novo ${text.noun}`}
         </button>
       )}
     </div>

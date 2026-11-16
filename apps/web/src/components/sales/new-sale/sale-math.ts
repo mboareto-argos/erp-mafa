@@ -1,19 +1,14 @@
+import type { CatalogProduct } from '@/lib/catalog';
 import { centsToDecimal, toCents } from '@/lib/money';
+
+export { searchProducts, type CatalogProduct } from '@/lib/catalog';
+export { installmentSchedule } from '@/lib/installments';
 
 // Regras de prévia da Nova venda: carrinho, totais, taxa da forma de
 // pagamento e agenda de parcelas do fiado. Tudo em centavos inteiros. A
 // agenda espelha apps/api/src/common/finance/installment-schedule.ts para
 // que o usuário veja exatamente as parcelas que a API vai gerar
 // (DS-WIZARD-002: "o usuário vê antes de confirmar, não depois").
-
-export type CatalogProduct = {
-  id: string;
-  name: string;
-  sku: string;
-  status: string;
-  variants: { id: string }[];
-  prices: { salePrice: string }[];
-};
 
 export type CartLine = {
   productId: string;
@@ -100,52 +95,6 @@ export function paymentFee(amountCents: number, method?: PaymentMethod) {
   const fixed = toCents(method.feeFixed ?? 0);
   const fee = Math.round((amountCents * rate) / 100) + fixed;
   return { fee, net: amountCents - fee };
-}
-
-/** Espelho de buildInstallmentSchedule (API): diferença de centavos na última parcela. */
-export function installmentSchedule(
-  totalCents: number,
-  count: number,
-  firstDueDate: string,
-) {
-  if (totalCents <= 0 || count < 1 || !/^\d{4}-\d{2}-\d{2}$/.test(firstDueDate))
-    return [];
-  const base = Math.floor(totalCents / count);
-  const first = new Date(`${firstDueDate}T00:00:00.000Z`);
-  return Array.from({ length: count }, (_, index) => {
-    const targetMonth = first.getUTCMonth() + index;
-    const year = first.getUTCFullYear() + Math.floor(targetMonth / 12);
-    const month = ((targetMonth % 12) + 12) % 12;
-    const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-    const due = new Date(
-      Date.UTC(year, month, Math.min(first.getUTCDate(), lastDay)),
-    );
-    return {
-      number: index + 1,
-      cents: index === count - 1 ? totalCents - base * (count - 1) : base,
-      dueDate: due.toISOString().slice(0, 10),
-    };
-  });
-}
-
-/** Busca sem acento/caixa por nome ou SKU; SKU exato vem primeiro. */
-export function searchProducts(products: CatalogProduct[], query: string) {
-  const normalize = (text: string) =>
-    text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
-  const q = normalize(query);
-  const active = products.filter(
-    (product) => product.status === 'active' && product.variants[0],
-  );
-  if (!q) return active;
-  const terms = q.split(/\s+/);
-  return active
-    .filter((product) => {
-      const haystack = `${normalize(product.name)} ${normalize(product.sku)}`;
-      return terms.every((term) => haystack.includes(term));
-    })
-    .sort(
-      (a, b) => Number(normalize(b.sku) === q) - Number(normalize(a.sku) === q),
-    );
 }
 
 export type Payment =

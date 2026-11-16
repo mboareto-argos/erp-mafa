@@ -1,11 +1,12 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CustomerPicker, formatPhone } from './customer-picker';
+import { formatPhone } from '@/lib/phone';
+import { ContactPicker } from './contact-picker';
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('CustomerPicker', () => {
+describe('ContactPicker', () => {
   it('cadastra o cliente ali mesmo e já o seleciona na venda', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -19,8 +20,9 @@ describe('CustomerPicker', () => {
     const onChange = vi.fn();
     const onCreated = vi.fn();
     render(
-      <CustomerPicker
-        customers={[]}
+      <ContactPicker
+        kind="customer"
+        contacts={[]}
         value=""
         onChange={onChange}
         onCreated={onCreated}
@@ -58,8 +60,9 @@ describe('CustomerPicker', () => {
 
   it('sem permissão de cadastrar cliente, o atalho não aparece (DS-PERM-001)', () => {
     render(
-      <CustomerPicker
-        customers={[{ id: 'c1', name: 'Ana' }]}
+      <ContactPicker
+        kind="customer"
+        contacts={[{ id: 'c1', name: 'Ana' }]}
         value=""
         onChange={vi.fn()}
         onCreated={vi.fn()}
@@ -68,6 +71,40 @@ describe('CustomerPicker', () => {
     );
     expect(screen.queryByRole('button', { name: /Cadastrar/ })).toBeNull();
     expect(screen.getByRole('button', { name: 'Ana' })).toBeInTheDocument();
+  });
+
+  it('fornecedor usa o cadastro de fornecedores', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 's1', name: 'Importadora Oriente' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const onChange = vi.fn();
+    render(
+      <ContactPicker
+        kind="supplier"
+        contacts={[]}
+        value=""
+        onChange={onChange}
+        onCreated={vi.fn()}
+        canCreate
+      />,
+    );
+    await userEvent.type(
+      screen.getByRole('searchbox', { name: 'Buscar fornecedor' }),
+      'Importadora Oriente',
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Cadastrar "Importadora Oriente"' }),
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: /Cadastrar e usar/ }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/purchasing/suppliers',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(onChange).toHaveBeenCalledWith('s1');
   });
 
   it('máscara de celular aceita só dígitos', () => {
