@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { AppIcon } from './app-icon';
 import { MobileNavigation } from './mobile-navigation';
-import { isActivePath, roleLabels, visibleGroups } from './navigation-config';
+import { activeHref, roleLabels, visibleGroups } from './navigation-config';
 
 export function AppNavigation({
   permissions,
@@ -28,6 +28,10 @@ export function AppNavigation({
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const groups = visibleGroups(permissions);
+  const activeItem = activeHref(
+    pathname,
+    groups.flatMap((group) => group.items.map((item) => item.href)),
+  );
 
   async function signOut() {
     await fetch('/api/session/logout', { method: 'POST' }).catch(() => null);
@@ -66,7 +70,7 @@ export function AppNavigation({
             <section className="nav-group" key={group.label}>
               <p className="nav-label">{group.label}</p>
               {group.items.map((item) => {
-                const active = isActivePath(pathname, item.href);
+                const active = item.href === activeItem;
                 return (
                   <Link
                     className="nav-link"

@@ -56,6 +56,11 @@ docker compose logs -f app                             # acompanhar os logs
   fica na constante `DEMO_LOGIN` do script.
 - Hot reload funciona nos dois apps: no container a web roda com webpack + polling
   (`dev:container`), porque o Turbopack não enxerga mudanças de arquivo do macOS via virtiofs.
+  Se uma classe nova do Tailwind não aparecer no navegador, salve `apps/web/src/app/globals.css`
+  (ou `touch` nele) para regerar o CSS — só acontece em desenvolvimento no container.
+- Memória: com 4 GB na VM do Rancher, rodar testes/lint junto com os servidores de dev pode
+  estourar a memória (o container reinicia sozinho). Recomendado 6–8 GB em Preferences →
+  Virtual Machine.
 - Testes: `docker compose exec app pnpm test` e
   `docker compose exec app pnpm --filter @erp-mafa/api test:integration`.
 - Recomeçar do zero (apaga só os dados locais): `docker compose down -v`.

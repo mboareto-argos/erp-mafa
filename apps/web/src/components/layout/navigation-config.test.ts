@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  activeHref,
   isActivePath,
   splitMobileNavigation,
   visibleGroups,
@@ -66,6 +67,15 @@ describe('navegação condicionada por permissão (DS-PERM-001)', () => {
       'Novo produto',
     ]);
     expect(visibleQuickActions(['view_sales'])).toEqual([]);
+  });
+
+  it('acende só o item mais específico (Quem me deve, não Financeiro)', () => {
+    const hrefs = ['/financeiro', '/financeiro/quem-me-deve', '/vendas'];
+    expect(activeHref('/financeiro/quem-me-deve', hrefs)).toBe(
+      '/financeiro/quem-me-deve',
+    );
+    expect(activeHref('/financeiro', hrefs)).toBe('/financeiro');
+    expect(activeHref('/vendas/nova', hrefs)).toBe('/vendas');
   });
 
   it('mantém o item ativo em sub-rotas sem confundir prefixos', () => {
