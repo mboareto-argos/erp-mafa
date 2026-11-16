@@ -29,6 +29,8 @@ type Dashboard = {
   overdueReceivablesCount?: number;
   overduePayablesCount?: number;
   cmv?: string;
+  giftCost?: string;
+  giftCount?: string;
   grossProfit?: string;
   netProfitEstimated?: string;
   margin?: string | null;
@@ -520,6 +522,16 @@ export default async function DashboardPage({
                 <dt>CMV</dt>
                 <dd>{money(dashboard.cmv)}</dd>
               </div>
+              {dashboard.giftCost !== undefined &&
+                Number(dashboard.giftCost) > 0 && (
+                  <div>
+                    <dt>Brindes (já no CMV)</dt>
+                    <dd>
+                      {money(dashboard.giftCost)} ·{' '}
+                      {Number(dashboard.giftCount ?? 0)} un.
+                    </dd>
+                  </div>
+                )}
               {dashboard.grossProfit !== undefined && (
                 <div>
                   <dt>Lucro bruto</dt>

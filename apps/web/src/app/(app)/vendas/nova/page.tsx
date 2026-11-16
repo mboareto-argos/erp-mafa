@@ -4,6 +4,7 @@ import type {
   CatalogProduct,
   PaymentMethod,
 } from '@/components/sales/new-sale/sale-math';
+import { withKitAvailability } from '@/lib/catalog';
 import { backendAuthenticatedRequest, getSession } from '@/lib/session';
 
 type Customer = {
@@ -21,7 +22,12 @@ type DraftSale = {
   discount: string;
   customer?: { id: string } | null;
   customerId?: string | null;
-  items: { productVariantId: string; quantity: string; unitPrice: string }[];
+  items: {
+    productVariantId: string;
+    quantity: string;
+    unitPrice: string;
+    isGift?: boolean;
+  }[];
 };
 
 // Dados opcionais (estoque, contas) dependem de permissões que nem todo
@@ -66,11 +72,14 @@ export default async function NewSalePage({
         : Promise.resolve(null),
     ]);
 
-  const stock = Object.fromEntries(
-    balances.map((balance) => [
-      balance.productVariantId,
-      Number(balance.quantityAvailable),
-    ]),
+  const stock = withKitAvailability(
+    products,
+    Object.fromEntries(
+      balances.map((balance) => [
+        balance.productVariantId,
+        Number(balance.quantityAvailable),
+      ]),
+    ),
   );
   const editableDraft = draft && draft.status === 'draft' ? draft : null;
 

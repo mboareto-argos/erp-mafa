@@ -15,6 +15,12 @@ const PRODUCT_INCLUDE = {
     select: { id: true, skuVariant: true, barcode: true } as const,
   },
   prices: { orderBy: { effectiveFrom: 'desc' as const }, take: 1 },
+  // Kit (BR §10.3, regra 11): a tela calcula o disponível do kit "na hora"
+  // a partir do estoque das peças.
+  kitComponents: {
+    where: { deletedAt: null },
+    select: { componentVariantId: true, quantity: true } as const,
+  },
 } satisfies Prisma.ProductInclude;
 
 const PRODUCT_DETAIL_INCLUDE = {
@@ -26,6 +32,10 @@ const PRODUCT_DETAIL_INCLUDE = {
   prices: {
     where: { deletedAt: null },
     orderBy: { effectiveFrom: 'desc' as const },
+  },
+  kitComponents: {
+    where: { deletedAt: null },
+    select: { componentVariantId: true, quantity: true } as const,
   },
 } satisfies Prisma.ProductInclude;
 

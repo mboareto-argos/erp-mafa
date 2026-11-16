@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import {
   Banknote,
   CreditCard,
+  Gift,
   HandCoins,
   Plus,
   QrCode,
@@ -41,9 +42,11 @@ import {
   cartTotals,
   confirmPayload,
   installmentSchedule,
+  linePrice,
   paymentFee,
   paymentProblem,
   searchProducts,
+  setGift,
   setQuantity,
   setUnitPrice,
   type CartLine,
@@ -57,7 +60,12 @@ type Draft = {
   channel: string;
   discount: string;
   customerId: string;
-  items: { productVariantId: string; quantity: string; unitPrice: string }[];
+  items: {
+    productVariantId: string;
+    quantity: string;
+    unitPrice: string;
+    isGift?: boolean;
+  }[];
 };
 
 const STEPS = ['Itens', 'Pagamento', 'Confirmar'] as const;
@@ -147,8 +155,13 @@ export function NewSaleFlow({
                   variantId: item.productVariantId,
                   name: product.name,
                   sku: product.sku,
-                  unitPriceCents: toCents(item.unitPrice),
+                  // Brinde volta com preço zero da API: guarda o preço do
+                  // produto para quando desmarcar.
+                  unitPriceCents: item.isGift
+                    ? toCents(product.prices[0]?.salePrice)
+                    : toCents(item.unitPrice),
                   quantity: Number(item.quantity),
+                  isGift: Boolean(item.isGift),
                 },
               ]
             : [];
@@ -277,7 +290,7 @@ export function NewSaleFlow({
     setError(undefined);
     if (step === 0) {
       if (cart.length === 0) return setError('Adicione pelo menos um produto.');
-      if (cart.some((line) => line.unitPriceCents <= 0))
+      if (cart.some((line) => !line.isGift && line.unitPriceCents <= 0))
         return setError('Informe o preço de todos os itens.');
     }
     if (step === 1) {
@@ -306,8 +319,9 @@ export function NewSaleFlow({
           items: cart.map((line) => ({
             productVariantId: line.variantId,
             quantity: line.quantity,
-            unitPrice: Number(centsToDecimal(line.unitPriceCents)),
+            unitPrice: Number(centsToDecimal(linePrice(line))),
             discount: 0,
+            isGift: Boolean(line.isGift),
           })),
         }),
       },
@@ -494,27 +508,39 @@ export function NewSaleFlow({
                               <strong className="block text-md font-semibold text-neutral-900">
                                 {line.name}
                               </strong>
-                              <button
-                                type="button"
-                                className="text-left text-sm text-neutral-500 underline decoration-dotted underline-offset-2"
-                                onClick={() =>
-                                  setEditingPrice(
+                              {line.isGift ? (
+                                <span className="text-sm text-brand-accent-hover">
+                                  Brinde · sai de graça, o custo conta no lucro
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="text-left text-sm text-neutral-500 underline decoration-dotted underline-offset-2"
+                                  onClick={() =>
+                                    setEditingPrice(
+                                      editingPrice === line.variantId
+                                        ? undefined
+                                        : line.variantId,
+                                    )
+                                  }
+                                  aria-expanded={
                                     editingPrice === line.variantId
-                                      ? undefined
-                                      : line.variantId,
-                                  )
-                                }
-                                aria-expanded={editingPrice === line.variantId}
-                              >
-                                {formatCents(line.unitPriceCents)} cada ·
-                                alterar preço
-                              </button>
+                                  }
+                                >
+                                  {formatCents(line.unitPriceCents)} cada ·
+                                  alterar preço
+                                </button>
+                              )}
                             </div>
                             <strong className="shrink-0 text-md font-semibold text-neutral-900 tabular-nums">
-                              {formatCents(line.unitPriceCents * line.quantity)}
+                              {line.isGift
+                                ? 'Grátis'
+                                : formatCents(
+                                    line.unitPriceCents * line.quantity,
+                                  )}
                             </strong>
                           </div>
-                          {editingPrice === line.variantId && (
+                          {!line.isGift && editingPrice === line.variantId && (
                             <CurrencyInput
                               label={`Preço de ${line.name} nesta venda`}
                               value={centsToDecimal(line.unitPriceCents)}
@@ -548,11 +574,36 @@ export function NewSaleFlow({
                                 )
                               }
                             />
-                            {short && (
-                              <span className="rounded-sm bg-warning-50 px-2 py-1 text-xs font-semibold text-warning-600">
-                                Só {available} em estoque
-                              </span>
-                            )}
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                              {short && (
+                                <span className="rounded-sm bg-warning-50 px-2 py-1 text-xs font-semibold text-warning-600">
+                                  Só {available} em estoque
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                aria-pressed={Boolean(line.isGift)}
+                                onClick={() => {
+                                  setEditingPrice(undefined);
+                                  setCart((current) =>
+                                    setGift(
+                                      current,
+                                      line.variantId,
+                                      !line.isGift,
+                                    ),
+                                  );
+                                }}
+                                className={cn(
+                                  'inline-flex min-h-10 items-center gap-1 rounded-md border px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-brand-accent',
+                                  line.isGift
+                                    ? 'border-brand-accent bg-brand-accent-subtle text-neutral-900'
+                                    : 'border-neutral-200 text-neutral-700 hover:bg-neutral-50',
+                                )}
+                              >
+                                <Gift className="size-4" aria-hidden="true" />
+                                Brinde
+                              </button>
+                            </div>
                           </div>
                         </li>
                       );
@@ -944,11 +995,15 @@ export function NewSaleFlow({
                           {line.name}
                         </strong>
                         <span className="text-neutral-500">
-                          {line.quantity} × {formatCents(line.unitPriceCents)}
+                          {line.isGift
+                            ? `${line.quantity} × brinde`
+                            : `${line.quantity} × ${formatCents(line.unitPriceCents)}`}
                         </span>
                       </span>
                       <strong className="shrink-0 tabular-nums">
-                        {formatCents(line.unitPriceCents * line.quantity)}
+                        {line.isGift
+                          ? 'Grátis'
+                          : formatCents(line.unitPriceCents * line.quantity)}
                       </strong>
                     </li>
                   ))}

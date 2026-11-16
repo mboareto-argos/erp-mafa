@@ -581,6 +581,99 @@ paths:
                     name: { type: string }
                     minStock: { type: string }
                     quantityAvailable: { type: string }
+  /kits/{productId}:
+    get:
+      tags: [catalog]
+      summary: >
+        Detalhe do kit (BR §10.3 regras 11–12; requer view_catalog): peças com custo, preço e
+        estoque, peças avulsas x preço do kit (economia), kits prontos e quantos dá para montar.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Kit, content: { application/json: { schema: { $ref: "#/components/schemas/KitDetail" } } } }
+        "404": { description: Produto não encontrado (inclusive de outra empresa) }
+    put:
+      tags: [catalog]
+      summary: >
+        Define modo e composição do kit (requer manage_catalog). Peças repetidas são somadas;
+        kit dentro de kit, o próprio kit e peças de outra empresa são recusados
+        (INVALID_KIT_COMPONENT). `mode: null` deixa de ser kit.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              properties:
+                mode: { type: string, enum: [assembled, on_demand], nullable: true }
+                components:
+                  type: array
+                  maxItems: 30
+                  items:
+                    type: object
+                    required: [productVariantId, quantity]
+                    properties:
+                      productVariantId: { type: string, format: uuid }
+                      quantity: { type: number, exclusiveMinimum: 0 }
+      responses:
+        "200": { description: Kit salvo, content: { application/json: { schema: { $ref: "#/components/schemas/KitDetail" } } } }
+        "400": { description: INVALID_KIT_COMPONENT ou sem peças }
+        "404": { description: Produto não encontrado }
+        "409": { description: KIT_HAS_STOCK — desmonte os kits prontos antes de mudar o modo }
+  /kits/{productId}/assemble:
+    post:
+      tags: [inventory]
+      summary: >
+        Monta N kits "montados antes" (BR §10.3 regras 12–13; requer adjust_stock). Baixa as
+        peças e dá entrada no kit com custo = soma das peças, em movimentações de origem
+        kit_assembly. Aceita Idempotency-Key.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: Idempotency-Key, in: header, required: false, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity]
+              properties:
+                quantity: { type: integer, minimum: 1, maximum: 1000 }
+      responses:
+        "201": { description: Montagem registrada }
+        "400": { description: STOCK_INSUFFICIENT (peças) }
+        "404": { description: Produto não encontrado }
+        "409": { description: KIT_NOT_ASSEMBLED_MODE }
+  /kits/{productId}/disassemble:
+    post:
+      tags: [inventory]
+      summary: >
+        Desmonta N kits prontos (requer adjust_stock): baixa o kit e devolve as peças ao
+        estoque ao custo atual delas. Aceita Idempotency-Key.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: Idempotency-Key, in: header, required: false, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity]
+              properties:
+                quantity: { type: integer, minimum: 1, maximum: 1000 }
+      responses:
+        "201": { description: Desmontagem registrada }
+        "400": { description: STOCK_INSUFFICIENT (kits prontos) }
+        "404": { description: Produto não encontrado }
+        "409": { description: KIT_NOT_ASSEMBLED_MODE }
   /inventory/adjustments:
     post:
       tags: [inventory]
@@ -1231,6 +1324,10 @@ paths:
                       quantity: { type: number }
                       unitPrice: { type: number }
                       discount: { type: number, default: 0 }
+                      isGift:
+                        type: boolean
+                        default: false
+                        description: Brinde (BR §10.10 regra 19) — o servidor zera preço e desconto
       responses:
         "201":
           description: Criada
@@ -1281,6 +1378,10 @@ paths:
                       quantity: { type: number }
                       unitPrice: { type: number }
                       discount: { type: number, default: 0 }
+                      isGift:
+                        type: boolean
+                        default: false
+                        description: Brinde (BR §10.10 regra 19) — o servidor zera preço e desconto
       responses:
         "200":
           description: Rascunho atualizado; itens anteriores permanecem inativados no histórico
@@ -2389,6 +2490,31 @@ components:
       required: false
       schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
   schemas:
+    KitDetail:
+      type: object
+      properties:
+        productId: { type: string, format: uuid }
+        mode: { type: string, enum: [assembled, on_demand], nullable: true }
+        components:
+          type: array
+          items:
+            type: object
+            properties:
+              productVariantId: { type: string, format: uuid }
+              productId: { type: string, format: uuid }
+              name: { type: string }
+              sku: { type: string }
+              quantity: { type: string }
+              unitCost: { type: string }
+              salePrice: { type: string }
+              available: { type: string }
+        kitSalePrice: { type: string }
+        kitStock: { type: string }
+        kitUnitCost: { type: string }
+        piecesCost: { type: string }
+        piecesPrice: { type: string }
+        savings: { type: string }
+        canAssemble: { type: integer }
     RoleName:
       type: string
       enum: [owner, admin, sales, inventory, finance, viewer]
@@ -2661,6 +2787,19 @@ components:
               discount: { type: string }
               unitCostAtSale: { type: string, nullable: true }
               quantityReturned: { type: string }
+              isGift: { type: boolean }
+              kitComponents:
+                type: array
+                nullable: true
+                description: >
+                  Kit "na hora" — peças baixadas por unidade do kit, congeladas na confirmação
+                  (BR §10.3 regra 12).
+                items:
+                  type: object
+                  properties:
+                    productVariantId: { type: string, format: uuid }
+                    quantity: { type: string }
+                    unitCost: { type: string }
         payments:
           type: array
           items:
@@ -2773,6 +2912,8 @@ components:
         overduePayablesCount: { type: integer }
         cashBalance: { type: string }
         cmv: { type: string, description: "Só com view_cost" }
+        giftCost: { type: string, description: "Custo dos brindes do período, já incluído no CMV (BR §10.10 regra 19). Só com view_cost" }
+        giftCount: { type: string, description: "Unidades dadas como brinde no período. Só com view_cost" }
         grossProfit: { type: string, description: "Só com view_profit" }
         netProfitEstimated: { type: string, description: "Só com view_profit" }
         margin: { type: string, nullable: true, description: "Só com view_profit" }

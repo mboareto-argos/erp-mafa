@@ -166,7 +166,15 @@ export class ReportingService {
     if (!canViewSales || !canViewCost) {
       return base;
     }
-    const withCost = { ...base, cmv: current.cmv.toString() };
+    // BR §10.10, regra 19: quanto foi gasto com brindes no período (já
+    // incluído no CMV acima). Custo, então só para quem vê custo.
+    const gifts = await this.getGiftCost(tenant.companyId, from, to);
+    const withCost = {
+      ...base,
+      cmv: current.cmv.toString(),
+      giftCost: gifts.cost.toString(),
+      giftCount: gifts.count.toString(),
+    };
     if (!canViewProfit) {
       return withCost;
     }
@@ -457,6 +465,33 @@ export class ReportingService {
     );
 
     return { total: total.toString(), products };
+  }
+
+  private async getGiftCost(companyId: string, from: Date, to: Date) {
+    const items = await this.prisma.saleItem.findMany({
+      where: {
+        companyId,
+        isGift: true,
+        deletedAt: null,
+        sale: {
+          status: { in: COUNTED_SALE_STATUSES },
+          createdAt: { gte: from, lte: to },
+        },
+      },
+      select: { quantity: true, quantityReturned: true, unitCostAtSale: true },
+    });
+    return items.reduce(
+      (acc, item) => {
+        const given = new Prisma.Decimal(item.quantity).sub(
+          item.quantityReturned,
+        );
+        return {
+          cost: acc.cost.add(given.mul(item.unitCostAtSale ?? 0)),
+          count: acc.count.add(given),
+        };
+      },
+      { cost: new Prisma.Decimal(0), count: new Prisma.Decimal(0) },
+    );
   }
 
   private async getSalesSummary(companyId: string, from: Date, to: Date) {
