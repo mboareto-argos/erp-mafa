@@ -11,6 +11,7 @@ import {
   DrawerTitle,
 } from '@/components/ui/drawer';
 import { cn } from '@/lib/utils';
+import { InstallAppButton } from '@/components/pwa/install-app';
 import { AppIcon } from './app-icon';
 import {
   activeHref,
@@ -207,7 +208,8 @@ export function MobileNavigation({
               );
             })}
           </ul>
-          <div className="border-t border-neutral-100 px-4 py-3">
+          <div className="grid gap-1 border-t border-neutral-100 px-4 py-3">
+            <InstallAppButton />
             <button
               type="button"
               onClick={signOut}

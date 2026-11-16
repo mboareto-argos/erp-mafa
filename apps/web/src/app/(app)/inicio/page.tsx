@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { InstallAppCard } from '@/components/pwa/install-app';
 import { AppIcon, type IconName } from '@/components/layout/app-icon';
 import { SelectControl } from '@/components/ui/select-field';
 import { backendAuthenticatedRequest, getSession } from '@/lib/session';
@@ -306,6 +307,7 @@ export default async function DashboardPage({
   ];
   return (
     <main className="page-content dashboard-page">
+      <InstallAppCard />
       <div className="page-heading dashboard-heading">
         <div>
           <span className="eyebrow">Visão geral</span>
