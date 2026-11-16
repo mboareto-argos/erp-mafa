@@ -86,6 +86,51 @@ describe('Edição, reativação, reprecificação e paginação — Products, S
       expect(response.body.error.code).toBe('SKU_IN_USE');
     });
 
+    it('código de barras: grava na variação, é único na empresa e pode ser trocado ou removido (BR §10.3)', async () => {
+      const session = await registerCompany(app);
+      const created = await request(app.getHttpServer())
+        .post('/api/v1/catalog/products')
+        .set(auth(session.accessToken))
+        .send({ sku: 'HAY-100', name: 'Hayaati EDP 100 ml', unit: 'un', barcode: ' 6291108730515 ' })
+        .expect(201);
+      expect(created.body.variants[0].barcode).toBe('6291108730515');
+
+      const duplicate = await request(app.getHttpServer())
+        .post('/api/v1/catalog/products')
+        .set(auth(session.accessToken))
+        .send({ sku: 'OUTRO', name: 'Outro', unit: 'un', barcode: '6291108730515' })
+        .expect(409);
+      expect(duplicate.body.error.code).toBe('BARCODE_IN_USE');
+      expect(duplicate.body.error.field).toBe('barcode');
+
+      // Produtos sem código não colidem entre si (NULL não conflita).
+      await createProduct(app, session.accessToken, { sku: 'SEM-1' });
+      await createProduct(app, session.accessToken, { sku: 'SEM-2' });
+
+      const updated = await request(app.getHttpServer())
+        .patch(`/api/v1/catalog/products/${created.body.id}`)
+        .set(auth(session.accessToken))
+        .send({ barcode: '7891234567895' })
+        .expect(200);
+      expect(updated.body.variants[0].barcode).toBe('7891234567895');
+
+      const list = await request(app.getHttpServer())
+        .get('/api/v1/catalog/products')
+        .set(auth(session.accessToken))
+        .expect(200);
+      const listed = (list.body as { id: string; variants: { barcode: string | null }[] }[]).find(
+        (product) => product.id === created.body.id,
+      );
+      expect(listed?.variants[0].barcode).toBe('7891234567895');
+
+      const cleared = await request(app.getHttpServer())
+        .patch(`/api/v1/catalog/products/${created.body.id}`)
+        .set(auth(session.accessToken))
+        .send({ barcode: null })
+        .expect(200);
+      expect(cleared.body.variants[0].barcode).toBeNull();
+    });
+
     it('desativa e reativa um produto (BR US-PROD-002)', async () => {
       const session = await registerCompany(app);
       const product = await createProduct(app, session.accessToken);

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { AppIcon } from '@/components/layout/app-icon';
 import { NewProductForm } from '@/components/catalog/new-product-form';
 import {
@@ -179,12 +180,12 @@ export default async function ProductsPage({
                     : 'Cadastre o primeiro produto para começar a operar compras, vendas e estoque.'}
                 </p>
                 {q ? (
-                  <a
+                  <Link
                     className="button button-secondary compact-button"
                     href="/produtos"
                   >
                     Limpar busca
-                  </a>
+                  </Link>
                 ) : canManage ? (
                   <a
                     className="button button-primary compact-button"

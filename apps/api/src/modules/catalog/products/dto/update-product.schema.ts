@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { barcodeSchema } from './create-product.schema';
 
 // Campos cadastrais apenas — preço/custo nunca mudam por aqui (ver
 // reprice-product.schema.ts): DS-FORM-004 exige histórico, não update.
@@ -9,6 +10,8 @@ export const updateProductSchema = z.object({
   categoryId: z.string().uuid().nullable().optional(),
   brandId: z.string().uuid().nullable().optional(),
   minStock: z.number().nonnegative().nullable().optional(),
+  // null remove o código de barras da variação.
+  barcode: barcodeSchema.nullable().optional(),
 });
 
 export type UpdateProductDto = z.infer<typeof updateProductSchema>;

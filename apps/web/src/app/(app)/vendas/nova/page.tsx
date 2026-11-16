@@ -32,7 +32,7 @@ const optional = <T,>(request: Promise<unknown>, fallback: T) =>
 export default async function NewSalePage({
   searchParams,
 }: {
-  searchParams: Promise<{ rascunho?: string }>;
+  searchParams: Promise<{ rascunho?: string; adicionar?: string }>;
 }) {
   const session = (await getSession()) as { permissions: string[] } | null;
   const permissions = session?.permissions ?? [];
@@ -40,7 +40,7 @@ export default async function NewSalePage({
   // valida de novo em cada chamada (TA-SEC-001).
   if (!permissions.includes('manage_sales')) redirect('/vendas');
 
-  const { rascunho } = await searchParams;
+  const { rascunho, adicionar } = await searchParams;
   const [products, methods, customers, balances, accounts, draft] =
     await Promise.all([
       backendAuthenticatedRequest('/catalog/products') as Promise<
@@ -84,6 +84,8 @@ export default async function NewSalePage({
         accounts.map((account) => [account.id, account.name]),
       )}
       canCreateCustomer={permissions.includes('manage_customers')}
+      canManageCatalog={permissions.includes('manage_catalog')}
+      initialAdd={adicionar}
       draft={
         editableDraft
           ? {

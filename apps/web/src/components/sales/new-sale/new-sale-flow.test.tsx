@@ -15,7 +15,7 @@ const products = [
     name: 'Yara EDP 100 ml',
     sku: 'LAT-YARA-100',
     status: 'active',
-    variants: [{ id: 'v1' }],
+    variants: [{ id: 'v1', barcode: '7891234567895' }],
     prices: [{ salePrice: '249.9' }],
   },
   {
@@ -66,6 +66,50 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('NewSaleFlow', () => {
+  it('câmera: código bipado abre a ficha do produto e "Adicionar ao carrinho" soma a quantidade', async () => {
+    renderFlow();
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Bipar com a câmera' }),
+    );
+    await userEvent.type(
+      await screen.findByLabelText('Digitar código'),
+      '7891234567895{Enter}',
+    );
+    expect(
+      await screen.findByRole('button', {
+        name: /Adicionar ao carrinho · R\$/,
+      }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Mais uma unidade' }),
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: /Adicionar ao carrinho/ }),
+    );
+    // A gaveta ainda está animando o fechamento (conteúdo atrás fica
+    // aria-hidden), então confere pelo texto.
+    expect(screen.getByText(/No carrinho · 2 itens/)).toBeInTheDocument();
+  });
+
+  it('"Adicionar a uma venda" na página do produto já abre com ele no carrinho', () => {
+    render(
+      <NewSaleFlow
+        products={products}
+        methods={methods}
+        customers={[]}
+        stock={null}
+        accounts={{}}
+        canCreateCustomer
+        initialAdd="v2"
+        draft={null}
+      />,
+    );
+    expect(
+      screen.getByRole('heading', { name: /No carrinho · 1 item/ }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Khamrah EDP 100 ml').length).toBeGreaterThan(0);
+  });
+
   it('Enter na busca adiciona o produto (leitor de código de barras) e atualiza o total', async () => {
     renderFlow();
     await userEvent.type(

@@ -145,10 +145,20 @@ export function receivePayload(
   };
 }
 
-/** Sugestão de código para o produto novo: o que foi buscado, se parecer um código. */
-export function suggestedSku(query: string) {
+/**
+ * Campos sugeridos para cadastrar um produto a partir do que foi buscado ou
+ * bipado: só dígitos (8–14) é código de barras; código com letras e números
+ * vira código interno; texto livre vira o nome.
+ */
+export function suggestedFields(query: string) {
   const trimmed = query.trim();
-  return /^[\w.-]{3,60}$/.test(trimmed) && /\d/.test(trimmed)
-    ? trimmed.toUpperCase()
-    : '';
+  if (/^\d{8,14}$/.test(trimmed))
+    return { barcode: trimmed, sku: '', name: '' };
+  if (/^[\w.-]{3,60}$/.test(trimmed) && /\d/.test(trimmed))
+    return { barcode: '', sku: trimmed.toUpperCase(), name: '' };
+  return { barcode: '', sku: '', name: trimmed };
 }
+
+/** Parece um código de barras (só dígitos, 8 a 14)? */
+export const looksLikeBarcode = (query: string) =>
+  /^\d{8,14}$/.test(query.trim());

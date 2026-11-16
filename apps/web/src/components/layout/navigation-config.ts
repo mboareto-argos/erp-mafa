@@ -163,6 +163,13 @@ export const quickActions: readonly QuickAction[] = [
     permission: 'manage_catalog',
   },
   {
+    label: 'Consultar produto',
+    description: 'Bipar o código e ver preço e estoque',
+    href: '/produtos/consultar',
+    icon: 'scan',
+    permission: 'view_catalog',
+  },
+  {
     label: 'Novo cliente',
     description: 'Cadastrar contato comercial',
     href: '/clientes?new=customer',

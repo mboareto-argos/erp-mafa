@@ -306,10 +306,11 @@ completo de sempre (retrocompatível com os seletores de produto em Compras/Vend
 | company_id | uuid FK → companies | |
 | product_id | uuid FK → products | |
 | sku_variant | text | |
+| barcode | text? | código de barras (EAN/UPC) ou conteúdo do QR da variação — BR §10.3; opcional |
 | attributes | jsonb | ex.: tamanho/volume |
 | created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
 
-Constraints: `UNIQUE(company_id, sku_variant)` · índice `(company_id, product_id)`.
+Constraints: `UNIQUE(company_id, sku_variant)` · `UNIQUE(company_id, barcode)` (NULL não conflita — produto sem código é permitido; BR §10.3 regra 2) · índice `(company_id, product_id)`.
 
 ### `product_prices`
 Histórico append-only (RN-PRC-003) — cada alteração de preço insere uma nova linha, nunca
