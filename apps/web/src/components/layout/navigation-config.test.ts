@@ -41,7 +41,11 @@ describe('navegação condicionada por permissão (DS-PERM-001)', () => {
       'view_inventory',
     ]);
     expect(tabs.map((t) => t.href)).toEqual(['/inicio', '/vendas', '/estoque']);
-    expect(more.map((m) => m.href)).toEqual(['/clientes', '/produtos']);
+    expect(more.map((m) => m.href)).toEqual([
+      '/clientes',
+      '/campanhas',
+      '/produtos',
+    ]);
   });
 
   it('proprietário alcança todas as telas pelo celular (abas + Mais)', () => {

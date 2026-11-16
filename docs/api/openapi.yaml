@@ -1140,6 +1140,10 @@ paths:
                 email: { type: string, format: email, nullable: true }
                 instagram: { type: string, nullable: true }
                 birthDate: { type: string, format: date, nullable: true }
+                marketingConsentSource:
+                  type: string
+                  enum: [in_person, whatsapp, instagram, other]
+                  description: Já cadastra com aceite de ofertas (BR §10.9 regra 9); data do servidor
       responses:
         "201":
           description: Criado
@@ -1242,6 +1246,134 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Customer" }
+  /customers/{id}/marketing-consent:
+    put:
+      tags: [customers]
+      summary: >
+        Aceite ou saída de ofertas (BR §10.9 regra 9; requer manage_customers). Data do servidor;
+        cada mudança vai para a auditoria.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [granted]
+              properties:
+                granted: { type: boolean }
+                source:
+                  type: string
+                  enum: [in_person, whatsapp, instagram, other]
+                  description: Obrigatório quando granted=true
+      responses:
+        "200": { description: Cliente atualizado }
+        "400": { description: Origem não informada }
+        "404": { description: Cliente não encontrado (inclusive de outra empresa) }
+  /campaigns:
+    get:
+      tags: [customers]
+      summary: Campanhas não arquivadas, com total de envios (requer view_customers)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Lista }
+    post:
+      tags: [customers]
+      summary: Cria campanha (BR §10.9 regra 10; requer manage_customers)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CampaignInput" }
+      responses:
+        "201": { description: Criada }
+        "400": { description: Marca obrigatória para `brand`, dias para `inactive`, ou marca de outra empresa }
+  /campaigns/preview:
+    post:
+      tags: [customers]
+      summary: Quantos clientes o público alcança (só quem aceitou ofertas; requer view_customers)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [audience]
+              properties:
+                audience: { type: string, enum: [all, birthdays, brand, inactive] }
+                audienceBrandId: { type: string, format: uuid, nullable: true }
+                audienceInactiveDays: { type: integer, minimum: 1, nullable: true }
+      responses:
+        "201":
+          description: Contagem
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count: { type: integer }
+                  withoutPhone: { type: integer }
+  /campaigns/{id}:
+    get:
+      tags: [customers]
+      summary: >
+        Campanha com o público atual (recipients com sentAt), clientes sem WhatsApp e total enviado
+        (requer view_customers).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Campanha }
+        "404": { description: Não encontrada, arquivada ou de outra empresa }
+    patch:
+      tags: [customers]
+      summary: Edita campanha (campos parciais; requer manage_customers)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CampaignInput" }
+      responses:
+        "200": { description: Atualizada }
+        "404": { description: Não encontrada }
+  /campaigns/{id}/archive:
+    patch:
+      tags: [customers]
+      summary: Arquiva (não apaga; os envios permanecem — requer manage_customers)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Arquivada }
+  /campaigns/{id}/deliveries:
+    post:
+      tags: [customers]
+      summary: >
+        Marca o envio 1 a 1 para um cliente (BR §10.9 regra 11; requer manage_customers). O cliente
+        precisa estar no público com consentimento vigente; marcar de novo não duplica.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customerId]
+              properties:
+                customerId: { type: string, format: uuid }
+      responses:
+        "201": { description: Envio registrado }
+        "400": { description: CUSTOMER_NOT_IN_AUDIENCE }
+        "404": { description: Campanha não encontrada }
 
   /payments/methods:
     post:
@@ -2490,6 +2622,16 @@ components:
       required: false
       schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
   schemas:
+    CampaignInput:
+      type: object
+      required: [title, message, audience]
+      properties:
+        title: { type: string, maxLength: 120 }
+        message: { type: string, maxLength: 2000, description: "{nome} vira o primeiro nome" }
+        imageUrl: { type: string, nullable: true, description: Só arquivo enviado pelo próprio sistema (ADR-0003) }
+        audience: { type: string, enum: [all, birthdays, brand, inactive] }
+        audienceBrandId: { type: string, format: uuid, nullable: true }
+        audienceInactiveDays: { type: integer, minimum: 1, maximum: 3650, nullable: true }
     KitDetail:
       type: object
       properties:

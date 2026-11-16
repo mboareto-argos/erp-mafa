@@ -44,6 +44,12 @@ export const navigationGroups: readonly NavigationGroup[] = [
         permission: 'view_customers',
       },
       {
+        href: '/campanhas',
+        label: 'Campanhas',
+        icon: 'campaigns',
+        permission: 'view_customers',
+      },
+      {
         href: '/produtos',
         label: 'Produtos',
         icon: 'products',

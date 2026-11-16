@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -23,6 +24,10 @@ import {
   updateCustomerSchema,
   type UpdateCustomerDto,
 } from './dto/update-customer.schema';
+import {
+  marketingConsentSchema,
+  type MarketingConsentDto,
+} from './dto/marketing-consent.schema';
 
 @Controller('customers')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -88,5 +93,17 @@ export class CustomersController {
     @Param('id') id: string,
   ) {
     return this.customers.reactivate(tenant.companyId, id);
+  }
+
+  // BR §10.9, regra 9 — aceite/saída de ofertas com data do servidor.
+  @Put(':id/marketing-consent')
+  @RequirePermission('manage_customers')
+  setMarketingConsent(
+    @CurrentTenant() tenant: CurrentTenantContext,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(marketingConsentSchema))
+    dto: MarketingConsentDto,
+  ) {
+    return this.customers.setMarketingConsent(tenant, id, dto);
   }
 }

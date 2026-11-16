@@ -607,16 +607,60 @@ Fase 4). Ver decisão registrada no histórico de commits (Fase 3).
 | name | text | |
 | whatsapp / phone / email / instagram | text? | duplicidade não é bloqueada — RN 10.9.3 diz que gera alerta (UX de frontend), não erro de backend |
 | birth_date | date? | |
+| marketing_consent_at | timestamp? | aceite de ofertas (BR §10.9, regra 9), data do servidor — migration `20261116210459_campaigns_and_consent` |
+| marketing_consent_source | enum(in_person, whatsapp, instagram, other)? | onde o cliente aceitou |
+| marketing_opt_out_at | timestamp? | saiu das ofertas; consentimento vigente = `consent_at` preenchido e `opt_out_at` nulo. Aceitar de novo limpa este campo. Cada mudança gera `audit_logs` (`customer.marketing_consent_granted` / `_revoked`) — é o histórico do aceite |
 | status | enum(active, inactive) | |
 | created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
 
 Índice: `(company_id, status)`.
+
+**Consentimento**: `PUT /customers/:id/marketing-consent` (manage_customers) com
+`{ granted, source }`; `POST /customers` aceita `marketingConsentSource` para já cadastrar com o
+aceite. O consentimento nunca é editado pelo `PATCH` cadastral.
 
 **API**: `PATCH /customers/:id` (campos cadastrais) e `PATCH /:id/reactivate`, mesmo padrão de
 `products`/`suppliers` acima. `GET /customers` também aceita `q`/`page`/`pageSize` opcionais,
 retrocompatível (sem `page`, array completo, usado pelo seletor de cliente em Vendas).
 `GET /customers/:id` retorna a ficha agregada, com indicadores em `Decimal`, saldo de
 recebíveis e até cinco vendas recentes, sempre filtrados por `company_id`.
+
+### `campaigns`
+Campanha (BR §10.9, regra 10) — migration `20261116210459_campaigns_and_consent`. O público é
+calculado na hora, sempre entre clientes ativos com consentimento vigente.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | RLS `tenant_isolation` |
+| title | text | só para o usuário |
+| message | text | `{nome}` vira o primeiro nome do cliente (na tela) |
+| image_url | text? | mesma origem aceita das fotos de produto (Vercel Blob / `/uploads`, ADR-0003) |
+| audience | enum(all, birthdays, brand, inactive) | aniversariantes = mês atual no fuso de São Paulo; inativos = já compraram e não compram há X dias |
+| audience_brand_id | uuid? FK → brands | só para `brand` |
+| audience_inactive_days | int? | só para `inactive` |
+| created_at / updated_at / created_by / deleted_at | — | arquivar = `deleted_at`; envios permanecem |
+
+Índice: `(company_id, created_at)`.
+
+**API** (permissões de clientes): `GET /campaigns`, `GET /campaigns/:id` (com `recipients`,
+`withoutPhone`, `sentCount`) e `POST /campaigns/preview` exigem `view_customers`; `POST`,
+`PATCH /:id`, `PATCH /:id/archive` e `POST /:id/deliveries` exigem `manage_customers`.
+
+### `campaign_deliveries`
+Envio 1 a 1 marcado pelo usuário (BR §10.9, regra 11). Append-only.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | RLS `tenant_isolation` |
+| campaign_id | uuid FK → campaigns | |
+| customer_id | uuid FK → customers | precisa estar no público e com consentimento no momento da marcação |
+| sent_at | timestamp | |
+| sent_by | uuid? FK → users | |
+
+Constraints: `UNIQUE(campaign_id, customer_id)` (marcar de novo não duplica) · índice
+`(company_id, campaign_id)`.
 
 ### `payment_methods`
 Sem prazo de recebimento nem configuração de parcelas ainda (venda só à vista nesta fase).

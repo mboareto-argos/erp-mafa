@@ -5,6 +5,8 @@ import { AppError } from '../../common/errors/app-error';
 import { CurrentTenantContext } from '../tenancy/jwt-payload.interface';
 import { CreateCustomerDto } from './dto/create-customer.schema';
 import { UpdateCustomerDto } from './dto/update-customer.schema';
+import { MarketingConsentDto } from './dto/marketing-consent.schema';
+import { AuditService } from '../audit/audit.service';
 
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 20;
@@ -17,13 +19,85 @@ export type ListCustomersParams = {
 
 @Injectable()
 export class CustomersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   // RN 10.9.3: e-mail/telefone duplicado gera alerta, nunca bloqueio —
   // decisão de UX de frontend, o backend nunca rejeita por duplicidade.
   create(tenant: CurrentTenantContext, dto: CreateCustomerDto) {
-    return this.prisma.customer.create({
-      data: { companyId: tenant.companyId, createdBy: tenant.userId, ...dto },
+    const { marketingConsentSource, ...data } = dto;
+    if (!marketingConsentSource)
+      return this.prisma.customer.create({
+        data: {
+          companyId: tenant.companyId,
+          createdBy: tenant.userId,
+          ...data,
+        },
+      });
+    return this.prisma.$transaction(async (tx) => {
+      const customer = await tx.customer.create({
+        data: {
+          companyId: tenant.companyId,
+          createdBy: tenant.userId,
+          ...data,
+          marketingConsentAt: new Date(),
+          marketingConsentSource,
+        },
+      });
+      await this.audit.record(tx, {
+        companyId: tenant.companyId,
+        userId: tenant.userId,
+        action: 'customer.marketing_consent_granted',
+        entityType: 'customer',
+        entityId: customer.id,
+        afterData: { source: marketingConsentSource },
+      });
+      return customer;
+    });
+  }
+
+  // BR §10.9, regra 9: aceite com data e origem; deixar de receber grava a
+  // data de saída. Cada mudança fica na auditoria (histórico do aceite).
+  async setMarketingConsent(
+    tenant: CurrentTenantContext,
+    id: string,
+    dto: MarketingConsentDto,
+  ) {
+    const customer = await this.findOwnedOrThrow(tenant.companyId, id);
+    const now = new Date();
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.customer.update({
+        where: { id },
+        data: dto.granted
+          ? {
+              marketingConsentAt: now,
+              marketingConsentSource: dto.source,
+              marketingOptOutAt: null,
+            }
+          : { marketingOptOutAt: now },
+      });
+      await this.audit.record(tx, {
+        companyId: tenant.companyId,
+        userId: tenant.userId,
+        action: dto.granted
+          ? 'customer.marketing_consent_granted'
+          : 'customer.marketing_consent_revoked',
+        entityType: 'customer',
+        entityId: id,
+        beforeData: {
+          consentAt: customer.marketingConsentAt,
+          source: customer.marketingConsentSource,
+          optOutAt: customer.marketingOptOutAt,
+        },
+        afterData: {
+          consentAt: updated.marketingConsentAt,
+          source: updated.marketingConsentSource,
+          optOutAt: updated.marketingOptOutAt,
+        },
+      });
+      return updated;
     });
   }
 

@@ -146,3 +146,8 @@ venda (BR §10.10, regra 19).
 ## Consentimento de marketing
 Aceite do cliente em receber ofertas, com data e origem; sem ele o cliente não entra em campanhas
 (BR §10.9, regra 9).
+
+## Campanha
+Mensagem de oferta, promoção ou data especial (texto e foto opcional) para um público de
+clientes que aceitaram receber ofertas, enviada um a um pelo WhatsApp do próprio usuário
+(BR §10.9, regras 10 e 11).

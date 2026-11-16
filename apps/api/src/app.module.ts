@@ -9,6 +9,7 @@ import { CatalogModule } from './modules/catalog/catalog.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { PurchasingModule } from './modules/purchasing/purchasing.module';
 import { CustomersModule } from './modules/customers/customers.module';
+import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { SalesModule } from './modules/sales/sales.module';
 import { CashFlowModule } from './modules/cash-flow/cash-flow.module';
@@ -33,6 +34,7 @@ import { IdempotencyModule } from './modules/idempotency/idempotency.module';
     InventoryModule,
     PurchasingModule,
     CustomersModule,
+    CampaignsModule,
     PaymentsModule,
     SalesModule,
     CashFlowModule,
