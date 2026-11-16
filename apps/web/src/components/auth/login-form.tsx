@@ -27,9 +27,15 @@ export function LoginForm() {
       const result = (await response.json()) as {
         message?: string;
         companies?: Company[];
+        autoSelected?: boolean;
       };
       if (!response.ok || !result.companies)
         throw new Error(result.message ?? 'Não foi possível entrar.');
+      if (result.autoSelected) {
+        router.replace('/inicio');
+        router.refresh();
+        return;
+      }
       sessionStorage.setItem(
         'erp_mafa_companies',
         JSON.stringify(result.companies),

@@ -438,7 +438,6 @@ td .status-badge { margin-top: 6px; }
 .skeleton-title { width: 180px; height: 34px; }
 .skeleton-copy { width: 280px; height: 18px; margin-top: 10px; }
 @keyframes shimmer { to { background-position: -200% 0; } }
-.mobile-nav { display: none; }
 .import-workspace { display: grid; gap: 24px; }
 .import-metrics .listing-metric-icon.warning { background: var(--color-warning-50); color: var(--color-warning-600); }
 .import-history { overflow: visible; }
@@ -793,7 +792,10 @@ td .status-badge { margin-top: 6px; }
   .auth-aside { min-height: 180px; padding: 28px 24px; }
   .auth-aside h1, .auth-aside p, .auth-aside small { display: none; }
   .auth-content { align-items: flex-start; padding: 48px 24px; }
-  .app-shell { padding-bottom: calc(76px + env(safe-area-inset-bottom)); padding-left: 0; }
+  /* Barra inferior + zona de segurança do botão flutuante (DS-LAYOUT-002). */
+  .app-shell { padding-bottom: calc(96px + env(safe-area-inset-bottom)); padding-left: 0; }
+  /* No celular a ação rápida mora no botão flutuante (+), não no topo. */
+  .header-new-button { display: none; }
   .sidebar { display: none; }
   .topbar { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; min-height: 60px; margin: 0; border-width: 0 0 1px; border-radius: 0; padding: 0 18px; box-shadow: none; }
   .header-brand { font-size: 16px; }.header-brand .brand-mark { width: 30px; height: 30px; flex-basis: 30px; font-size: 17px; }
@@ -886,9 +888,5 @@ td .status-badge { margin-top: 6px; }
   .table-actions-cell { display: flex; align-items: center; justify-content: space-between; background: transparent; }
   .table-actions-cell .row-menu-trigger { margin: 0; }
   .table-edit-form { margin: 4px 0; padding: 16px; }
-  .mobile-nav { position: fixed; z-index: 10; right: 0; bottom: 0; left: 0; display: grid; grid-template-columns: repeat(var(--mobile-nav-items), minmax(0, 1fr)); min-height: 68px; border-top: 1px solid var(--border); background: var(--surface); padding-bottom: env(safe-area-inset-bottom); }
-  .mobile-nav a { display: grid; grid-template-rows: 24px 16px; place-items: center; color: var(--muted); font-size: 11px; font-weight: 600; line-height: 16px; text-decoration: none; }
-  .mobile-nav svg { width: 19px; height: 19px; }
-  .mobile-nav a[aria-current="page"] { color: var(--accent-hover); }
   .dialog-content { padding: 20px; }
 }

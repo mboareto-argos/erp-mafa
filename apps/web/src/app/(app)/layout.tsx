@@ -29,6 +29,7 @@ export default async function AppLayout({
         permissions={session.permissions}
         userName={session.user.name}
         roleName={session.roleName}
+        companyName={session.company.name}
       />
       <div className="main-area">
         <AppHeader

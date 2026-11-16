@@ -11,8 +11,16 @@ import { createPaymentMethod, receiveStock } from './utils/sales-helpers';
 describe('Isolamento multiempresa — Reporting', () => {
   let app: INestApplication;
   const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
-  const from = '2026-08-01';
-  const to = '2026-08-31';
+  // Período relativo a hoje: com datas fixas as vendas de A (criadas hoje)
+  // caem fora da janela e o teste passa sem provar o isolamento.
+  const civil = (date: Date) => date.toISOString().slice(0, 10);
+  const now = new Date();
+  const from = civil(
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)),
+  );
+  const to = civil(
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 2, 0)),
+  );
 
   beforeAll(async () => {
     app = await createTestApp();
@@ -44,6 +52,15 @@ describe('Isolamento multiempresa — Reporting', () => {
       .set(auth(companyA.accessToken))
       .send({ payments: [{ paymentMethodId: paymentMethodA.id, amount: 300 }] })
       .expect(201);
+
+    // Controle positivo: a venda de A está dentro do período consultado, então
+    // o zero de B abaixo prova isolamento — e não só um período vazio.
+    const dashboardAsA = await request(app.getHttpServer())
+      .get(`/api/v1/reporting/dashboard?from=${from}&to=${to}`)
+      .set(auth(companyA.accessToken))
+      .expect(200);
+    expect(dashboardAsA.body.revenueNet).toBe('300');
+    expect(dashboardAsA.body.salesCount).toBe(1);
 
     const dashboardAsB = await request(app.getHttpServer())
       .get(`/api/v1/reporting/dashboard?from=${from}&to=${to}`)
