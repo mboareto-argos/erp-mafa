@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { NewPurchaseFlow } from '@/components/purchasing/new-purchase/new-purchase-flow';
 import type { CatalogProduct } from '@/lib/catalog';
+import { payingAccountLabel } from '@/lib/financial-accounts';
 import { backendAuthenticatedRequest, getSession } from '@/lib/session';
 
 type Supplier = {
@@ -9,7 +10,7 @@ type Supplier = {
   status: string;
   whatsapp?: string | null;
 };
-type Account = { id: string; name: string; status?: string };
+type Account = { id: string; name: string; status?: string; kind?: string };
 type DraftPurchase = {
   id: string;
   status: string;
@@ -63,7 +64,10 @@ export default async function NewPurchasePage({
       suppliers={suppliers.filter((supplier) => supplier.status === 'active')}
       accounts={accounts
         .filter((account) => !account.status || account.status === 'active')
-        .map(({ id, name }) => ({ id, name }))}
+        .map((account) => ({
+          id: account.id,
+          name: payingAccountLabel(account),
+        }))}
       canCreateProduct={permissions.includes('manage_catalog')}
       canCreateSupplier={permissions.includes('manage_purchasing')}
       canPay={canPay}

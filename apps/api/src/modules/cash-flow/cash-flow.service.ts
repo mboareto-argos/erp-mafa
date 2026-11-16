@@ -25,6 +25,8 @@ export class CashFlowService {
       originId: string;
       description?: string;
       createdBy?: string;
+      /** Data do fato (ex.: saldo inicial em uma data passada); padrão: agora. */
+      occurredAt?: Date;
     },
   ) {
     return tx.financialTransaction.create({
@@ -37,6 +39,7 @@ export class CashFlowService {
         originId: params.originId,
         description: params.description,
         createdBy: params.createdBy,
+        ...(params.occurredAt ? { occurredAt: params.occurredAt } : {}),
       },
     });
   }

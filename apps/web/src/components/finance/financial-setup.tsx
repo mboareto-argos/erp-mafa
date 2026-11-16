@@ -1,5 +1,6 @@
 'use client';
 
+import { receivingAccounts } from '@/lib/financial-accounts';
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppIcon } from '@/components/layout/app-icon';
@@ -20,7 +21,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { SelectField } from '@/components/ui/select-field';
 
-type Account = { id: string; name: string; status: string; balance?: string };
+type Account = {
+  id: string;
+  name: string;
+  status: string;
+  balance?: string;
+  kind?: 'store' | 'owner';
+};
 type Method = {
   id: string;
   name: string;
@@ -428,6 +435,9 @@ export function FinancialSetup({
                   <tr key={account.id}>
                     <td data-label="Conta">
                       <strong>{account.name}</strong>
+                      {account.kind === 'owner' && (
+                        <small>Conta do proprietário (seu bolso)</small>
+                      )}
                     </td>
                     <td data-label="Status">
                       <span className={`status-badge ${account.status}`}>
@@ -474,7 +484,10 @@ export function FinancialSetup({
             </p>
           </div>
           {canManageMethods && (
-            <CreateMethod accounts={accounts} onCreated={refresh} />
+            <CreateMethod
+              accounts={receivingAccounts(accounts)}
+              onCreated={refresh}
+            />
           )}
         </div>
         <div className="table-wrap">

@@ -699,6 +699,7 @@ Saldo **nunca é materializado** — sempre calculado por agregação de `financ
 | id | uuid PK | |
 | company_id | uuid FK → companies | |
 | name | text | |
+| kind | enum(store, owner) | `owner` = conta do proprietário (BR §10.13 regra 10) — no máximo uma por empresa (garantido no serviço); fora do "dinheiro da loja" (regra 11). Migration `20261116190000_financial_real_balance` |
 | status | enum(active, inactive) | |
 | created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
 
@@ -716,7 +717,7 @@ Documento de Negócio). Convenção de sinal: `amount` positivo em `type=in`, ne
 | financial_account_id | uuid FK → financial_accounts | |
 | type | enum(in, out, transfer, adjustment) | |
 | amount | numeric(14,2) | com sinal |
-| origin_type | enum(sale_payment, receivable_payment, payable_payment, expense, transfer, adjustment) | |
+| origin_type | enum(sale_payment, sale_return, receivable_payment, payable_payment, expense, transfer, adjustment, opening_balance, balance_adjustment, owner_contribution) | `opening_balance` (saldo inicial, uma vez por conta), `balance_adjustment` (conferência com o banco) e `owner_contribution` (aporte) são `type = adjustment` e não entram na DRE — BR §10.13 regras 8–10 |
 | origin_id | uuid | referência polimórfica |
 | description | text? | |
 | occurred_at | timestamptz | |

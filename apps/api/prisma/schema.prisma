@@ -1159,10 +1159,19 @@ enum FinancialAccountStatus {
 // Saldo nunca e' materializado aqui — sempre calculado por agregacao de
 // FinancialTransaction (RN 10.13.3), evitando mais uma tabela pra
 // reconciliar.
+// BR §10.13 regras 10–11: "owner" é a conta do proprietário (dinheiro
+// pessoal usado na loja) — no máximo uma por empresa (garantido no
+// serviço) e fora do "dinheiro da loja".
+enum FinancialAccountKind {
+  store
+  owner
+}
+
 model FinancialAccount {
   id        String                 @id @default(uuid()) @db.Uuid
   companyId String                 @map("company_id") @db.Uuid
   name      String
+  kind      FinancialAccountKind   @default(store)
   status    FinancialAccountStatus @default(active)
   createdAt DateTime               @default(now()) @map("created_at")
   updatedAt DateTime               @updatedAt @map("updated_at")
@@ -1198,6 +1207,10 @@ enum FinancialTransactionOriginType {
   expense
   transfer
   adjustment
+  // BR §10.13 regras 8–10: nenhum deles é receita nem despesa.
+  opening_balance
+  balance_adjustment
+  owner_contribution
 }
 
 // Lancamento realizado de caixa — IMUTAVEL apos criado (regra de

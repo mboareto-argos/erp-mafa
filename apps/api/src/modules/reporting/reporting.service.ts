@@ -563,9 +563,10 @@ export class ReportingService {
     }, new Prisma.Decimal(0));
   }
 
+  // BR §10.13 regra 11: "dinheiro da loja" não inclui a conta do proprietário.
   private async getConsolidatedCashBalance(companyId: string) {
     const result = await this.prisma.financialTransaction.aggregate({
-      where: { companyId },
+      where: { companyId, financialAccount: { kind: 'store' } },
       _sum: { amount: true },
     });
     return new Prisma.Decimal(result._sum.amount ?? 0);

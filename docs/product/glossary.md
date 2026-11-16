@@ -115,3 +115,17 @@ Processo de conferência do estoque físico.
 Movimentação criada para corrigir uma divergência de quantidade.
 
 ---
+
+## Conta do proprietário
+Conta financeira especial (uma por empresa) que representa o dinheiro pessoal do proprietário
+usado para pagar despesas ou compras da loja. Não compõe o dinheiro da loja; saldo negativo é o
+que a loja deve ao proprietário (BR §10.13, regra 10).
+
+## Aporte do proprietário
+Valor que o proprietário colocou na empresa e não será reembolsado. Não é receita (BR §10.13,
+regra 10).
+
+## Ajuste de conferência
+Movimentação que corrige a diferença entre o saldo calculado de uma conta e o saldo real
+informado pelo usuário, com motivo obrigatório. Não é receita nem despesa (BR §10.13, regra 9).
+
