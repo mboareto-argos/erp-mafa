@@ -234,12 +234,28 @@ export class AuthService {
   }
 
   async me(tenant: CurrentTenantContext) {
-    const [user, company] = await Promise.all([
-      this.prisma.user.findUniqueOrThrow({ where: { id: tenant.userId } }),
-      this.prisma.company.findUniqueOrThrow({
-        where: { id: tenant.companyId },
-      }),
-    ]);
+    // Mesmo critério do select-company/refresh: o token só vale enquanto o
+    // vínculo ativo existir. Usuário bloqueado/removido ou empresa inexistente
+    // é "sessão expirada" (401) — antes virava 500 e prendia o usuário numa
+    // tela de erro, sem conseguir voltar ao login.
+    const membership = await this.prisma.membership.findFirst({
+      where: {
+        userId: tenant.userId,
+        companyId: tenant.companyId,
+        status: 'active',
+        deletedAt: null,
+      },
+      include: { company: true, user: true },
+    });
+
+    if (!membership || membership.user.status === 'blocked') {
+      throw new AppError(
+        'SESSION_EXPIRED',
+        'Sessão expirada. Faça login novamente.',
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+    const { user, company } = membership;
 
     return {
       user: { id: user.id, name: user.name, email: user.email },

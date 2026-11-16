@@ -32,6 +32,8 @@ services:
       context: .
       dockerfile: .devcontainer/Dockerfile
     network_mode: service:postgres
+    # Se um dos servidores de dev cair, o container reinicia sozinho.
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy

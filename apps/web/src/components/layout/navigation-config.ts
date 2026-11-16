@@ -117,7 +117,7 @@ export const quickActions: readonly QuickAction[] = [
   {
     label: 'Nova venda',
     description: 'Registrar uma venda e seu pagamento',
-    href: '/vendas?new=sale',
+    href: '/vendas/nova',
     icon: 'sales',
     permission: 'manage_sales',
   },

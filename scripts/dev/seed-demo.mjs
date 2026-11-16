@@ -74,10 +74,10 @@ async function main() {
     type: 'pix', name: 'Pix', financialAccountId: banco.id,
   });
   const credito = await call('POST', '/payments/methods', {
-    type: 'credit_card', name: 'Crédito (maquininha)', feeRate: 0.0349, financialAccountId: banco.id,
+    type: 'credit_card', name: 'Crédito (maquininha)', feeRate: 3.49, financialAccountId: banco.id,
   });
   await call('POST', '/payments/methods', {
-    type: 'debit_card', name: 'Débito (maquininha)', feeRate: 0.0137, financialAccountId: banco.id,
+    type: 'debit_card', name: 'Débito (maquininha)', feeRate: 1.37, financialAccountId: banco.id,
   });
   const dinheiro = await call('POST', '/payments/methods', {
     type: 'cash', name: 'Dinheiro', financialAccountId: caixa.id,
