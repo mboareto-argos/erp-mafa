@@ -144,3 +144,31 @@ describe('pagamento → corpo do confirm', () => {
     expect(paymentProblem(credit, 100, 'c1')).toBeNull();
   });
 });
+
+describe('brinde no carrinho (BR §10.10, regra 19)', () => {
+  it('linha brinde sai de graça e volta ao preço ao desmarcar', async () => {
+    const { cartTotals, setGift } = await import('./sale-math');
+    const cart = [
+      {
+        productId: 'p1',
+        variantId: 'v1',
+        name: 'Perfume',
+        sku: 'P1',
+        unitPriceCents: 10000,
+        quantity: 1,
+      },
+      {
+        productId: 'p2',
+        variantId: 'v2',
+        name: 'Miniatura',
+        sku: 'P2',
+        unitPriceCents: 3500,
+        quantity: 2,
+      },
+    ];
+    const gifted = setGift(cart, 'v2', true);
+    expect(cartTotals(gifted).total).toBe(10000);
+    expect(cartTotals(gifted).units).toBe(3);
+    expect(cartTotals(setGift(gifted, 'v2', false)).total).toBe(17000);
+  });
+});

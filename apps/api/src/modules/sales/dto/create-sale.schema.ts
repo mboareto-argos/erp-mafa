@@ -5,6 +5,8 @@ const createSaleItemSchema = z.object({
   quantity: z.number().positive('Quantidade deve ser maior que zero.'),
   unitPrice: z.number().nonnegative(),
   discount: z.number().nonnegative().default(0),
+  // Brinde (BR §10.10, regra 19): o servidor zera preço e desconto.
+  isGift: z.boolean().default(false),
 });
 
 export const createSaleSchema = z.object({

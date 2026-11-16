@@ -161,7 +161,13 @@ describe('NewSaleFlow', () => {
     );
     const created = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(created.items).toEqual([
-      { productVariantId: 'v1', quantity: 1, unitPrice: 249.9, discount: 0 },
+      {
+        productVariantId: 'v1',
+        quantity: 1,
+        unitPrice: 249.9,
+        discount: 0,
+        isGift: false,
+      },
     ]);
     const [confirmUrl, confirmInit] = fetchMock.mock.calls[1];
     expect(confirmUrl).toBe('/api/sales/sale-1/confirm');

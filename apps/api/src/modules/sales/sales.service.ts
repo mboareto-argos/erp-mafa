@@ -14,12 +14,40 @@ import {
   calculateSaleTotals,
   calculateCmvAndProfit,
 } from './sale-calculations';
+import {
+  currentUnitCost,
+  kitUnitCost,
+  parseKitSnapshot,
+  snapshotKitComponents,
+  type KitComponentSnapshot,
+} from '../inventory/kits/kits.service';
+
+// Brinde (BR §10.10, regra 19): preço e desconto sempre zero, venha o que
+// vier do cliente.
+function normalizeItems(items: CreateSaleDto['items']) {
+  return items.map((item) =>
+    item.isGift ? { ...item, unitPrice: 0, discount: 0 } : item,
+  );
+}
 
 const INCLUDE_DETAILS = {
   customer: true,
   items: {
     where: { deletedAt: null },
-    include: { productVariant: { include: { product: true } } },
+    include: {
+      productVariant: {
+        include: {
+          product: {
+            include: {
+              kitComponents: {
+                where: { deletedAt: null },
+                select: { componentVariantId: true, quantity: true },
+              },
+            },
+          },
+        },
+      },
+    },
   },
   payments: { include: { paymentMethod: true } },
   receivables: {
@@ -78,7 +106,8 @@ export class SalesService {
       }
     }
 
-    const { subtotal, total } = calculateSaleTotals(dto.items, dto.discount);
+    const items = normalizeItems(dto.items);
+    const { subtotal, total } = calculateSaleTotals(items, dto.discount);
 
     return this.prisma.sale.create({
       data: {
@@ -90,12 +119,13 @@ export class SalesService {
         total,
         createdBy: tenant.userId,
         items: {
-          create: dto.items.map((item) => ({
+          create: items.map((item) => ({
             companyId: tenant.companyId,
             productVariantId: item.productVariantId,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             discount: item.discount,
+            isGift: item.isGift,
             createdBy: tenant.userId,
           })),
         },
@@ -173,7 +203,8 @@ export class SalesService {
       }
     }
 
-    const { subtotal, total } = calculateSaleTotals(dto.items, dto.discount);
+    const items = normalizeItems(dto.items);
+    const { subtotal, total } = calculateSaleTotals(items, dto.discount);
 
     return this.prisma.$transaction(async (tx) => {
       await tx.saleItem.updateMany({
@@ -193,12 +224,13 @@ export class SalesService {
           discount: dto.discount,
           total,
           items: {
-            create: dto.items.map((item) => ({
+            create: items.map((item) => ({
               companyId: tenant.companyId,
               productVariantId: item.productVariantId,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
               discount: item.discount,
+              isGift: item.isGift,
               createdBy: tenant.userId,
             })),
           },
@@ -238,6 +270,31 @@ export class SalesService {
 
     return this.prisma.$transaction(async (tx) => {
       for (const item of sale.items) {
+        // Kit "na hora" reserva as peças, não o kit (BR §10.3, regra 12);
+        // a composição fica congelada no item para a confirmação.
+        if (item.productVariant.product.kitMode === 'on_demand') {
+          const snapshot = await snapshotKitComponents(
+            tx,
+            tenant.companyId,
+            item.productVariant.productId,
+          );
+          for (const component of snapshot) {
+            await this.inventory.reserveStock(tx, {
+              companyId: tenant.companyId,
+              productVariantId: component.productVariantId,
+              quantity: new Prisma.Decimal(item.quantity).mul(
+                component.quantity,
+              ),
+              saleId: sale.id,
+              createdBy: tenant.userId,
+            });
+          }
+          await tx.saleItem.update({
+            where: { id: item.id },
+            data: { kitComponents: snapshot },
+          });
+          continue;
+        }
         await this.inventory.reserveStock(tx, {
           companyId: tenant.companyId,
           productVariantId: item.productVariantId,
@@ -349,18 +406,77 @@ export class SalesService {
       }[] = [];
 
       for (const item of sale.items) {
-        const variant = await tx.productVariant.findUniqueOrThrow({
-          where: { id: item.productVariantId },
-        });
-        const lastPrice = await tx.productPrice.findFirst({
-          where: {
-            companyId: tenant.companyId,
-            productId: variant.productId,
-            deletedAt: null,
-          },
-          orderBy: { effectiveFrom: 'desc' },
-        });
-        const unitCostAtSale = new Prisma.Decimal(lastPrice?.costPrice ?? 0);
+        // Kit "na hora" (BR §10.3, regra 12): baixa as peças e o custo do
+        // item é a soma dos custos delas. Kit "montado antes" é um produto
+        // com estoque e custo próprios, segue o caminho comum.
+        if (item.productVariant.product.kitMode === 'on_demand') {
+          const reservedSnapshot = parseKitSnapshot(item.kitComponents);
+          const snapshot: KitComponentSnapshot[] = [];
+          const pieces =
+            reservedSnapshot.length > 0
+              ? reservedSnapshot
+              : await snapshotKitComponents(
+                  tx,
+                  tenant.companyId,
+                  item.productVariant.productId,
+                );
+          for (const component of pieces) {
+            // Custo de agora, mesmo se a reserva foi feita antes (igual ao
+            // produto comum, que congela o custo na confirmação).
+            const pieceVariant = await tx.productVariant.findUniqueOrThrow({
+              where: { id: component.productVariantId },
+            });
+            const pieceCost = await currentUnitCost(
+              tx,
+              tenant.companyId,
+              pieceVariant.productId,
+            );
+            const quantity = new Prisma.Decimal(item.quantity).mul(
+              component.quantity,
+            );
+            if (wasReserved) {
+              await this.inventory.consumeReservation(tx, {
+                companyId: tenant.companyId,
+                productVariantId: component.productVariantId,
+                saleId,
+                unitCost: pieceCost,
+                createdBy: tenant.userId,
+              });
+            } else {
+              await this.inventory.releaseStock(tx, {
+                companyId: tenant.companyId,
+                productVariantId: component.productVariantId,
+                quantity,
+                unitCost: pieceCost,
+                originType: 'sale',
+                originId: saleId,
+                createdBy: tenant.userId,
+              });
+            }
+            snapshot.push({
+              productVariantId: component.productVariantId,
+              quantity: component.quantity,
+              unitCost: pieceCost.toString(),
+            });
+          }
+          const unitCostAtSale = kitUnitCost(snapshot);
+          await tx.saleItem.update({
+            where: { id: item.id },
+            data: { unitCostAtSale, kitComponents: snapshot },
+          });
+          costItems.push({
+            quantity: new Prisma.Decimal(item.quantity),
+            quantityReturned: new Prisma.Decimal(0),
+            unitCostAtSale,
+          });
+          continue;
+        }
+
+        const unitCostAtSale = await currentUnitCost(
+          tx,
+          tenant.companyId,
+          item.productVariant.productId,
+        );
 
         if (wasReserved) {
           await this.inventory.consumeReservation(tx, {
@@ -521,13 +637,7 @@ export class SalesService {
           item.quantityReturned,
         );
         if (remaining.greaterThan(0)) {
-          await this.inventory.restoreStock(tx, {
-            companyId: tenant.companyId,
-            productVariantId: item.productVariantId,
-            quantity: remaining,
-            originId: sale.id,
-            createdBy: tenant.userId,
-          });
+          await this.restoreItemStock(tx, tenant, item, remaining, sale.id);
         }
       }
 
@@ -660,13 +770,13 @@ export class SalesService {
         });
 
         if (returned.condition === 'apt') {
-          await this.inventory.restoreStock(tx, {
-            companyId: tenant.companyId,
-            productVariantId: item.productVariantId,
-            quantity: returned.quantity,
-            originId: saleReturn.id,
-            createdBy: tenant.userId,
-          });
+          await this.restoreItemStock(
+            tx,
+            tenant,
+            item,
+            new Prisma.Decimal(returned.quantity),
+            saleReturn.id,
+          );
         }
       }
 
@@ -740,6 +850,37 @@ export class SalesService {
     });
 
     return updatedSale;
+  }
+
+  // Devolve ao estoque o que o item tirou: o próprio produto, ou as peças
+  // congeladas de um kit "na hora" (BR §10.3, regra 13).
+  private async restoreItemStock(
+    tx: Prisma.TransactionClient,
+    tenant: CurrentTenantContext,
+    item: { productVariantId: string; kitComponents: Prisma.JsonValue },
+    quantity: Prisma.Decimal,
+    originId: string,
+  ) {
+    const pieces = parseKitSnapshot(item.kitComponents);
+    if (pieces.length === 0) {
+      await this.inventory.restoreStock(tx, {
+        companyId: tenant.companyId,
+        productVariantId: item.productVariantId,
+        quantity,
+        originId,
+        createdBy: tenant.userId,
+      });
+      return;
+    }
+    for (const piece of pieces) {
+      await this.inventory.restoreStock(tx, {
+        companyId: tenant.companyId,
+        productVariantId: piece.productVariantId,
+        quantity: quantity.mul(piece.quantity),
+        originId,
+        createdBy: tenant.userId,
+      });
+    }
   }
 
   private async reconcileFinancialReduction(

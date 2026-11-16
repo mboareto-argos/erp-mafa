@@ -19,8 +19,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -34,67 +34,69 @@ enum CompanyStatus {
 }
 
 model Company {
-  id               String        @id @default(uuid()) @db.Uuid
-  name             String
-  document         String?
-  segment          String?
-  plan             String?
-  brandAccentColor String        @default("#C49A28") @map("brand_accent_color")
-  email            String?
-  phone            String?
-  currency         String        @default("BRL")
-  timezone         String        @default("America/Sao_Paulo")
-  operationStartDate DateTime?   @map("operation_start_date") @db.Date
-  allowNegativeStock Boolean     @default(false) @map("allow_negative_stock")
-  allocationMethod String        @default("proportional_value") @map("allocation_method")
-  defaultMinStock  Decimal?      @map("default_min_stock") @db.Decimal(14, 3)
-  discountLimit    Decimal?      @map("discount_limit") @db.Decimal(5, 2)
-  status           CompanyStatus @default(active)
-  createdAt        DateTime      @default(now()) @map("created_at")
-  updatedAt        DateTime      @updatedAt @map("updated_at")
-  deletedAt        DateTime?     @map("deleted_at")
+  id                 String        @id @default(uuid()) @db.Uuid
+  name               String
+  document           String?
+  segment            String?
+  plan               String?
+  brandAccentColor   String        @default("#C49A28") @map("brand_accent_color")
+  email              String?
+  phone              String?
+  currency           String        @default("BRL")
+  timezone           String        @default("America/Sao_Paulo")
+  operationStartDate DateTime?     @map("operation_start_date") @db.Date
+  allowNegativeStock Boolean       @default(false) @map("allow_negative_stock")
+  allocationMethod   String        @default("proportional_value") @map("allocation_method")
+  defaultMinStock    Decimal?      @map("default_min_stock") @db.Decimal(14, 3)
+  discountLimit      Decimal?      @map("discount_limit") @db.Decimal(5, 2)
+  status             CompanyStatus @default(active)
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+  deletedAt          DateTime?     @map("deleted_at")
 
-  memberships             Membership[]
-  invitations             Invitation[]
-  refreshTokens           RefreshToken[]
-  categories              Category[]
-  brands                  Brand[]
-  tags                    Tag[]
-  products                Product[]
-  productVariants         ProductVariant[]
-  productPrices           ProductPrice[]
-  productTags             ProductTag[]
-  stockBalances           StockBalance[]
-  stockMovements          StockMovement[]
-  stockAdjustments        StockAdjustment[]
-  stockReservations       StockReservation[]
-  inventoryCounts         InventoryCount[]
-  inventoryCountItems     InventoryCountItem[]
-  suppliers               Supplier[]
-  purchases               Purchase[]
-  purchaseItems           PurchaseItem[]
-  purchaseReceipts        PurchaseReceipt[]
-  purchaseReceiptItems    PurchaseReceiptItem[]
-  purchaseCostAllocations PurchaseCostAllocation[]
-  customers               Customer[]
-  paymentMethods          PaymentMethod[]
-  sales                   Sale[]
-  saleItems               SaleItem[]
-  salePayments            SalePayment[]
-  saleReturns             SaleReturn[]
-  saleReturnItems         SaleReturnItem[]
-  financialAccounts       FinancialAccount[]
-  financialTransactions   FinancialTransaction[]
-  transfers               Transfer[]
-  receivables             Receivable[]
-  receivablePayments      ReceivablePayment[]
-  payables                Payable[]
-  payablePayments         PayablePayment[]
-  expenses                Expense[]
-  auditLogs               AuditLog[]
-  idempotencyRecords      IdempotencyRecord[]
-  importJobs              ImportJob[]
-  importRows              ImportRow[]
+  memberships                Membership[]
+  invitations                Invitation[]
+  refreshTokens              RefreshToken[]
+  categories                 Category[]
+  brands                     Brand[]
+  tags                       Tag[]
+  products                   Product[]
+  productVariants            ProductVariant[]
+  productPrices              ProductPrice[]
+  productTags                ProductTag[]
+  stockBalances              StockBalance[]
+  stockMovements             StockMovement[]
+  stockAdjustments           StockAdjustment[]
+  stockReservations          StockReservation[]
+  inventoryCounts            InventoryCount[]
+  productKitComponents       ProductKitComponent[]
+  kitAssemblies              KitAssembly[]
+  inventoryCountItems        InventoryCountItem[]
+  suppliers                  Supplier[]
+  purchases                  Purchase[]
+  purchaseItems              PurchaseItem[]
+  purchaseReceipts           PurchaseReceipt[]
+  purchaseReceiptItems       PurchaseReceiptItem[]
+  purchaseCostAllocations    PurchaseCostAllocation[]
+  customers                  Customer[]
+  paymentMethods             PaymentMethod[]
+  sales                      Sale[]
+  saleItems                  SaleItem[]
+  salePayments               SalePayment[]
+  saleReturns                SaleReturn[]
+  saleReturnItems            SaleReturnItem[]
+  financialAccounts          FinancialAccount[]
+  financialTransactions      FinancialTransaction[]
+  transfers                  Transfer[]
+  receivables                Receivable[]
+  receivablePayments         ReceivablePayment[]
+  payables                   Payable[]
+  payablePayments            PayablePayment[]
+  expenses                   Expense[]
+  auditLogs                  AuditLog[]
+  idempotencyRecords         IdempotencyRecord[]
+  importJobs                 ImportJob[]
+  importRows                 ImportRow[]
   profitDistributionPolicies ProfitDistributionPolicy[]
 
   @@map("companies")
@@ -118,50 +120,52 @@ model User {
   updatedAt    DateTime   @updatedAt @map("updated_at")
   deletedAt    DateTime?  @map("deleted_at")
 
-  memberships                    Membership[]
-  refreshTokens                  RefreshToken[]
-  createdMemberships             Membership[]             @relation("MembershipCreatedBy")
-  createdInvitations             Invitation[]             @relation("InvitationCreatedBy")
-  createdCategories              Category[]               @relation("CategoryCreatedBy")
-  createdBrands                  Brand[]                  @relation("BrandCreatedBy")
-  createdTags                    Tag[]                    @relation("TagCreatedBy")
-  createdProducts                Product[]                @relation("ProductCreatedBy")
-  createdProductVariants         ProductVariant[]         @relation("ProductVariantCreatedBy")
-  createdProductPrices           ProductPrice[]           @relation("ProductPriceCreatedBy")
-  createdProductTags             ProductTag[]             @relation("ProductTagCreatedBy")
-  createdStockMovements          StockMovement[]          @relation("StockMovementCreatedBy")
-  createdStockAdjustments        StockAdjustment[]        @relation("StockAdjustmentCreatedBy")
-  approvedStockAdjustments       StockAdjustment[]        @relation("StockAdjustmentApprovedBy")
-  createdStockReservations       StockReservation[]       @relation("StockReservationCreatedBy")
-  createdInventoryCounts         InventoryCount[]          @relation("InventoryCountCreatedBy")
-  completedInventoryCounts       InventoryCount[]          @relation("InventoryCountCompletedBy")
-  countedInventoryItems          InventoryCountItem[]      @relation("InventoryCountItemCountedBy")
-  createdInventoryCountItems     InventoryCountItem[]      @relation("InventoryCountItemCreatedBy")
-  createdSuppliers               Supplier[]               @relation("SupplierCreatedBy")
-  createdPurchases               Purchase[]               @relation("PurchaseCreatedBy")
-  createdPurchaseItems           PurchaseItem[]           @relation("PurchaseItemCreatedBy")
-  createdPurchaseReceipts        PurchaseReceipt[]        @relation("PurchaseReceiptCreatedBy")
-  createdPurchaseReceiptItems    PurchaseReceiptItem[]    @relation("PurchaseReceiptItemCreatedBy")
-  createdPurchaseCostAllocations PurchaseCostAllocation[] @relation("PurchaseCostAllocationCreatedBy")
-  createdCustomers               Customer[]               @relation("CustomerCreatedBy")
-  createdPaymentMethods          PaymentMethod[]          @relation("PaymentMethodCreatedBy")
-  createdSales                   Sale[]                   @relation("SaleCreatedBy")
-  createdSaleItems               SaleItem[]               @relation("SaleItemCreatedBy")
-  createdSalePayments            SalePayment[]            @relation("SalePaymentCreatedBy")
-  createdSaleReturns             SaleReturn[]             @relation("SaleReturnCreatedBy")
-  createdSaleReturnItems         SaleReturnItem[]         @relation("SaleReturnItemCreatedBy")
-  createdFinancialAccounts       FinancialAccount[]       @relation("FinancialAccountCreatedBy")
-  createdFinancialTransactions   FinancialTransaction[]   @relation("FinancialTransactionCreatedBy")
-  createdTransfers               Transfer[]               @relation("TransferCreatedBy")
-  createdReceivables             Receivable[]             @relation("ReceivableCreatedBy")
-  createdReceivablePayments      ReceivablePayment[]      @relation("ReceivablePaymentCreatedBy")
-  createdPayables                Payable[]                @relation("PayableCreatedBy")
-  createdPayablePayments         PayablePayment[]         @relation("PayablePaymentCreatedBy")
-  createdExpenses                Expense[]                @relation("ExpenseCreatedBy")
+  memberships                       Membership[]
+  refreshTokens                     RefreshToken[]
+  createdMemberships                Membership[]               @relation("MembershipCreatedBy")
+  createdInvitations                Invitation[]               @relation("InvitationCreatedBy")
+  createdCategories                 Category[]                 @relation("CategoryCreatedBy")
+  createdBrands                     Brand[]                    @relation("BrandCreatedBy")
+  createdTags                       Tag[]                      @relation("TagCreatedBy")
+  createdProducts                   Product[]                  @relation("ProductCreatedBy")
+  createdProductVariants            ProductVariant[]           @relation("ProductVariantCreatedBy")
+  createdProductPrices              ProductPrice[]             @relation("ProductPriceCreatedBy")
+  createdProductTags                ProductTag[]               @relation("ProductTagCreatedBy")
+  createdStockMovements             StockMovement[]            @relation("StockMovementCreatedBy")
+  createdStockAdjustments           StockAdjustment[]          @relation("StockAdjustmentCreatedBy")
+  createdProductKitComponents       ProductKitComponent[]      @relation("ProductKitComponentCreatedBy")
+  createdKitAssemblies              KitAssembly[]              @relation("KitAssemblyCreatedBy")
+  approvedStockAdjustments          StockAdjustment[]          @relation("StockAdjustmentApprovedBy")
+  createdStockReservations          StockReservation[]         @relation("StockReservationCreatedBy")
+  createdInventoryCounts            InventoryCount[]           @relation("InventoryCountCreatedBy")
+  completedInventoryCounts          InventoryCount[]           @relation("InventoryCountCompletedBy")
+  countedInventoryItems             InventoryCountItem[]       @relation("InventoryCountItemCountedBy")
+  createdInventoryCountItems        InventoryCountItem[]       @relation("InventoryCountItemCreatedBy")
+  createdSuppliers                  Supplier[]                 @relation("SupplierCreatedBy")
+  createdPurchases                  Purchase[]                 @relation("PurchaseCreatedBy")
+  createdPurchaseItems              PurchaseItem[]             @relation("PurchaseItemCreatedBy")
+  createdPurchaseReceipts           PurchaseReceipt[]          @relation("PurchaseReceiptCreatedBy")
+  createdPurchaseReceiptItems       PurchaseReceiptItem[]      @relation("PurchaseReceiptItemCreatedBy")
+  createdPurchaseCostAllocations    PurchaseCostAllocation[]   @relation("PurchaseCostAllocationCreatedBy")
+  createdCustomers                  Customer[]                 @relation("CustomerCreatedBy")
+  createdPaymentMethods             PaymentMethod[]            @relation("PaymentMethodCreatedBy")
+  createdSales                      Sale[]                     @relation("SaleCreatedBy")
+  createdSaleItems                  SaleItem[]                 @relation("SaleItemCreatedBy")
+  createdSalePayments               SalePayment[]              @relation("SalePaymentCreatedBy")
+  createdSaleReturns                SaleReturn[]               @relation("SaleReturnCreatedBy")
+  createdSaleReturnItems            SaleReturnItem[]           @relation("SaleReturnItemCreatedBy")
+  createdFinancialAccounts          FinancialAccount[]         @relation("FinancialAccountCreatedBy")
+  createdFinancialTransactions      FinancialTransaction[]     @relation("FinancialTransactionCreatedBy")
+  createdTransfers                  Transfer[]                 @relation("TransferCreatedBy")
+  createdReceivables                Receivable[]               @relation("ReceivableCreatedBy")
+  createdReceivablePayments         ReceivablePayment[]        @relation("ReceivablePaymentCreatedBy")
+  createdPayables                   Payable[]                  @relation("PayableCreatedBy")
+  createdPayablePayments            PayablePayment[]           @relation("PayablePaymentCreatedBy")
+  createdExpenses                   Expense[]                  @relation("ExpenseCreatedBy")
   createdProfitDistributionPolicies ProfitDistributionPolicy[] @relation("ProfitPolicyCreatedBy")
-  auditLogs                      AuditLog[]               @relation("AuditLogCreatedBy")
-  createdImportJobs              ImportJob[]              @relation("ImportJobCreatedBy")
-  revertedImportJobs             ImportJob[]              @relation("ImportJobRevertedBy")
+  auditLogs                         AuditLog[]                 @relation("AuditLogCreatedBy")
+  createdImportJobs                 ImportJob[]                @relation("ImportJobCreatedBy")
+  revertedImportJobs                ImportJob[]                @relation("ImportJobRevertedBy")
 
   @@map("users")
 }
@@ -260,17 +264,17 @@ model RefreshToken {
 // Trilha append-only das operações sensíveis. Não há endpoint de alteração
 // ou remoção: a retenção será uma política administrativa futura.
 model AuditLog {
-  id          String   @id @default(uuid()) @db.Uuid
-  companyId   String   @map("company_id") @db.Uuid
-  userId      String?  @map("user_id") @db.Uuid
-  action      String
-  entityType  String   @map("entity_type")
-  entityId    String?  @map("entity_id")
-  beforeData  Json?    @map("before_data")
-  afterData   Json?    @map("after_data")
-  reason      String?
-  origin      String   @default("api")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id         String   @id @default(uuid()) @db.Uuid
+  companyId  String   @map("company_id") @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  beforeData Json?    @map("before_data")
+  afterData  Json?    @map("after_data")
+  reason     String?
+  origin     String   @default("api")
+  createdAt  DateTime @default(now()) @map("created_at")
 
   company Company @relation(fields: [companyId], references: [id])
   user    User?   @relation("AuditLogCreatedBy", fields: [userId], references: [id])
@@ -322,30 +326,30 @@ enum ImportJobStatus {
 // aceite final") inativa as entidades geradas e lanca um ajuste
 // compensatorio de estoque quando aplicavel, mantendo TA-DATA-001.
 model ImportJob {
-  id             String           @id @default(uuid()) @db.Uuid
-  companyId      String           @map("company_id") @db.Uuid
-  entityType     ImportEntityType @map("entity_type")
-  status         ImportJobStatus  @default(completed)
-  fileName       String?          @map("file_name")
-  totalRows      Int              @map("total_rows")
-  createdCount   Int              @map("created_count")
-  updatedCount   Int              @map("updated_count")
-  skippedCount   Int              @map("skipped_count")
-  rejectedCount  Int              @map("rejected_count")
+  id              String           @id @default(uuid()) @db.Uuid
+  companyId       String           @map("company_id") @db.Uuid
+  entityType      ImportEntityType @map("entity_type")
+  status          ImportJobStatus  @default(completed)
+  fileName        String?          @map("file_name")
+  totalRows       Int              @map("total_rows")
+  createdCount    Int              @map("created_count")
+  updatedCount    Int              @map("updated_count")
+  skippedCount    Int              @map("skipped_count")
+  rejectedCount   Int              @map("rejected_count")
   // Total informado pelo usuario a partir da planilha original — comparado
   // com a soma das linhas efetivamente criadas (RN §34.8: "a soma das vendas/
   // recebimentos importados devera ser conciliada com as planilhas").
-  expectedTotal  Decimal?         @map("expected_total") @db.Decimal(14, 2)
-  reconciledTotal Decimal?        @map("reconciled_total") @db.Decimal(14, 2)
-  createdAt      DateTime         @default(now()) @map("created_at")
-  createdBy      String?          @map("created_by") @db.Uuid
-  revertedAt     DateTime?        @map("reverted_at")
-  revertedBy     String?          @map("reverted_by") @db.Uuid
+  expectedTotal   Decimal?         @map("expected_total") @db.Decimal(14, 2)
+  reconciledTotal Decimal?         @map("reconciled_total") @db.Decimal(14, 2)
+  createdAt       DateTime         @default(now()) @map("created_at")
+  createdBy       String?          @map("created_by") @db.Uuid
+  revertedAt      DateTime?        @map("reverted_at")
+  revertedBy      String?          @map("reverted_by") @db.Uuid
 
-  company         Company     @relation(fields: [companyId], references: [id])
-  createdByUser   User?       @relation("ImportJobCreatedBy", fields: [createdBy], references: [id])
-  revertedByUser  User?       @relation("ImportJobRevertedBy", fields: [revertedBy], references: [id])
-  rows            ImportRow[]
+  company        Company     @relation(fields: [companyId], references: [id])
+  createdByUser  User?       @relation("ImportJobCreatedBy", fields: [createdBy], references: [id])
+  revertedByUser User?       @relation("ImportJobRevertedBy", fields: [revertedBy], references: [id])
+  rows           ImportRow[]
 
   @@index([companyId, entityType, createdAt])
   @@map("import_jobs")
@@ -461,34 +465,39 @@ enum ProductStatus {
 }
 
 model Product {
-  id         String        @id @default(uuid()) @db.Uuid
-  companyId  String        @map("company_id") @db.Uuid
+  id         String          @id @default(uuid()) @db.Uuid
+  companyId  String          @map("company_id") @db.Uuid
   sku        String
   name       String
-  categoryId String?       @map("category_id") @db.Uuid
-  brandId    String?       @map("brand_id") @db.Uuid
+  categoryId String?         @map("category_id") @db.Uuid
+  brandId    String?         @map("brand_id") @db.Uuid
   unit       String
-  status     ProductStatus @default(active)
-  aliases    String[]      @default([])
+  status     ProductStatus   @default(active)
+  aliases    String[]        @default([])
   // Estoque minimo (doc §10.3) — usado pelo alerta de estoque baixo do
   // Inventory (RN 10.7.8). Opcional: sem valor, o produto nunca aparece
   // no relatorio de estoque baixo.
-  minStock   Decimal?      @map("min_stock") @db.Decimal(14, 3)
+  minStock   Decimal?        @map("min_stock") @db.Decimal(14, 3)
   // Foto principal (BR §10.3 "imagem"). URL pública no armazenamento de
   // arquivos (Vercel Blob — ADR-0003); o arquivo nunca fica no banco.
-  imageUrl   String?       @map("image_url")
-  createdAt  DateTime      @default(now()) @map("created_at")
-  updatedAt  DateTime      @updatedAt @map("updated_at")
-  createdBy  String?       @map("created_by") @db.Uuid
-  deletedAt  DateTime?     @map("deleted_at")
+  imageUrl   String?         @map("image_url")
+  // Kit (BR §10.3, regras 11 a 13): null = produto comum. "assembled" tem
+  // estoque próprio (montar/desmontar); "on_demand" baixa as peças na venda.
+  kitMode    ProductKitMode? @map("kit_mode")
+  createdAt  DateTime        @default(now()) @map("created_at")
+  updatedAt  DateTime        @updatedAt @map("updated_at")
+  createdBy  String?         @map("created_by") @db.Uuid
+  deletedAt  DateTime?       @map("deleted_at")
 
-  company       Company          @relation(fields: [companyId], references: [id])
-  category      Category?        @relation(fields: [categoryId], references: [id])
-  brand         Brand?           @relation(fields: [brandId], references: [id])
-  createdByUser User?            @relation("ProductCreatedBy", fields: [createdBy], references: [id])
+  company       Company               @relation(fields: [companyId], references: [id])
+  category      Category?             @relation(fields: [categoryId], references: [id])
+  brand         Brand?                @relation(fields: [brandId], references: [id])
+  createdByUser User?                 @relation("ProductCreatedBy", fields: [createdBy], references: [id])
   variants      ProductVariant[]
   prices        ProductPrice[]
   productTags   ProductTag[]
+  kitComponents ProductKitComponent[] @relation("KitComponents")
+  kitAssemblies KitAssembly[]
 
   @@unique([companyId, sku])
   @@index([companyId, status])
@@ -521,7 +530,8 @@ model ProductVariant {
   purchaseReceiptItems PurchaseReceiptItem[]
   saleItems            SaleItem[]
   saleReturnItems      SaleReturnItem[]
-  inventoryCountItems InventoryCountItem[]
+  inventoryCountItems  InventoryCountItem[]
+  kitComponentOf       ProductKitComponent[] @relation("KitComponentOf")
 
   @@unique([companyId, skuVariant])
   @@unique([companyId, barcode])
@@ -554,6 +564,63 @@ model ProductPrice {
 
   @@index([companyId, productId, effectiveFrom])
   @@map("product_prices")
+}
+
+enum ProductKitMode {
+  assembled
+  on_demand
+}
+
+// Composição do kit (BR §10.3, regra 11): quais variações (peças) formam o
+// kit e em que quantidade. Trocar a composição inativa as linhas antigas
+// (deleted_at) e cria novas — o histórico de vendas guarda a composição
+// usada em sale_items.kit_components.
+model ProductKitComponent {
+  id                 String    @id @default(uuid()) @db.Uuid
+  companyId          String    @map("company_id") @db.Uuid
+  kitProductId       String    @map("kit_product_id") @db.Uuid
+  componentVariantId String    @map("component_variant_id") @db.Uuid
+  quantity           Decimal   @db.Decimal(14, 3)
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  createdBy          String?   @map("created_by") @db.Uuid
+  deletedAt          DateTime? @map("deleted_at")
+
+  company          Company        @relation(fields: [companyId], references: [id])
+  kitProduct       Product        @relation("KitComponents", fields: [kitProductId], references: [id])
+  componentVariant ProductVariant @relation("KitComponentOf", fields: [componentVariantId], references: [id])
+  createdByUser    User?          @relation("ProductKitComponentCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([companyId, kitProductId])
+  @@map("product_kit_components")
+}
+
+enum KitAssemblyType {
+  assemble
+  disassemble
+}
+
+// Montagem/desmontagem de kit "assembled" (BR §10.3, regras 12 e 13). É a
+// origem (origin_type = kit_assembly) das movimentações de estoque do kit e
+// das peças. Append-only, como StockMovement.
+model KitAssembly {
+  id           String          @id @default(uuid()) @db.Uuid
+  companyId    String          @map("company_id") @db.Uuid
+  kitProductId String          @map("kit_product_id") @db.Uuid
+  type         KitAssemblyType
+  quantity     Decimal         @db.Decimal(14, 3)
+  // Custo unitário do kit nesta operação: soma dos custos das peças na
+  // montagem; custo atual do kit na desmontagem.
+  unitCost     Decimal         @map("unit_cost") @db.Decimal(14, 4)
+  createdAt    DateTime        @default(now()) @map("created_at")
+  createdBy    String?         @map("created_by") @db.Uuid
+
+  company       Company @relation(fields: [companyId], references: [id])
+  kitProduct    Product @relation(fields: [kitProductId], references: [id])
+  createdByUser User?   @relation("KitAssemblyCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([companyId, kitProductId])
+  @@map("kit_assemblies")
 }
 
 // Tabela de associacao explicita (em vez de m:n implicito do Prisma) para
@@ -616,6 +683,7 @@ enum StockMovementOriginType {
   adjustment
   return
   sale
+  kit_assembly
 }
 
 // Registro imutavel (RN 10.7.1/10.7.2/10.7.3 do Documento de Negocio) — toda
@@ -730,18 +798,18 @@ model InventoryCount {
 }
 
 model InventoryCountItem {
-  id                String    @id @default(uuid()) @db.Uuid
-  companyId         String    @map("company_id") @db.Uuid
-  inventoryCountId  String    @map("inventory_count_id") @db.Uuid
-  productVariantId  String    @map("product_variant_id") @db.Uuid
-  expectedQuantity  Decimal   @map("expected_quantity") @db.Decimal(14, 3)
-  countedQuantity   Decimal?  @map("counted_quantity") @db.Decimal(14, 3)
-  countedBy         String?   @map("counted_by") @db.Uuid
-  countedAt         DateTime? @map("counted_at")
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
-  createdBy         String?   @map("created_by") @db.Uuid
-  deletedAt         DateTime? @map("deleted_at")
+  id               String    @id @default(uuid()) @db.Uuid
+  companyId        String    @map("company_id") @db.Uuid
+  inventoryCountId String    @map("inventory_count_id") @db.Uuid
+  productVariantId String    @map("product_variant_id") @db.Uuid
+  expectedQuantity Decimal   @map("expected_quantity") @db.Decimal(14, 3)
+  countedQuantity  Decimal?  @map("counted_quantity") @db.Decimal(14, 3)
+  countedBy        String?   @map("counted_by") @db.Uuid
+  countedAt        DateTime? @map("counted_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  createdBy        String?   @map("created_by") @db.Uuid
+  deletedAt        DateTime? @map("deleted_at")
 
   company        Company        @relation(fields: [companyId], references: [id])
   inventoryCount InventoryCount @relation(fields: [inventoryCountId], references: [id])
@@ -1027,9 +1095,9 @@ model Sale {
   createdBy             String?      @map("created_by") @db.Uuid
   deletedAt             DateTime?    @map("deleted_at")
 
-  company       Company       @relation(fields: [companyId], references: [id])
-  customer      Customer?     @relation(fields: [customerId], references: [id])
-  createdByUser User?         @relation("SaleCreatedBy", fields: [createdBy], references: [id])
+  company           Company            @relation(fields: [companyId], references: [id])
+  customer          Customer?          @relation(fields: [customerId], references: [id])
+  createdByUser     User?              @relation("SaleCreatedBy", fields: [createdBy], references: [id])
   items             SaleItem[]
   payments          SalePayment[]
   returns           SaleReturn[]
@@ -1054,6 +1122,14 @@ model SaleItem {
   // muda quando o custo atual do produto muda.
   unitCostAtSale   Decimal?  @map("unit_cost_at_sale") @db.Decimal(14, 4)
   quantityReturned Decimal   @default(0) @map("quantity_returned") @db.Decimal(14, 3)
+  // Brinde (BR §10.10, regra 19): preço zero, sai do estoque e o custo
+  // entra no CMV da venda.
+  isGift           Boolean   @default(false) @map("is_gift")
+  // Kit "on_demand": peças baixadas na confirmação, congeladas para que
+  // cancelamento/devolução devolvam exatamente o que saiu, mesmo que a
+  // composição do kit mude depois. [{ productVariantId, quantity, unitCost }]
+  // por UMA unidade do kit.
+  kitComponents    Json?     @map("kit_components")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
   createdBy        String?   @map("created_by") @db.Uuid
@@ -1270,24 +1346,24 @@ enum ReceivableStatus {
 // pendente/parcial) — sem job agendado no projeto ainda, sem status
 // `overdue` armazenado.
 model Receivable {
-  id             String           @id @default(uuid()) @db.Uuid
-  companyId      String           @map("company_id") @db.Uuid
-  customerId     String?          @map("customer_id") @db.Uuid
+  id                String           @id @default(uuid()) @db.Uuid
+  companyId         String           @map("company_id") @db.Uuid
+  customerId        String?          @map("customer_id") @db.Uuid
   // Preparado para uma futura venda a prazo (nao usado ainda — Fase 3 e'
   // so' a vista). Ver plano da Fase 4.
-  saleId         String?          @map("sale_id") @db.Uuid
-  installmentNumber Int?          @map("installment_number")
-  installmentCount  Int?          @map("installment_count")
-  description    String
-  amountOriginal Decimal          @map("amount_original") @db.Decimal(14, 2)
-  amountReceived Decimal          @default(0) @map("amount_received") @db.Decimal(14, 2)
-  dueDate        DateTime         @map("due_date")
-  status         ReceivableStatus @default(pending)
-  cancelReason   String?          @map("cancel_reason")
-  createdAt      DateTime         @default(now()) @map("created_at")
-  updatedAt      DateTime         @updatedAt @map("updated_at")
-  createdBy      String?          @map("created_by") @db.Uuid
-  deletedAt      DateTime?        @map("deleted_at")
+  saleId            String?          @map("sale_id") @db.Uuid
+  installmentNumber Int?             @map("installment_number")
+  installmentCount  Int?             @map("installment_count")
+  description       String
+  amountOriginal    Decimal          @map("amount_original") @db.Decimal(14, 2)
+  amountReceived    Decimal          @default(0) @map("amount_received") @db.Decimal(14, 2)
+  dueDate           DateTime         @map("due_date")
+  status            ReceivableStatus @default(pending)
+  cancelReason      String?          @map("cancel_reason")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+  createdBy         String?          @map("created_by") @db.Uuid
+  deletedAt         DateTime?        @map("deleted_at")
 
   company       Company             @relation(fields: [companyId], references: [id])
   customer      Customer?           @relation(fields: [customerId], references: [id])
@@ -1330,29 +1406,29 @@ enum PayableStatus {
 }
 
 model Payable {
-  id             String        @id @default(uuid()) @db.Uuid
-  companyId      String        @map("company_id") @db.Uuid
-  supplierId     String?       @map("supplier_id") @db.Uuid
-  purchaseId     String?       @map("purchase_id") @db.Uuid
-  expenseId      String?       @map("expense_id") @db.Uuid
-  installmentNumber Int?       @map("installment_number")
-  installmentCount  Int?       @map("installment_count")
-  description    String
-  amountOriginal Decimal       @map("amount_original") @db.Decimal(14, 2)
-  amountPaid     Decimal       @default(0) @map("amount_paid") @db.Decimal(14, 2)
-  dueDate        DateTime      @map("due_date")
-  status         PayableStatus @default(pending)
-  cancelReason   String?       @map("cancel_reason")
-  createdAt      DateTime      @default(now()) @map("created_at")
-  updatedAt      DateTime      @updatedAt @map("updated_at")
-  createdBy      String?       @map("created_by") @db.Uuid
-  deletedAt      DateTime?     @map("deleted_at")
+  id                String        @id @default(uuid()) @db.Uuid
+  companyId         String        @map("company_id") @db.Uuid
+  supplierId        String?       @map("supplier_id") @db.Uuid
+  purchaseId        String?       @map("purchase_id") @db.Uuid
+  expenseId         String?       @map("expense_id") @db.Uuid
+  installmentNumber Int?          @map("installment_number")
+  installmentCount  Int?          @map("installment_count")
+  description       String
+  amountOriginal    Decimal       @map("amount_original") @db.Decimal(14, 2)
+  amountPaid        Decimal       @default(0) @map("amount_paid") @db.Decimal(14, 2)
+  dueDate           DateTime      @map("due_date")
+  status            PayableStatus @default(pending)
+  cancelReason      String?       @map("cancel_reason")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+  createdBy         String?       @map("created_by") @db.Uuid
+  deletedAt         DateTime?     @map("deleted_at")
 
   company       Company          @relation(fields: [companyId], references: [id])
   supplier      Supplier?        @relation(fields: [supplierId], references: [id])
   purchase      Purchase?        @relation(fields: [purchaseId], references: [id])
-  legacyExpense Expense?       @relation("LegacyExpensePayable")
-  expenseOrigin Expense?       @relation("ExpensePayables", fields: [expenseId], references: [id])
+  legacyExpense Expense?         @relation("LegacyExpensePayable")
+  expenseOrigin Expense?         @relation("ExpensePayables", fields: [expenseId], references: [id])
   createdByUser User?            @relation("PayableCreatedBy", fields: [createdBy], references: [id])
   payments      PayablePayment[]
 

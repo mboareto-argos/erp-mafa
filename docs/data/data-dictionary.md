@@ -289,6 +289,7 @@ auditoria TA-DATA-001. `UNIQUE(company_id, name)` · índice `(company_id, statu
 | aliases | text[] | RN-IMP-001 |
 | min_stock | numeric(14,3)? | estoque mínimo (§10.3) — alimenta o alerta de estoque baixo do Inventory (RN 10.7.8); adicionado na migration `20260804175603_add_inventory_purchasing` |
 | image_url | text? | foto principal (§10.3 "imagem") — URL pública no Vercel Blob (ADR-0003) ou `/uploads/` no ambiente local; o arquivo nunca fica no banco |
+| kit_mode | enum(assembled, on_demand)? | kit (BR §10.3, regras 11–13): `null` = produto comum; `assembled` = "montado antes" (estoque próprio, montar/desmontar); `on_demand` = "montado na hora" (sem estoque próprio, a venda baixa as peças) — migration `20261116204001_kits_and_gifts` |
 | created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
 
 Constraints: `UNIQUE(company_id, sku)` · índice `(company_id, status)`.
@@ -335,6 +336,47 @@ sobrescreve a anterior.
 `sale_price` — insere uma nova linha aqui (nunca edita a existente) e grava um
 `audit_logs` com `action: 'product.repriced'` e o `reason` informado. `cost_price` é
 calculado por recebimentos/ajustes autorizados, nunca digitado nesse comando (DS-FORM-004).
+
+### `product_kit_components`
+Composição do kit (BR §10.3, regra 11) — migration `20261116204001_kits_and_gifts`. Trocar a
+composição inativa as linhas atuais (`deleted_at`) e cria novas; o que foi vendido fica
+congelado em `sale_items.kit_components`.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | RLS `tenant_isolation` |
+| kit_product_id | uuid FK → products | o kit |
+| component_variant_id | uuid FK → product_variants | a peça — nunca outro kit nem o próprio kit (validado no serviço) |
+| quantity | numeric(14,3) | quantas por kit |
+| created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
+
+Índice: `(company_id, kit_product_id)`.
+
+**API**: `GET /kits/:productId` (view_catalog) devolve peças, custo e preço avulso, economia,
+estoque do kit e quantos dá para montar; `PUT /kits/:productId` (manage_catalog) define modo e
+composição (`mode: null` deixa de ser kit; kit pronto em estoque não muda de modo — `KIT_HAS_STOCK`).
+
+### `kit_assemblies`
+Montagem/desmontagem de kit "montado antes" (BR §10.3, regras 12–13). Append-only, como
+`stock_movements`; é a origem (`origin_type = kit_assembly`) das movimentações do kit e das peças.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | RLS `tenant_isolation` |
+| kit_product_id | uuid FK → products | |
+| type | enum(assemble, disassemble) | |
+| quantity | numeric(14,3) | kits montados/desmontados |
+| unit_cost | numeric(14,4) | montagem: soma dos custos das peças no momento (entra no custo médio do kit); desmontagem: custo atual do kit |
+| created_at / created_by | — | sem `updated_at`/`deleted_at` — imutável |
+
+Índice: `(company_id, kit_product_id)`.
+
+**API**: `POST /kits/:productId/assemble` e `/disassemble` (adjust_stock, com
+`Idempotency-Key`), corpo `{ quantity }` inteiro. Montar baixa as peças (`out`) e dá entrada no
+kit (`in`, recalcula o custo médio do kit); desmontar faz o inverso, devolvendo as peças ao
+custo atual delas.
 
 ### `product_tags`
 Tabela de associação explícita `products` ↔ `tags` (em vez de m:n implícito do Prisma), para
@@ -388,7 +430,7 @@ ser append-only, sem `updated_at`/`deleted_at` (mesma exceção de `stock_balanc
 | type | enum(in, out, adjustment, return, reservation, release) | `reservation`/`release` adicionados na migration `20260810141344_add_stock_reservation_transit`; não alteram o físico, só documentam o deslocamento entre `quantity_available` e `quantity_reserved` |
 | quantity | numeric(14,3) | com sinal |
 | unit_cost | numeric(14,4)? | |
-| origin_type | enum(purchase, adjustment, return, sale) | `sale` adicionado na migration `20260804183648_add_sales_customers_payments` |
+| origin_type | enum(purchase, adjustment, return, sale, kit_assembly) | `sale` adicionado na migration `20260804183648_add_sales_customers_payments`; `kit_assembly` (montagem/desmontagem de kit, origem em `kit_assemblies`) na `20261116204001_kits_and_gifts` |
 | origin_id | uuid | referência polimórfica (compra, ajuste, devolução, venda) |
 | created_at / created_by | — | sem `updated_at`/`deleted_at` — imutável |
 
@@ -629,6 +671,8 @@ padrão de `purchase_items.quantity_received`.
 | discount | numeric(14,2) | desconto deste item |
 | unit_cost_at_sale | numeric(14,4)? | congelado na confirmação (RN 10.10.9/10.10.10) — o CMV histórico nunca muda quando o custo atual do produto muda |
 | quantity_returned | numeric(14,3) | materializado, default 0 |
+| is_gift | boolean | brinde (BR §10.10, regra 19): o servidor zera `unit_price`/`discount`; sai do estoque e `unit_cost_at_sale` entra no CMV. O dashboard soma `giftCost`/`giftCount` do período (só para `view_cost`) — migration `20261116204001_kits_and_gifts` |
+| kit_components | jsonb? | só para kit "na hora": peças baixadas por UMA unidade do kit, `[{ productVariantId, quantity, unitCost }]`, congeladas na reserva/confirmação para que cancelamento e devolução devolvam exatamente o que saiu. `unit_cost_at_sale` = soma de `quantity × unitCost` |
 | created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
 
 Índice: `(company_id, sale_id)`.

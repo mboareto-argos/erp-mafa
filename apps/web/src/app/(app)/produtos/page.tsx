@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { AppIcon } from '@/components/layout/app-icon';
+import { NewKitButton } from '@/components/catalog/new-kit-button';
 import { NewProductForm } from '@/components/catalog/new-product-form';
 import {
   ProductRow,
@@ -87,6 +88,7 @@ export default async function ProductsPage({
             Cadastre produtos uma vez e use-os em compras, vendas e estoque.
           </p>
         </div>
+        {canManage && <NewKitButton />}
       </div>
 
       {canManage && (

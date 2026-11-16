@@ -715,6 +715,23 @@ Cada variação poderá ter:
 9. O custo atual não deverá ser alterado manualmente sem registro de origem ou ajuste autorizado.
 10. A quantidade do estoque não deverá ser editada diretamente no cadastro do produto.
 
+## Kits
+
+*Incluído em 16/11/2026, aprovado pelo proprietário da MAFA Store (entrega de kits e brindes).*
+
+11. **Kit (K1).** Um kit é um produto com uma composição: quais produtos (peças) o formam e em que
+    quantidade. O kit tem preço de venda próprio, e o sistema deverá mostrar quanto o cliente
+    economiza em relação a comprar as peças separadamente.
+12. **Modo do kit (K2).** Cada kit define o seu modo:
+    - **Montado antes:** o kit tem estoque próprio. A ação "Montar N kits" baixa as peças e soma
+      N kits ao estoque; o custo do kit é a soma dos custos das peças no momento da montagem.
+      "Desmontar" devolve as peças ao estoque. Vender o kit baixa o estoque do kit.
+    - **Montado na hora:** o kit não tem estoque próprio. Vender o kit baixa as peças, e o custo da
+      venda é a soma dos custos das peças. O disponível é quantos kits dá para montar com o estoque
+      atual das peças.
+13. **Rastreabilidade do kit (K3).** Montagem, desmontagem e baixa de peças geram movimentações de
+    estoque próprias e rastreáveis. O estoque do kit e das peças nunca é editado diretamente.
+
 ## Critérios de aceite
 
 - Ao cadastrar um produto com SKU já existente na empresa, o sistema deverá impedir o cadastro.
@@ -1018,6 +1035,22 @@ Manter dados básicos e histórico de relacionamento.
 7. Preferências comerciais não deverão ser inferidas como dados sensíveis sem necessidade.
 8. Marketing deverá respeitar consentimento quando aplicável.
 
+## Campanhas e consentimento
+
+*Incluído em 16/11/2026, aprovado pelo proprietário da MAFA Store (detalha a regra 8).*
+
+9. **Consentimento (C1).** O cadastro do cliente registra se ele aceita receber ofertas, com a data
+   e a origem do aceite. Somente clientes que aceitaram entram em campanhas, e o cliente pode
+   deixar de receber a qualquer momento.
+10. **Campanha (C2).** Uma campanha tem título, mensagem, foto opcional e público: todos que
+    aceitaram, aniversariantes do mês, quem comprou uma marca, ou clientes sem comprar há X dias.
+11. **Envio 1 a 1 (C3).** O envio é feito pelo WhatsApp do próprio usuário, um cliente por vez
+    (link com o texto pronto; a foto vai como link), marcando quem já recebeu. Também deverá
+    haver a opção "Compartilhar" (foto + texto) para a lista de transmissão do WhatsApp do
+    usuário.
+12. **API oficial (C4).** O envio automático pela API oficial do WhatsApp (ou SMS) fica para uma
+    etapa posterior. Não deverá ser usado envio em massa não oficial.
+
 ## Indicadores
 
 - total comprado;
@@ -1105,6 +1138,11 @@ A implementação poderá simplificar os status no MVP, desde que preserve a cap
 17. A venda poderá ter custo de entrega pago pela empresa.
 18. O frete cobrado do cliente deverá ser tratado separadamente do custo de entrega.
 19. Brindes deverão ser registrados como itens com valor zero ou por movimentação específica, preservando o custo.
+
+    *Detalhamento incluído em 16/11/2026, aprovado pelo proprietário (B1):* qualquer item do
+    carrinho poderá ser marcado como **brinde**. O brinde tem preço R$ 0,00, sai do estoque, o seu
+    custo entra no custo da venda (reduzindo o lucro) e fica identificado, para que se veja quanto
+    se gasta com brindes por mês.
 20. A venda não deverá ser apagada após confirmação.
 21. Alterações relevantes deverão gerar auditoria.
 22. O lucro exibido deverá indicar se é estimado ou realizado.
@@ -2940,10 +2978,10 @@ As seguintes decisões deverão ser validadas antes ou durante a especificação
 8. Rateio de custos adicionais.
 9. Forma de cálculo de lucro líquido.
 10. Tratamento de pró-labore e retiradas.
-11. Tratamento de brindes.
+11. Tratamento de brindes. *(Resolvido em 16/11/2026 — ver §10.10, regra 19.)*
 12. Tratamento de decants e fracionamento.
 13. Controle de lotes e validade.
-14. Controle de kits e composição.
+14. Controle de kits e composição. *(Resolvido em 16/11/2026 — ver §10.3, regras 11 a 13.)*
 15. Necessidade de múltiplos preços.
 16. Necessidade de múltiplas moedas.
 17. Política de desconto.

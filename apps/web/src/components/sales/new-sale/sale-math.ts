@@ -17,7 +17,13 @@ export type CartLine = {
   sku: string;
   unitPriceCents: number;
   quantity: number;
+  /** Brinde (BR §10.10, regra 19): sai de graça; o preço fica guardado para desmarcar. */
+  isGift?: boolean;
 };
+
+/** Preço que vale na venda: zero quando a linha é brinde. */
+export const linePrice = (line: CartLine) =>
+  line.isGift ? 0 : line.unitPriceCents;
 
 export type PaymentMethod = {
   id: string;
@@ -78,9 +84,15 @@ export function setUnitPrice(
   );
 }
 
+export function setGift(cart: CartLine[], variantId: string, isGift: boolean) {
+  return cart.map((line) =>
+    line.variantId === variantId ? { ...line, isGift } : line,
+  );
+}
+
 export function cartTotals(cart: CartLine[], discountCents = 0) {
   const subtotal = cart.reduce(
-    (sum, line) => sum + line.unitPriceCents * line.quantity,
+    (sum, line) => sum + linePrice(line) * line.quantity,
     0,
   );
   const units = cart.reduce((sum, line) => sum + line.quantity, 0);

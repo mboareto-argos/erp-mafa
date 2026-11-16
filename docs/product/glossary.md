@@ -129,3 +129,20 @@ regra 10).
 Movimentação que corrige a diferença entre o saldo calculado de uma conta e o saldo real
 informado pelo usuário, com motivo obrigatório. Não é receita nem despesa (BR §10.13, regra 9).
 
+
+## Kit
+Produto formado por outros produtos (peças) em quantidades definidas, com preço próprio. Pode ser
+"montado antes" (tem estoque próprio) ou "montado na hora" (baixa as peças na venda)
+(BR §10.3, regras 11 a 13).
+
+## Montagem de kit
+Movimentação que baixa as peças e soma kits prontos ao estoque; a desmontagem faz o inverso
+(BR §10.3, regra 13).
+
+## Brinde
+Item de uma venda entregue de graça: preço zero, sai do estoque e o seu custo reduz o lucro da
+venda (BR §10.10, regra 19).
+
+## Consentimento de marketing
+Aceite do cliente em receber ofertas, com data e origem; sem ele o cliente não entra em campanhas
+(BR §10.9, regra 9).

@@ -8,6 +8,8 @@ import { AdjustmentsController } from './adjustments/adjustments.controller';
 import { LowStockController } from './low-stock/low-stock.controller';
 import { InventoryCountsController } from './counts/inventory-counts.controller';
 import { InventoryCountsService } from './counts/inventory-counts.service';
+import { KitsController } from './kits/kits.controller';
+import { KitsService } from './kits/kits.service';
 
 @Module({
   imports: [TenancyModule, CatalogModule],
@@ -17,8 +19,9 @@ import { InventoryCountsService } from './counts/inventory-counts.service';
     AdjustmentsController,
     LowStockController,
     InventoryCountsController,
+    KitsController,
   ],
-  providers: [InventoryService, InventoryCountsService],
-  exports: [InventoryService],
+  providers: [InventoryService, InventoryCountsService, KitsService],
+  exports: [InventoryService, KitsService],
 })
 export class InventoryModule {}

@@ -9,7 +9,42 @@ export type CatalogProduct = {
   imageUrl?: string | null;
   variants: { id: string; barcode?: string | null }[];
   prices: { salePrice: string }[];
+  /** Kit (BR §10.3, regra 11): null/ausente = produto comum. */
+  kitMode?: 'assembled' | 'on_demand' | null;
+  kitComponents?: { componentVariantId: string; quantity: string }[];
 };
+
+/**
+ * Estoque por variação com os kits "na hora" incluídos: o disponível deles é
+ * quantos dá para montar com as peças (BR §10.3, regra 12). Kit "montado
+ * antes" já tem estoque próprio.
+ */
+export function withKitAvailability(
+  products: CatalogProduct[],
+  stock: Record<string, number>,
+) {
+  const result = { ...stock };
+  for (const product of products) {
+    const variantId = product.variants[0]?.id;
+    if (product.kitMode !== 'on_demand' || !variantId) continue;
+    const pieces = product.kitComponents ?? [];
+    result[variantId] =
+      pieces.length === 0
+        ? 0
+        : Math.max(
+            0,
+            Math.min(
+              ...pieces.map((piece) =>
+                Math.floor(
+                  (stock[piece.componentVariantId] ?? 0) /
+                    Number(piece.quantity),
+                ),
+              ),
+            ),
+          );
+  }
+  return result;
+}
 
 const normalize = (text: string) =>
   text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();

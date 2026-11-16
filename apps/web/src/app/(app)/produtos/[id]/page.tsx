@@ -7,8 +7,11 @@ import {
   ShoppingBag,
   ShoppingCart,
 } from 'lucide-react';
+import { KitPanel } from '@/components/catalog/kit-panel';
 import { ProductPhotoEditor } from '@/components/catalog/product-photo-editor';
 import { Button } from '@/components/ui/button';
+import type { CatalogProduct } from '@/lib/catalog';
+import { KIT_MODE_LABEL, type KitDetail } from '@/lib/kits';
 import { formatCents, toCents } from '@/lib/money';
 import {
   ApiRequestError,
@@ -29,6 +32,7 @@ type ProductDetail = {
   brand?: { name: string } | null;
   variants: { id: string; skuVariant: string; barcode?: string | null }[];
   prices: { salePrice: string; effectiveFrom: string }[];
+  kitMode?: 'assembled' | 'on_demand' | null;
 };
 type Balance = {
   productVariantId: string;
@@ -78,15 +82,45 @@ export default async function ProductPage({
       : Promise.resolve(null),
   ]);
 
+  // Kit (BR §10.3, regras 11 a 13): detalhe das peças e, para quem edita a
+  // composição, o catálogo para buscar as peças.
+  const [kit, catalog] = await Promise.all([
+    product.kitMode
+      ? (
+          backendAuthenticatedRequest(
+            `/kits/${product.id}`,
+          ) as Promise<KitDetail>
+        ).catch(() => null)
+      : Promise.resolve(null),
+    can('manage_catalog')
+      ? (
+          backendAuthenticatedRequest('/catalog/products') as Promise<
+            CatalogProduct[]
+          >
+        ).catch(() => [] as CatalogProduct[])
+      : Promise.resolve([] as CatalogProduct[]),
+  ]);
+  const stockMap = Object.fromEntries(
+    (balances ?? []).map((item) => [
+      item.productVariantId,
+      Number(item.quantityAvailable),
+    ]),
+  );
+
   const variant = product.variants[0];
   const balance = balances?.find(
     (item) => item.productVariantId === variant?.id,
   );
-  const available = balance
-    ? Number(balance.quantityAvailable)
-    : balances
-      ? 0
-      : null;
+  // Kit "na hora" não tem estoque próprio: o disponível é quantos dá para
+  // montar com as peças.
+  const available =
+    product.kitMode === 'on_demand' && kit
+      ? kit.canAssemble
+      : balance
+        ? Number(balance.quantityAvailable)
+        : balances
+          ? 0
+          : null;
   const inTransit = balance ? Number(balance.quantityInTransit ?? 0) : 0;
   const price = product.prices[0];
   const active = product.status === 'active';
@@ -112,7 +146,13 @@ export default async function ProductPage({
         <div className="grid content-start gap-4">
           <div>
             <p className="text-xs font-semibold tracking-wide text-brand-accent-hover uppercase">
-              {[product.brand?.name, product.category?.name]
+              {[
+                product.kitMode
+                  ? `Kit · ${KIT_MODE_LABEL[product.kitMode]}`
+                  : null,
+                product.brand?.name,
+                product.category?.name,
+              ]
                 .filter(Boolean)
                 .join(' · ') || 'Produto'}
             </p>
@@ -150,7 +190,13 @@ export default async function ProductPage({
                       : 'bg-success-50 text-success-600',
                   )}
                 >
-                  {available <= 0 ? 'Sem estoque' : `${available} em estoque`}
+                  {available <= 0
+                    ? product.kitMode === 'on_demand'
+                      ? 'Faltam peças'
+                      : 'Sem estoque'
+                    : product.kitMode === 'on_demand'
+                      ? `Dá para montar ${available}`
+                      : `${available} em estoque`}
                 </span>
                 {inTransit > 0 && (
                   <span className="mt-1 block text-xs text-info-600">
@@ -193,14 +239,17 @@ export default async function ProductPage({
                 </Link>
               </Button>
             )}
-            {active && can('manage_purchasing') && variant && (
-              <Button asChild size="lg" variant="secondary">
-                <Link href={`/compras/nova?adicionar=${variant.id}`}>
-                  <ShoppingBag aria-hidden="true" />
-                  Comprar mais
-                </Link>
-              </Button>
-            )}
+            {active &&
+              !product.kitMode &&
+              can('manage_purchasing') &&
+              variant && (
+                <Button asChild size="lg" variant="secondary">
+                  <Link href={`/compras/nova?adicionar=${variant.id}`}>
+                    <ShoppingBag aria-hidden="true" />
+                    Comprar mais
+                  </Link>
+                </Button>
+              )}
             {can('manage_catalog') && (
               <Button asChild size="lg" variant="tertiary">
                 <Link href={`/produtos?edit=${product.id}`}>
@@ -212,6 +261,17 @@ export default async function ProductPage({
           </div>
         </div>
       </article>
+
+      <KitPanel
+        productId={product.id}
+        productName={product.name}
+        kitPriceCents={price ? toCents(price.salePrice) : 0}
+        detail={kit}
+        products={catalog}
+        stock={stockMap}
+        canManageCatalog={can('manage_catalog')}
+        canAdjustStock={can('adjust_stock')}
+      />
 
       <Button asChild variant="secondary" className="justify-self-start">
         <Link href="/produtos/consultar">
