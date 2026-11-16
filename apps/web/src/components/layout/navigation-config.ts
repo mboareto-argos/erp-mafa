@@ -138,7 +138,7 @@ export const quickActions: readonly QuickAction[] = [
   {
     label: 'Nova compra',
     description: 'Receber mercadorias e formar estoque',
-    href: '/compras?new=purchase',
+    href: '/compras/nova',
     icon: 'purchases',
     permission: 'manage_purchasing',
   },

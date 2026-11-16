@@ -25,7 +25,7 @@ import {
 // menu lateral.
 
 /** Rotas de tarefa única em tela cheia (ex.: Nova venda). */
-const FOCUS_ROUTES = ['/vendas/nova'];
+const FOCUS_ROUTES = ['/vendas/nova', '/compras/nova'];
 
 const tabClass =
   'flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs font-semibold text-neutral-500 transition-colors duration-[120ms] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-accent';

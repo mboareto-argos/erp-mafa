@@ -697,7 +697,7 @@ export function PurchaseActions({
             <DropdownMenuItem asChild>
               <Link
                 className="dropdown-item edit"
-                href={`/compras?edit=${purchase.id}`}
+                href={`/compras/nova?rascunho=${purchase.id}`}
               >
                 <span>
                   <AppIcon name="edit" />

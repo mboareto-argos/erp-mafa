@@ -5,17 +5,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Banknote,
-  Calculator,
-  ChevronLeft,
   CreditCard,
   HandCoins,
-  Minus,
   PackageSearch,
   Plus,
   QrCode,
   ScanBarcode,
   Wallet,
-  X,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -23,7 +19,19 @@ import { CurrencyInput } from '@/components/ui/currency-input';
 import { notify } from '@/components/ui/toaster';
 import { centsToDecimal, formatCents, toCents } from '@/lib/money';
 import { cn } from '@/lib/utils';
-import { CustomerPicker, type PickerCustomer } from './customer-picker';
+import {
+  CalculatedBox,
+  Stepper,
+  SummaryRow,
+  TaskFlow,
+  TaskFlowFooter,
+  TaskFlowHeader,
+  TaskFlowSteps,
+} from '@/components/flow/task-flow';
+import {
+  ContactPicker,
+  type PickerContact,
+} from '@/components/forms/contact-picker';
 import {
   addToCart,
   cartTotals,
@@ -92,7 +100,7 @@ export function NewSaleFlow({
 }: {
   products: CatalogProduct[];
   methods: PaymentMethod[];
-  customers: PickerCustomer[];
+  customers: PickerContact[];
   stock: Record<string, number> | null;
   accounts: Record<string, string>;
   canCreateCustomer: boolean;
@@ -360,18 +368,14 @@ export function NewSaleFlow({
     );
 
   return (
-    <main className="new-sale-flow page-content flex min-h-[calc(100dvh-60px)] flex-col !pb-0 sm:min-h-[calc(100dvh-72px)]">
-      <header className="mb-4 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold tracking-wide text-brand-accent-hover uppercase">
-            {draft ? 'Rascunho de venda' : 'Vendas'}
-          </p>
-          <h1 className="text-xl font-semibold text-neutral-900 sm:text-2xl">
-            Nova venda
-          </h1>
-        </div>
-        <div className="flex items-center gap-1">
-          {cart.length > 0 && (
+    <TaskFlow>
+      <TaskFlowHeader
+        eyebrow={draft ? 'Rascunho de venda' : 'Vendas'}
+        title="Nova venda"
+        closeHref="/vendas"
+        closeLabel="Fechar e voltar para Vendas"
+        actions={
+          cart.length > 0 && (
             <Button
               type="button"
               variant="tertiary"
@@ -382,40 +386,11 @@ export function NewSaleFlow({
             >
               Salvar rascunho
             </Button>
-          )}
-          <Button
-            asChild
-            variant="tertiary"
-            size="icon"
-            aria-label="Fechar e voltar para Vendas"
-          >
-            <Link href="/vendas">
-              <X aria-hidden="true" />
-            </Link>
-          </Button>
-        </div>
-      </header>
+          )
+        }
+      />
 
-      <ol className="mb-5 grid grid-cols-3 gap-2" aria-label="Etapas da venda">
-        {STEPS.map((label, index) => (
-          <li key={label} aria-current={index === step ? 'step' : undefined}>
-            <span
-              className={cn(
-                'block h-1.5 rounded-full bg-neutral-100',
-                index <= step && 'bg-brand-accent',
-              )}
-            />
-            <span
-              className={cn(
-                'mt-1.5 block text-xs font-semibold text-neutral-500',
-                index === step && 'text-neutral-900',
-              )}
-            >
-              {label}
-            </span>
-          </li>
-        ))}
-      </ol>
+      <TaskFlowSteps steps={STEPS} current={step} label="Etapas da venda" />
 
       {restored && step === 0 && (
         <div
@@ -505,61 +480,23 @@ export function NewSaleFlow({
                             />
                           )}
                           <div className="flex items-center justify-between gap-3">
-                            <div
-                              className="flex items-center rounded-full border border-neutral-200"
-                              role="group"
-                              aria-label={`Quantidade de ${line.name}`}
-                            >
-                              <button
-                                type="button"
-                                className="grid size-11 place-items-center rounded-full text-neutral-700 hover:bg-neutral-50"
-                                onClick={() =>
-                                  setCart((current) =>
-                                    setQuantity(
-                                      current,
-                                      line.variantId,
-                                      line.quantity - 1,
-                                    ),
-                                  )
-                                }
-                                aria-label={
-                                  line.quantity === 1
-                                    ? `Remover ${line.name}`
-                                    : `Diminuir ${line.name}`
-                                }
-                              >
-                                {line.quantity === 1 ? (
-                                  <X className="size-5" aria-hidden="true" />
-                                ) : (
-                                  <Minus
-                                    className="size-5"
-                                    aria-hidden="true"
-                                  />
-                                )}
-                              </button>
-                              <span
-                                className="w-8 text-center text-md font-semibold tabular-nums"
-                                aria-live="polite"
-                              >
-                                {line.quantity}
-                              </span>
-                              <button
-                                type="button"
-                                className="grid size-11 place-items-center rounded-full text-neutral-700 hover:bg-neutral-50"
-                                onClick={() =>
-                                  setCart((current) =>
-                                    setQuantity(
-                                      current,
-                                      line.variantId,
-                                      line.quantity + 1,
-                                    ),
-                                  )
-                                }
-                                aria-label={`Aumentar ${line.name}`}
-                              >
-                                <Plus className="size-5" aria-hidden="true" />
-                              </button>
-                            </div>
+                            <Stepper
+                              value={line.quantity}
+                              min={1}
+                              label={`Quantidade de ${line.name}`}
+                              decreaseLabel={`Diminuir ${line.name}`}
+                              increaseLabel={`Aumentar ${line.name}`}
+                              removeLabel={`Remover ${line.name}`}
+                              onChange={(quantity) =>
+                                setCart((current) =>
+                                  setQuantity(
+                                    current,
+                                    line.variantId,
+                                    quantity,
+                                  ),
+                                )
+                              }
+                            />
                             {short && (
                               <span className="rounded-sm bg-warning-50 px-2 py-1 text-xs font-semibold text-warning-600">
                                 Só {available} em estoque
@@ -700,8 +637,9 @@ export function NewSaleFlow({
                 >
                   Para quem é a venda?
                 </h2>
-                <CustomerPicker
-                  customers={customers}
+                <ContactPicker
+                  kind="customer"
+                  contacts={customers}
                   value={customerId}
                   onChange={setCustomerId}
                   onCreated={(customer) =>
@@ -788,11 +726,11 @@ export function NewSaleFlow({
 
                 {fee && fee.fee > 0 && payment?.mode === 'now' && (
                   <CalculatedBox title="Taxa da forma de pagamento">
-                    <Row
+                    <SummaryRow
                       label={`Taxa (${String(methodById(payment.methodId)?.feeRate ?? 0).replace('.', ',')}%)`}
                       value={`− ${formatCents(fee.fee)}`}
                     />
-                    <Row
+                    <SummaryRow
                       label="Você recebe"
                       value={formatCents(fee.net)}
                       strong
@@ -809,40 +747,16 @@ export function NewSaleFlow({
                       >
                         Em quantas vezes?
                       </span>
-                      <div
-                        className="flex items-center rounded-full border border-neutral-200"
-                        role="group"
-                        aria-labelledby="installments-label"
-                      >
-                        <button
-                          type="button"
-                          className="grid size-11 place-items-center rounded-full disabled:opacity-40"
-                          disabled={payment.count <= 1}
-                          onClick={() =>
-                            choose({ ...payment, count: payment.count - 1 })
-                          }
-                          aria-label="Menos parcelas"
-                        >
-                          <Minus className="size-5" aria-hidden="true" />
-                        </button>
-                        <span
-                          className="w-10 text-center font-semibold tabular-nums"
-                          aria-live="polite"
-                        >
-                          {payment.count}x
-                        </span>
-                        <button
-                          type="button"
-                          className="grid size-11 place-items-center rounded-full disabled:opacity-40"
-                          disabled={payment.count >= 12}
-                          onClick={() =>
-                            choose({ ...payment, count: payment.count + 1 })
-                          }
-                          aria-label="Mais parcelas"
-                        >
-                          <Plus className="size-5" aria-hidden="true" />
-                        </button>
-                      </div>
+                      <Stepper
+                        value={payment.count}
+                        min={1}
+                        max={12}
+                        label="Número de parcelas"
+                        decreaseLabel="Menos parcelas"
+                        increaseLabel="Mais parcelas"
+                        format={(count) => `${count}x`}
+                        onChange={(count) => choose({ ...payment, count })}
+                      />
                     </div>
                     <label className="grid gap-1 text-sm font-semibold text-neutral-700">
                       Quando vence a primeira?
@@ -904,7 +818,7 @@ export function NewSaleFlow({
                     {schedule.length > 0 && (
                       <CalculatedBox title="Parcelas que serão geradas">
                         {schedule.map((installment) => (
-                          <Row
+                          <SummaryRow
                             key={installment.number}
                             label={`${installment.number}ª · vence ${dateLabel(installment.dueDate)}`}
                             value={formatCents(installment.cents)}
@@ -1075,122 +989,58 @@ export function NewSaleFlow({
         >
           <div className="grid gap-3 rounded-lg border border-neutral-100 bg-neutral-0 p-4 shadow-sm">
             <strong className="text-md text-neutral-900">Resumo</strong>
-            <Row label="Itens" value={String(totals.units)} />
-            <Row label="Subtotal" value={formatCents(totals.subtotal)} />
+            <SummaryRow label="Itens" value={String(totals.units)} />
+            <SummaryRow label="Subtotal" value={formatCents(totals.subtotal)} />
             {totals.discount > 0 && (
-              <Row
+              <SummaryRow
                 label="Desconto"
                 value={`− ${formatCents(totals.discount)}`}
               />
             )}
-            <Row
+            <SummaryRow
               label="Cliente"
               value={selectedCustomer?.name ?? 'Consumidor final'}
             />
             <div className="border-t border-neutral-100 pt-3">
-              <Row label="Total" value={formatCents(totals.total)} strong />
+              <SummaryRow
+                label="Total"
+                value={formatCents(totals.total)}
+                strong
+              />
             </div>
           </div>
         </aside>
       </div>
 
-      <footer className="sticky bottom-0 z-20 -mx-4.5 mt-auto border-t border-neutral-100 bg-neutral-0/95 px-4.5 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))] backdrop-blur sm:-mx-8 sm:px-8">
-        {error && (
-          <p
-            role="alert"
-            className="mb-2 rounded-md bg-danger-50 px-3 py-2 text-sm text-danger-600"
-          >
-            {error}
-          </p>
-        )}
-        <div className="flex items-center gap-3">
-          {step > 0 && (
-            <Button
-              type="button"
-              variant="secondary"
-              size="lg"
-              className="px-3"
-              onClick={goBack}
-              disabled={Boolean(pending)}
-              aria-label="Voltar uma etapa"
-            >
-              <ChevronLeft aria-hidden="true" />
-            </Button>
-          )}
-          <div className="min-w-0 flex-1">
-            <span className="block text-xs text-neutral-500">
-              Total · {plural(totals.units, 'item', 'itens')}
-            </span>
-            <strong className="block truncate text-xl font-bold sm:text-2xl text-neutral-900 tabular-nums">
-              {formatCents(totals.total)}
-            </strong>
-          </div>
-          {step < 2 ? (
-            <Button
-              type="button"
-              size="lg"
-              onClick={goNext}
-              disabled={cart.length === 0}
-            >
-              Continuar
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              size="lg"
-              onClick={confirm}
-              loading={pending === 'confirm'}
-              disabled={Boolean(pending)}
-            >
-              Confirmar venda
-            </Button>
-          )}
-        </div>
-      </footer>
-    </main>
-  );
-}
-
-// Valor calculado pelo sistema: visualmente diferente de campo digitável
-// (DS-FORM-004) — fundo neutro, ícone de calculadora, sem borda de input.
-function CalculatedBox({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="grid gap-2 rounded-md bg-neutral-50 p-3 text-sm">
-      <span className="flex items-center gap-1.5 text-xs font-semibold text-neutral-500">
-        <Calculator className="size-4" aria-hidden="true" />
-        {title} · calculado
-      </span>
-      {children}
-    </div>
-  );
-}
-
-function Row({
-  label,
-  value,
-  strong,
-}: {
-  label: string;
-  value: string;
-  strong?: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-neutral-700">{label}</span>
-      <span
-        className={cn(
-          'tabular-nums text-neutral-900',
-          strong && 'text-lg font-bold',
-        )}
+      <TaskFlowFooter
+        error={error}
+        onBack={step > 0 ? goBack : undefined}
+        backDisabled={Boolean(pending)}
+        summaryLabel={`Total · ${plural(totals.units, 'item', 'itens')}`}
+        summaryValue={formatCents(totals.total)}
       >
-        {value}
-      </span>
-    </div>
+        {step < 2 ? (
+          <Button
+            type="button"
+            size="lg"
+            onClick={goNext}
+            disabled={cart.length === 0}
+          >
+            Continuar
+          </Button>
+        ) : (
+          <Button
+            aria-label="Confirmar venda"
+            type="button"
+            size="lg"
+            onClick={confirm}
+            loading={pending === 'confirm'}
+            disabled={Boolean(pending)}
+          >
+            Confirmar<span className="hidden sm:inline"> venda</span>
+          </Button>
+        )}
+      </TaskFlowFooter>
+    </TaskFlow>
   );
 }
