@@ -89,6 +89,12 @@ export const navigationGroups: readonly NavigationGroup[] = [
         icon: 'finance',
         permission: 'view_financial_accounts',
       },
+      {
+        href: '/financeiro/quem-me-deve',
+        label: 'Quem me deve',
+        icon: 'debtors',
+        permission: 'view_receivables',
+      },
     ],
   },
   {
@@ -206,6 +212,16 @@ export function splitMobileNavigation(permissions: readonly string[]) {
     (item) => !(MOBILE_TAB_HREFS as readonly string[]).includes(item.href),
   );
   return { tabs, more };
+}
+
+/**
+ * Entre os itens de menu, o ativo é o mais específico que casa com a rota:
+ * em /financeiro/quem-me-deve acende "Quem me deve", não "Financeiro".
+ */
+export function activeHref(pathname: string, hrefs: readonly string[]) {
+  return hrefs
+    .filter((href) => isActivePath(pathname, href))
+    .sort((a, b) => b.length - a.length)[0];
 }
 
 /** Item ativo também em sub-rotas (ex.: /vendas/123 mantém "Vendas" ativo). */

@@ -13,6 +13,7 @@ import {
 import { cn } from '@/lib/utils';
 import { AppIcon } from './app-icon';
 import {
+  activeHref,
   isActivePath,
   roleLabels,
   splitMobileNavigation,
@@ -50,7 +51,11 @@ export function MobileNavigation({
 
   const { tabs, more } = splitMobileNavigation(permissions);
   const actions = visibleQuickActions(permissions);
-  const moreActive = more.some((item) => isActivePath(pathname, item.href));
+  const activeItem = activeHref(
+    pathname,
+    [...tabs, ...more].map((item) => item.href),
+  );
+  const moreActive = more.some((item) => item.href === activeItem);
   // DS-LAYOUT-002: o botão flutuante some durante o preenchimento de
   // formulários em tela cheia (abertos via ?new= ou ?edit=).
   const formOpen = searchParams.has('new') || searchParams.has('edit');
@@ -87,7 +92,7 @@ export function MobileNavigation({
         }}
       >
         {tabs.map((item) => {
-          const active = isActivePath(pathname, item.href);
+          const active = item.href === activeItem;
           return (
             <Link
               key={item.href}
@@ -182,7 +187,7 @@ export function MobileNavigation({
           </DrawerHeader>
           <ul className="grid grid-cols-3 gap-2 overflow-y-auto px-4 pb-4">
             {more.map((item) => {
-              const active = isActivePath(pathname, item.href);
+              const active = item.href === activeItem;
               return (
                 <li key={item.href}>
                   <Link
