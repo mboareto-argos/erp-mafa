@@ -15,7 +15,7 @@ export default async function AppLayout({
     roleName: string;
     permissions: string[];
   } | null;
-  if (!session) redirect('/entrar');
+  if (!session) redirect('/api/session/expired');
   const initials = session.user.name
     .split(' ')
     .slice(0, 2)

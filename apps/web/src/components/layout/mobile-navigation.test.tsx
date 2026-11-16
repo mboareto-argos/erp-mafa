@@ -65,6 +65,18 @@ describe('MobileNavigation', () => {
     expect(screen.queryByRole('button', { name: /Ações rápidas/ })).toBeNull();
   });
 
+  it('some por completo em fluxo de tela cheia (Nova venda)', () => {
+    nav.pathname = '/vendas/nova';
+    render(
+      <MobileNavigation
+        {...props}
+        permissions={['view_sales', 'manage_sales']}
+      />,
+    );
+    expect(screen.queryByRole('navigation')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Ações rápidas/ })).toBeNull();
+  });
+
   it('"Mais" lista as telas que não cabem nas abas', async () => {
     render(
       <MobileNavigation

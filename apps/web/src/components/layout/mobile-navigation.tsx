@@ -24,6 +24,9 @@ import {
 // ações rápidas. Só aparece abaixo de 600px (--bp-sm); acima disso vale o
 // menu lateral.
 
+/** Rotas de tarefa única em tela cheia (ex.: Nova venda). */
+const FOCUS_ROUTES = ['/vendas/nova'];
+
 const tabClass =
   'flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs font-semibold text-neutral-500 transition-colors duration-[120ms] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-brand-accent';
 
@@ -51,6 +54,8 @@ export function MobileNavigation({
   // DS-LAYOUT-002: o botão flutuante some durante o preenchimento de
   // formulários em tela cheia (abertos via ?new= ou ?edit=).
   const formOpen = searchParams.has('new') || searchParams.has('edit');
+  // Fluxos em tela cheia têm rodapé de ação próprio: sem barra nem botão +.
+  const focusFlow = FOCUS_ROUTES.some((route) => isActivePath(pathname, route));
 
   async function signOut() {
     setSigningOut(true);
@@ -58,6 +63,8 @@ export function MobileNavigation({
     router.replace('/entrar');
     router.refresh();
   }
+
+  if (focusFlow) return null;
 
   return (
     <>

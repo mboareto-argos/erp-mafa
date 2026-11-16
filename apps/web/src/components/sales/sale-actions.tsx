@@ -887,7 +887,7 @@ export function SaleActions({
             <DropdownMenuItem asChild>
               <Link
                 className="dropdown-item edit"
-                href={`/vendas?edit=${sale.id}`}
+                href={`/vendas/nova?rascunho=${sale.id}`}
               >
                 <span>
                   <AppIcon name="edit" />

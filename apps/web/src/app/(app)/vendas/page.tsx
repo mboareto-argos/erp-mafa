@@ -1,6 +1,7 @@
 import { AppIcon } from '@/components/layout/app-icon';
 import { ListingMetrics } from '@/components/listings/listing-ui';
-import { QuickSaleForm } from '@/components/sales/quick-sale-form';
+import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import {
   SaleActions,
   type SaleListItem,
@@ -16,7 +17,6 @@ type Product = {
   prices: { salePrice: string }[];
 };
 type Method = { id: string; name: string; status: string };
-type Customer = { id: string; name: string; status: string };
 
 const money = (value: string | number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
@@ -41,18 +41,18 @@ export default async function SalesPage({
 }: {
   searchParams: Promise<{ new?: string; edit?: string }>;
 }) {
-  const [sales, products, methods, customers, session] = await Promise.all([
+  // Links antigos (?new=sale, ?edit=ID) levam para a Nova venda em tela cheia.
+  const { new: newAction, edit: editId } = await searchParams;
+  if (editId) redirect(`/vendas/nova?rascunho=${editId}`);
+  if (newAction === 'sale') redirect('/vendas/nova');
+
+  const [sales, products, methods, session] = await Promise.all([
     backendAuthenticatedRequest('/sales') as Promise<SaleListItem[]>,
     backendAuthenticatedRequest('/catalog/products') as Promise<Product[]>,
     backendAuthenticatedRequest('/payments/methods') as Promise<Method[]>,
-    backendAuthenticatedRequest('/customers') as Promise<Customer[]>,
     getSession() as Promise<{ permissions: string[] } | null>,
   ]);
-  const { new: newAction, edit: editId } = await searchParams;
   const canManage = session?.permissions.includes('manage_sales') ?? false;
-  const editingSale = canManage
-    ? sales.find((sale) => sale.id === editId && sale.status === 'draft')
-    : undefined;
   const confirmed = sales.filter((sale) => sale.status === 'confirmed');
 
   return (
@@ -67,30 +67,12 @@ export default async function SalesPage({
       </div>
       {canManage && products.length > 0 && (
         <div className="page-workspace-action">
-          <QuickSaleForm
-            key={
-              editingSale
-                ? `edit-${editingSale.id}`
-                : newAction === 'sale'
-                  ? 'new-sale'
-                  : 'closed-sale'
-            }
-            products={products}
-            methods={methods}
-            customers={customers}
-            initialOpen={newAction === 'sale' || Boolean(editingSale)}
-            editingSale={
-              editingSale
-                ? {
-                    id: editingSale.id,
-                    customerId: editingSale.customer?.id,
-                    channel: editingSale.channel,
-                    discount: editingSale.discount,
-                    items: editingSale.items,
-                  }
-                : undefined
-            }
-          />
+          <Link
+            className="button button-primary compact-button"
+            href="/vendas/nova"
+          >
+            Nova venda
+          </Link>
         </div>
       )}
       <ListingMetrics

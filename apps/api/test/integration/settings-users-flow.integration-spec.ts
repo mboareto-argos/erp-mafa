@@ -137,6 +137,59 @@ describe('Configurações + usuários — fluxo completo (integração)', () => 
       .expect(403);
   });
 
+  it('sessão de quem foi removido da equipe vira 401 em /auth/me (não 500)', async () => {
+    const owner = await registerCompany(app);
+    const auth = { Authorization: `Bearer ${owner.accessToken}` };
+    const email = uniqueEmail('removed');
+    const invited = await request(app.getHttpServer())
+      .post('/api/v1/users/invitations')
+      .set(auth)
+      .send({ email, roleName: 'sales' })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post(`/api/v1/invitations/${invited.body.invitation.token}/accept`)
+      .send({ name: 'Pessoa Removida', password: 'senha-forte-123' })
+      .expect(201);
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email, password: 'senha-forte-123' })
+      .expect(200);
+    const selected = await request(app.getHttpServer())
+      .post('/api/v1/auth/select-company')
+      .send({
+        preauthToken: login.body.preauthToken,
+        companyId: owner.company.id,
+      })
+      .expect(200);
+    const memberAuth = {
+      Authorization: `Bearer ${selected.body.accessToken}`,
+    };
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set(memberAuth)
+      .expect(200);
+
+    const users = await request(app.getHttpServer())
+      .get('/api/v1/users')
+      .set(auth)
+      .expect(200);
+    const { memberships } = users.body as {
+      memberships: { id: string; user: { email: string } }[];
+    };
+    const membership = memberships.find((item) => item.user.email === email)!;
+    await request(app.getHttpServer())
+      .patch(`/api/v1/users/${membership.id}`)
+      .set(auth)
+      .send({ roleName: 'sales', status: 'removed' })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set(memberAuth)
+      .expect(401)
+      .expect((res) => expect(res.body.error.code).toBe('SESSION_EXPIRED'));
+  });
+
   it('impede remover o próprio acesso e o último proprietário', async () => {
     const owner = await registerCompany(app);
     const auth = { Authorization: `Bearer ${owner.accessToken}` };
