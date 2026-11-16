@@ -1551,6 +1551,85 @@ paths:
                   financialAccountId: { type: string, format: uuid }
                   balance: { type: string }
 
+  /financial-accounts/{id}/opening-balance:
+    post:
+      tags: [financial-accounts]
+      summary: >
+        Saldo inicial da conta (BR §10.13 regra 8; requer manage_financial_accounts). Uma única
+        vez por conta; pode ser negativo. Movimentação de ajuste — não é receita.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount: { type: number, description: Diferente de zero }
+                date: { type: string, format: date }
+      responses:
+        "201": { description: Lançado }
+        "404": { description: Conta não encontrada (inclusive de outra empresa) }
+        "409": { description: OPENING_BALANCE_ALREADY_SET ou conta inativa }
+  /financial-accounts/{id}/reconcile:
+    post:
+      tags: [financial-accounts]
+      summary: >
+        Conferir saldo com o banco (BR §10.13 regra 9; requer manage_financial_accounts). Lança
+        só a diferença entre o saldo calculado e o informado, com motivo e auditoria; repetir com
+        o mesmo saldo não lança nada. Não é receita nem despesa.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [actualBalance, reason]
+              properties:
+                actualBalance: { type: number }
+                reason: { type: string, minLength: 3 }
+                date: { type: string, format: date }
+      responses:
+        "201":
+          description: Resultado da conferência
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  adjusted: { type: boolean }
+                  difference: { type: string }
+                  balance: { type: string }
+  /financial-accounts/{id}/owner-contribution:
+    post:
+      tags: [financial-accounts]
+      summary: >
+        Aporte do proprietário (BR §10.13 regra 10; requer manage_financial_accounts; aceita
+        Idempotency-Key). Só na conta `kind = owner`; reduz o que a loja deve ao proprietário e
+        nunca passa desse valor. Não é receita.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: Idempotency-Key, in: header, required: false, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount: { type: number, exclusiveMinimum: 0 }
+                note: { type: string }
+      responses:
+        "201": { description: Aporte lançado }
+        "400": { description: NOT_OWNER_ACCOUNT ou CONTRIBUTION_EXCEEDS_DEBT }
   /cash-flow/transactions:
     get:
       tags: [cash-flow]

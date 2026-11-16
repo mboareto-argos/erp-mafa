@@ -1,4 +1,10 @@
 import Link from 'next/link';
+import { MoneyOverview } from '@/components/finance/money/money-overview';
+import {
+  payingAccountLabel,
+  receivingAccounts,
+} from '@/lib/financial-accounts';
+import { toCents as moneyToCents } from '@/lib/money';
 import { ExpenseForm } from '@/components/finance/expense-form';
 import {
   ExpenseList,
@@ -12,7 +18,14 @@ import { AppIcon } from '@/components/layout/app-icon';
 import { ListingEmptyState } from '@/components/listings/listing-ui';
 import { backendAuthenticatedRequest, getSession } from '@/lib/session';
 
-type Account = { id: string; name: string; status: string; balance?: string };
+type Account = {
+  id: string;
+  name: string;
+  status: string;
+  balance?: string;
+  kind?: 'store' | 'owner';
+  hasOpeningBalance?: boolean;
+};
 type Method = {
   id: string;
   name: string;
@@ -85,16 +98,13 @@ export default async function FinancialPage({
           >)
         : Promise.resolve([]),
     ]);
-  const accounts = has('view_financial_accounts')
-    ? await Promise.all(
-        rawAccounts.map(async (account) => ({
-          ...account,
-          ...((await backendAuthenticatedRequest(
-            `/financial-accounts/${account.id}/balance`,
-          )) as { balance: string }),
-        })),
-      )
-    : [];
+  // A API já devolve o saldo de cada conta (calculado pelas movimentações).
+  const accounts = has('view_financial_accounts') ? rawAccounts : [];
+  // Para pagar, a conta do proprietário aparece como "Do meu bolso".
+  const payingAccounts = accounts.map((account) => ({
+    ...account,
+    name: payingAccountLabel(account),
+  }));
   const allTabs: Array<{ value: Tab; label: string; permission: boolean }> = [
     {
       value: 'overview',
@@ -142,7 +152,6 @@ export default async function FinancialPage({
   const openPayables = payableItems.filter((item) =>
     ['pending', 'partially_paid'].includes(item.status),
   );
-  const cashBalance = sum(accounts.map((account) => account.balance ?? '0'));
   const receivableBalance = sum(
     openReceivables.map((item) =>
       remaining(item.amountOriginal, item.amountApplied),
@@ -200,7 +209,7 @@ export default async function FinancialPage({
 
       {newAction === 'expense' && has('manage_expenses') && (
         <div className="page-workspace-action">
-          <ExpenseForm accounts={accounts} initialOpen />
+          <ExpenseForm accounts={payingAccounts} initialOpen />
         </div>
       )}
       {newAction === 'receivable' && has('manage_receivables') && (
@@ -229,86 +238,23 @@ export default async function FinancialPage({
       )}
       {!newAction && tab === 'overview' && (
         <>
-          <section className="finance-kpis" aria-label="Resumo financeiro">
-            <Link href="/financeiro?tab=cash">
-              <span className="finance-kpi-icon cash">
-                <AppIcon name="finance" />
-              </span>
-              <div>
-                <small>Saldo em contas</small>
-                <strong>{money(cashBalance)}</strong>
-                <p>Caixa realizado</p>
-              </div>
-            </Link>
-            {has('view_receivables') && (
-              <Link href="/financeiro?tab=receivables">
-                <span className="finance-kpi-icon incoming">
-                  <AppIcon name="sales" />
-                </span>
-                <div>
-                  <small>A receber</small>
-                  <strong>{money(receivableBalance)}</strong>
-                  <p>Caixa previsto</p>
-                </div>
-              </Link>
-            )}
-            {has('view_payables') && (
-              <Link href="/financeiro?tab=payables">
-                <span className="finance-kpi-icon outgoing">
-                  <AppIcon name="purchases" />
-                </span>
-                <div>
-                  <small>A pagar</small>
-                  <strong>{money(payableBalance)}</strong>
-                  <p>Caixa previsto</p>
-                </div>
-              </Link>
-            )}
-            <article>
-              <span className="finance-kpi-icon warning">
-                <AppIcon name="shield" />
-              </span>
-              <div>
-                <small>Títulos vencidos</small>
-                <strong>{overdueCount}</strong>
-                <p>Exigem atenção</p>
-              </div>
-            </article>
-          </section>
+          <MoneyOverview
+            accounts={accounts.map((account) => ({
+              id: account.id,
+              name: account.name,
+              status: account.status,
+              kind: account.kind ?? 'store',
+              balance: account.balance ?? '0',
+              hasOpeningBalance: account.hasOpeningBalance ?? false,
+            }))}
+            receivableCents={moneyToCents(receivableBalance)}
+            payableCents={moneyToCents(payableBalance)}
+            overdueCount={overdueCount}
+            canManage={has('manage_financial_accounts')}
+            canSeeReceivables={has('view_receivables')}
+            canSeePayables={has('view_payables')}
+          />
           <div className="finance-overview-grid">
-            <section className="data-card">
-              <div className="data-card-heading">
-                <div>
-                  <h2>Contas financeiras</h2>
-                  <p>Saldo calculado pelas movimentações realizadas.</p>
-                </div>
-                <Link className="text-link" href="/financeiro?tab=cash">
-                  Ver fluxo
-                </Link>
-              </div>
-              {accounts.length === 0 ? (
-                <p className="inline-empty">
-                  Nenhuma conta financeira cadastrada.
-                </p>
-              ) : (
-                <div className="finance-overview-accounts">
-                  {accounts.map((account) => (
-                    <div key={account.id}>
-                      <span>
-                        <AppIcon name="finance" />
-                      </span>
-                      <div>
-                        <strong>{account.name}</strong>
-                        <small>
-                          {account.status === 'active' ? 'Ativa' : 'Inativa'}
-                        </small>
-                      </div>
-                      <b>{money(account.balance ?? '0')}</b>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
             <section className="data-card">
               <div className="data-card-heading">
                 <div>
@@ -363,7 +309,7 @@ export default async function FinancialPage({
         <OpenItems
           title="Contas a receber"
           kind="receivables"
-          accounts={accounts}
+          accounts={receivingAccounts(accounts)}
           canManage={has('manage_receivables')}
           items={receivableItems}
         />
@@ -372,7 +318,7 @@ export default async function FinancialPage({
         <OpenItems
           title="Contas a pagar"
           kind="payables"
-          accounts={accounts}
+          accounts={payingAccounts}
           canManage={has('manage_payables')}
           items={payableItems}
         />

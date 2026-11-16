@@ -8,7 +8,7 @@ import {
 import { backendAuthenticatedRequest, getSession } from '@/lib/session';
 
 type Session = { permissions: string[]; company: { name: string } };
-type Account = { id: string; name: string; status?: string };
+type Account = { id: string; name: string; status?: string; kind?: string };
 
 const optional = <T,>(request: Promise<unknown>, fallback: T) =>
   (request as Promise<T>).catch(() => fallback);
@@ -42,7 +42,12 @@ export default async function DebtorsPage() {
       today={today}
       companyName={session?.company.name ?? ''}
       accounts={accounts
-        .filter((account) => !account.status || account.status === 'active')
+        // Dinheiro de cliente entra numa conta da loja, nunca no "meu bolso".
+        .filter(
+          (account) =>
+            (!account.status || account.status === 'active') &&
+            account.kind !== 'owner',
+        )
         .map(({ id, name }) => ({ id, name }))}
       canReceive={canReceive}
       canSell={permissions.includes('manage_sales')}

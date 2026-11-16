@@ -1262,6 +1262,33 @@ Representar onde o dinheiro está ou transita.
 6. O usuário poderá ocultar contas sem saldo da visão principal.
 7. Valores a receber de cartão poderão ser representados em uma conta transitória.
 
+## Saldo real, conferência e conta do proprietário
+
+*Incluído em 16/11/2026, aprovado pelo proprietário da MAFA Store (Fase 3 — financeiro real).*
+
+8. **Saldo inicial (detalha a regra 4).** Cada conta poderá registrar uma única vez o seu saldo
+   inicial, em uma data. Ele entra como movimentação de ajuste e não é receita nem despesa —
+   não aparece no lucro.
+9. **Conferir saldo.** O usuário poderá informar o saldo que o banco (ou o caixa físico)
+   mostra em uma data. Havendo diferença para o saldo calculado, o sistema registrará um ajuste
+   de conferência no valor da diferença, com motivo obrigatório e auditoria. O ajuste aparece no
+   fluxo de caixa como "ajuste" e não é receita nem despesa.
+10. **Conta do proprietário.** A empresa poderá ter uma única conta do tipo "proprietário",
+    que representa o dinheiro pessoal do proprietário usado para pagar despesas ou compras da
+    loja:
+    - o que for pago por ela é despesa ou compra normal da loja (entra no resultado como
+      qualquer outro pagamento);
+    - o saldo dela não compõe o dinheiro da loja; quando negativo, é exibido como o valor que a
+      loja deve ao proprietário;
+    - **reembolso:** é uma transferência de uma conta da loja para a conta do proprietário e não
+      altera o resultado (regra 2 e §10.16, regra 5);
+    - **aporte:** o proprietário poderá decidir que parte ou todo o valor devido não será
+      reembolsado. Isso é registrado como aporte do proprietário — reduz o valor devido, não é
+      receita e fica identificado como dinheiro colocado pelo proprietário na empresa;
+    - o aporte não poderá superar o valor que a loja deve ao proprietário naquele momento.
+11. **Dinheiro da loja.** O indicador principal de caixa ("dinheiro da loja hoje") é a soma
+    dos saldos das contas da loja, sem a conta do proprietário.
+
 ---
 
 # 10.14 Contas a receber
