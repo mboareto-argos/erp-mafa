@@ -11,17 +11,10 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { SelectControl } from '@/components/ui/select-field';
-import { AppIcon, type IconName } from './app-icon';
+import { AppIcon } from './app-icon';
+import { visibleQuickActions } from './navigation-config';
 
 type SearchScope = 'products' | 'customers' | 'suppliers';
-type QuickAction = {
-  label: string;
-  description: string;
-  href: string;
-  icon: IconName;
-  permission: string;
-};
-
 const searchScopes: Record<
   SearchScope,
   { label: string; path: string; placeholder: string }
@@ -42,72 +35,6 @@ const searchScopes: Record<
     placeholder: 'Buscar fornecedores',
   },
 };
-
-const quickActions: readonly QuickAction[] = [
-  {
-    label: 'Nova venda',
-    description: 'Registrar uma venda e seu pagamento',
-    href: '/vendas?new=sale',
-    icon: 'sales',
-    permission: 'manage_sales',
-  },
-  {
-    label: 'Nova compra',
-    description: 'Receber mercadorias e formar estoque',
-    href: '/compras?new=purchase',
-    icon: 'purchases',
-    permission: 'manage_purchasing',
-  },
-  {
-    label: 'Novo produto',
-    description: 'Cadastrar item para compra e venda',
-    href: '/produtos?new=product',
-    icon: 'products',
-    permission: 'manage_catalog',
-  },
-  {
-    label: 'Novo cliente',
-    description: 'Cadastrar contato comercial',
-    href: '/clientes?new=customer',
-    icon: 'customers',
-    permission: 'manage_customers',
-  },
-  {
-    label: 'Novo fornecedor',
-    description: 'Cadastrar parceiro de compra',
-    href: '/fornecedores?new=supplier',
-    icon: 'suppliers',
-    permission: 'manage_purchasing',
-  },
-  {
-    label: 'Nova despesa',
-    description: 'Registrar saída ou conta futura',
-    href: '/financeiro?new=expense',
-    icon: 'finance',
-    permission: 'manage_expenses',
-  },
-  {
-    label: 'Novo recebimento',
-    description: 'Registrar uma conta a receber',
-    href: '/financeiro?new=receivable',
-    icon: 'finance',
-    permission: 'manage_receivables',
-  },
-  {
-    label: 'Ajuste de estoque',
-    description: 'Registrar diferença de inventário',
-    href: '/estoque?new=adjustment',
-    icon: 'inventory',
-    permission: 'adjust_stock',
-  },
-  {
-    label: 'Nova importação',
-    description: 'Validar e migrar dados por planilha',
-    href: '/importacoes?new=import',
-    icon: 'imports',
-    permission: 'manage_imports',
-  },
-];
 
 function HeaderSearch() {
   const [scope, setScope] = useState<SearchScope>('products');
@@ -149,9 +76,7 @@ function HeaderSearch() {
 }
 
 function QuickActionDialog({ permissions }: { permissions: string[] }) {
-  const actions = quickActions.filter((action) =>
-    permissions.includes(action.permission),
-  );
+  const actions = visibleQuickActions(permissions);
   if (actions.length === 0) return null;
   return (
     <Dialog>

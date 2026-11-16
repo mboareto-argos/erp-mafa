@@ -152,10 +152,8 @@ function SalesChart({ points }: { points: TrendPoint[] }) {
                 rx="4"
                 className="chart-bar"
               >
-                <title>
-                  {civilDate(point.date)}: {money(point.revenue)} em{' '}
-                  {point.salesCount} venda(s)
-                </title>
+                {/* Um único texto: <title> com vários nós de texto quebra a hidratação no React 19. */}
+                <title>{`${civilDate(point.date)}: ${money(point.revenue)} em ${point.salesCount} venda(s)`}</title>
               </rect>
               {(points.length <= 12 ||
                 index % Math.ceil(points.length / 8) === 0) && (

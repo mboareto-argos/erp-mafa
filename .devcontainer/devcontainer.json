@@ -1,0 +1,10 @@
+{
+  "name": "ERP MAFA (local)",
+  "dockerComposeFile": ["../docker-compose.yml"],
+  "service": "app",
+  "workspaceFolder": "/workspace",
+  "runServices": ["postgres", "app"],
+  "overrideCommand": true,
+  "postStartCommand": "bash scripts/dev/start.sh",
+  "forwardPorts": [3000, 3001, 5432]
+}

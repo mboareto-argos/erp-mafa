@@ -1,3 +1,12 @@
+# Ambiente de desenvolvimento/teste 100% local (Rancher Desktop / Docker).
+#
+#   docker compose up            → banco + web (3000) + api (3001)
+#   docker compose up postgres   → só o banco (para rodar node direto no host)
+#
+# O serviço "app" compartilha a rede do "postgres" (network_mode), então lá
+# dentro o banco continua em localhost:5432 — os mesmos .env.example/.env.test
+# funcionam no host e no container. Por isso as portas do app são publicadas
+# no serviço postgres.
 services:
   postgres:
     image: postgres:16-alpine
@@ -6,10 +15,51 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: erp_mafa
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432" # Postgres
+      - "127.0.0.1:3000:3000" # web (Next.js)
+      - "127.0.0.1:3001:3001" # api (Nest.js)
     volumes:
       - erp_mafa_postgres_data:/var/lib/postgresql/data
       - ./scripts/init-postgres-dbs.sql:/docker-entrypoint-initdb.d/init-postgres-dbs.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    network_mode: service:postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    working_dir: /workspace
+    command: bash scripts/dev/start.sh
+    environment:
+      API_BASE_URL: http://localhost:3001/api/v1
+      TURBO_TELEMETRY_DISABLED: "1"
+      # Hot reload por polling: com virtiofs (Rancher Desktop/VZ) os eventos
+      # de arquivo do macOS não chegam ao container.
+      TSC_WATCHFILE: DynamicPriorityPolling # api (nest start --watch)
+      TSC_WATCHDIRECTORY: DynamicPriorityPolling
+    volumes:
+      - .:/workspace:cached
+      # node_modules ficam em volumes próprios: binários nativos (argon2,
+      # Prisma) são Linux aqui e macOS no host — nunca compartilhar.
+      - erp_mafa_node_modules:/workspace/node_modules
+      - erp_mafa_api_node_modules:/workspace/apps/api/node_modules
+      - erp_mafa_web_node_modules:/workspace/apps/web/node_modules
+      - erp_mafa_tokens_node_modules:/workspace/packages/design-tokens/node_modules
+      - erp_mafa_web_next:/workspace/apps/web/.next
+      - erp_mafa_pnpm_store:/pnpm-store
 
 volumes:
   erp_mafa_postgres_data:
+  erp_mafa_node_modules:
+  erp_mafa_api_node_modules:
+  erp_mafa_web_node_modules:
+  erp_mafa_tokens_node_modules:
+  erp_mafa_web_next:
+  erp_mafa_pnpm_store:

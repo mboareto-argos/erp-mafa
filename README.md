@@ -37,6 +37,30 @@ Projeto pensado para desenvolvimento com apoio de agentes de IA no [Zed](https:/
 Leia `AGENTS.md` antes de começar qualquer implementação — ele resume as regras de negócio
 e técnicas que nunca podem ser violadas.
 
+### Ambiente local em container (Rancher Desktop / Docker)
+
+Ambiente de teste 100% local — nunca toca o banco de produção (Neon/Vercel). Só precisa do
+Rancher Desktop (ou Docker) instalado; Node e pnpm rodam dentro do container.
+
+```bash
+docker compose up -d                                   # banco + api (3001) + web (3000)
+docker compose exec app node scripts/dev/seed-demo.mjs # dados de demonstração da loja
+docker compose logs -f app                             # acompanhar os logs
+```
+
+- Web em <http://localhost:3000>, API em <http://localhost:3001/api/v1>, Postgres em `localhost:5432`.
+- O primeiro `up` instala dependências, cria `apps/api/.env` (com `JWT_SECRET` aleatório),
+  aplica migrations e o seed de papéis (`scripts/dev/start.sh`).
+- `seed-demo.mjs` cria pela própria API uma empresa de teste com produtos, compras (uma
+  recebida e uma em trânsito), vendas à vista e no fiado, e despesas. O login de teste
+  fica na constante `DEMO_LOGIN` do script.
+- Hot reload funciona nos dois apps: no container a web roda com webpack + polling
+  (`dev:container`), porque o Turbopack não enxerga mudanças de arquivo do macOS via virtiofs.
+- Testes: `docker compose exec app pnpm test` e
+  `docker compose exec app pnpm --filter @erp-mafa/api test:integration`.
+- Recomeçar do zero (apaga só os dados locais): `docker compose down -v`.
+- Também funciona como Dev Container (`.devcontainer/devcontainer.json`) em editores compatíveis.
+
 ## Estado atual e próximos passos
 
 1. API: Fases 1–5 implementadas (fundação, estoque/compras, vendas, financeiro e reporting),
@@ -88,8 +112,9 @@ Registrado deliberadamente como pendência, não implementado ainda:
   `GET` desses três cadastros aceita array completo sem `page` por compatibilidade temporária
   com os seletores usados em Compras/Vendas/Estoque — remover esse modo legado exige revisar
   os três consumidores juntos, não isoladamente.
-- **Sem testes automatizados no `apps/web`** — nenhum framework de teste (vitest/playwright)
-  configurado ainda; toda a cobertura de teste do projeto está em `apps/api`.
+- **Cobertura de testes do `apps/web` ainda é inicial** — Vitest + Testing Library
+  configurados (`pnpm --filter @erp-mafa/web test`, também rodam no `pnpm test`), cobrindo
+  hoje só a navegação condicionada por permissão; sem E2E (Playwright) ainda.
 - **Reserva de estoque sem expiração automática**: liberar uma reserva (`POST
   /sales/:id/cancel` numa venda `reserved`) é sempre manual — sem job/fila no projeto (mesmo
   motivo do processamento síncrono de Importação), não há data de expiração nem rotina que

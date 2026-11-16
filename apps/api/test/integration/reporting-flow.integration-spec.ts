@@ -11,8 +11,19 @@ import { switchRole } from './utils/role-helpers';
 describe('Reporting — dashboard e relatórios (integração)', () => {
   let app: INestApplication;
   const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
-  const from = '2026-08-01';
-  const to = '2026-08-31';
+  // Vendas são registradas com a data de hoje (createdAt), então o período
+  // do relatório precisa acompanhar o relógio — com datas fixas o teste
+  // quebra assim que o mês passa. Janela do mês anterior ao seguinte para
+  // não depender de fuso horário nas viradas de mês.
+  const civil = (date: Date) => date.toISOString().slice(0, 10);
+  const now = new Date();
+  const from = civil(
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)),
+  );
+  const to = civil(
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 2, 0)),
+  );
+  const today = civil(now);
 
   beforeAll(async () => {
     app = await createTestApp();
@@ -51,7 +62,7 @@ describe('Reporting — dashboard e relatórios (integração)', () => {
         description: 'Embalagens',
         category: 'embalagem',
         amount: 50,
-        competenceDate: '2026-08-04',
+        competenceDate: today,
         paidNow: true,
         financialAccountId: account.id,
       })
@@ -107,7 +118,7 @@ describe('Reporting — dashboard e relatórios (integração)', () => {
       .post('/api/v1/company/profit-distribution')
       .set(auth(session.accessToken))
       .send({
-        effectiveFrom: '2026-08-01',
+        effectiveFrom: from,
         reinvestmentRate: 50,
         proLaboreRate: 30,
         reserveRate: 15,
