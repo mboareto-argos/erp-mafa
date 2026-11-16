@@ -1,6 +1,8 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import localFont from 'next/font/local';
+import { ServiceWorkerRegistration } from '@/components/pwa/service-worker-registration';
 import { Toaster } from '@/components/ui/toaster';
+import { APP_DESCRIPTION, APP_NAME, APP_SURFACE } from '@/lib/app-identity';
 import './globals.css';
 
 // Familia tipografica definida em docs/product/design-system.md, secao 4.4
@@ -27,8 +29,22 @@ const fontMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: 'ERP MAFA Store',
-  description: 'ERP simplificado para pequenos vendedores.',
+  title: APP_NAME,
+  description: APP_DESCRIPTION,
+  applicationName: APP_NAME,
+  // iPhone: "Adicionar à Tela de Início" abre em tela cheia, com o nome da
+  // loja embaixo do ícone (apple-icon.tsx).
+  appleWebApp: { capable: true, title: APP_NAME, statusBarStyle: 'default' },
+  formatDetection: { telephone: false },
+  // iOS anteriores ao 16.4 só abrem em tela cheia com a tag antiga.
+  other: { 'apple-mobile-web-app-capable': 'yes' },
+};
+
+export const viewport: Viewport = {
+  themeColor: APP_SURFACE,
+  // Ocupa a tela toda no iPhone; o layout já respeita as bordas com
+  // env(safe-area-inset-*) na barra inferior e nos rodapés fixos.
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
@@ -40,6 +56,7 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
       <body className="min-h-full flex flex-col font-sans">
         {children}
         <Toaster />
+        <ServiceWorkerRegistration />
       </body>
     </html>
   );

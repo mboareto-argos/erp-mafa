@@ -92,6 +92,20 @@ docker compose logs -f app                             # acompanhar os logs
    processamento síncrono, com workspace Web de prévia, revisão, confirmação,
    relatório, conciliação e reversão controlada.
 
+### App instalável (PWA)
+
+O web é instalável no celular (ícone na tela, abre em tela cheia, atalhos ao segurar o
+ícone: Nova venda, Consultar produto, Nova compra, Quem me deve):
+
+- **Android/Chrome:** cartão "Use o … como app" no Início ou "Instalar app no celular" na aba
+  Mais (pedido nativo do Chrome).
+- **iPhone/Safari:** o mesmo botão mostra o passo a passo (Compartilhar → Adicionar à Tela de
+  Início) — o Safari não permite que o site ofereça a instalação.
+- Manifesto em `apps/web/src/app/manifest.ts`; ícones gerados no build a partir da inicial da
+  loja (`lib/app-icon-image.tsx`); nome configurável por `NEXT_PUBLIC_APP_NAME`.
+- O service worker (`public/sw.js`, só em produção) **não guarda dados em cache**: sem internet,
+  mostra a tela "Sem conexão" (`/offline`) em vez de números possivelmente desatualizados.
+
 ### Débito técnico conhecido
 
 Registrado deliberadamente como pendência, não implementado ainda:
