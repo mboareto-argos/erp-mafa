@@ -2,12 +2,12 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import {
   ChevronLeft,
-  Package,
   Pencil,
   ScanBarcode,
   ShoppingBag,
   ShoppingCart,
 } from 'lucide-react';
+import { ProductPhotoEditor } from '@/components/catalog/product-photo-editor';
 import { Button } from '@/components/ui/button';
 import { formatCents, toCents } from '@/lib/money';
 import {
@@ -23,6 +23,7 @@ type ProductDetail = {
   sku: string;
   unit: string;
   status: string;
+  imageUrl?: string | null;
   minStock?: string | null;
   category?: { name: string } | null;
   brand?: { name: string } | null;
@@ -101,13 +102,12 @@ export default async function ProductPage({
       </Link>
 
       <article className="grid gap-6 rounded-lg border border-neutral-100 bg-neutral-0 p-4 sm:grid-cols-[minmax(0,280px)_minmax(0,1fr)] sm:p-6">
-        {/* Foto do produto entra aqui na próxima etapa (Vercel Blob). */}
-        <div
-          className="grid aspect-[2/1] place-items-center rounded-lg bg-neutral-50 text-neutral-300 sm:aspect-square"
-          aria-hidden="true"
-        >
-          <Package className="size-16" strokeWidth={1.2} />
-        </div>
+        <ProductPhotoEditor
+          productId={product.id}
+          productName={product.name}
+          imageUrl={product.imageUrl ?? null}
+          canManage={can('manage_catalog')}
+        />
 
         <div className="grid content-start gap-4">
           <div>

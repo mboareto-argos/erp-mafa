@@ -1,5 +1,6 @@
 'use client';
 
+import { ProductImage } from '@/components/catalog/product-image';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -75,6 +76,7 @@ export function ProductLookup({
               href={`/produtos/${product.id}`}
               className="flex min-h-14 items-center gap-3 rounded-lg border border-neutral-100 bg-neutral-0 px-3 py-2 hover:border-brand-accent focus-visible:outline-2 focus-visible:outline-brand-accent"
             >
+              <ProductImage src={product.imageUrl} alt="" className="size-11" />
               <span className="min-w-0 flex-1">
                 <strong className="line-clamp-2 text-sm font-semibold text-neutral-900">
                   {product.name}

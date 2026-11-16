@@ -6,6 +6,7 @@ export type CatalogProduct = {
   name: string;
   sku: string;
   status: string;
+  imageUrl?: string | null;
   variants: { id: string; barcode?: string | null }[];
   prices: { salePrice: string }[];
 };

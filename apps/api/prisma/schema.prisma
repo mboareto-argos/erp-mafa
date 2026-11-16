@@ -474,6 +474,9 @@ model Product {
   // Inventory (RN 10.7.8). Opcional: sem valor, o produto nunca aparece
   // no relatorio de estoque baixo.
   minStock   Decimal?      @map("min_stock") @db.Decimal(14, 3)
+  // Foto principal (BR §10.3 "imagem"). URL pública no armazenamento de
+  // arquivos (Vercel Blob — ADR-0003); o arquivo nunca fica no banco.
+  imageUrl   String?       @map("image_url")
   createdAt  DateTime      @default(now()) @map("created_at")
   updatedAt  DateTime      @updatedAt @map("updated_at")
   createdBy  String?       @map("created_by") @db.Uuid

@@ -1,5 +1,6 @@
 'use client';
 
+import { ProductImage } from '@/components/catalog/product-image';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -601,6 +602,11 @@ export function NewSaleFlow({
                           )}
                           aria-label={`Adicionar ${product.name}${inCart ? ` (${inCart} no carrinho)` : ''}`}
                         >
+                          <ProductImage
+                            src={product.imageUrl}
+                            alt=""
+                            className="size-11"
+                          />
                           <span className="min-w-0 flex-1">
                             <strong className="line-clamp-2 text-sm font-semibold text-neutral-900">
                               {product.name}

@@ -288,6 +288,7 @@ auditoria TA-DATA-001. `UNIQUE(company_id, name)` · índice `(company_id, statu
 | status | enum(active, inactive) | |
 | aliases | text[] | RN-IMP-001 |
 | min_stock | numeric(14,3)? | estoque mínimo (§10.3) — alimenta o alerta de estoque baixo do Inventory (RN 10.7.8); adicionado na migration `20260804175603_add_inventory_purchasing` |
+| image_url | text? | foto principal (§10.3 "imagem") — URL pública no Vercel Blob (ADR-0003) ou `/uploads/` no ambiente local; o arquivo nunca fica no banco |
 | created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
 
 Constraints: `UNIQUE(company_id, sku)` · índice `(company_id, status)`.
