@@ -42,3 +42,6 @@ next-env.d.ts
 
 # decodificador de código de barras copiado do pacote zxing-wasm (scripts/copy-zxing-wasm.mjs)
 /public/vendor/zxing/
+
+# fotos gravadas localmente quando não há Vercel Blob (lib/storage.ts)
+/public/uploads/

@@ -131,6 +131,45 @@ describe('Edição, reativação, reprecificação e paginação — Products, S
       expect(cleared.body.variants[0].barcode).toBeNull();
     });
 
+    it('foto do produto: aceita só arquivo do armazenamento do app e pode ser removida (BR §10.3)', async () => {
+      const session = await registerCompany(app);
+      const product = await createProduct(app, session.accessToken, { sku: 'FOTO-1' });
+      const blobUrl = 'https://abc123xyz.public.blob.vercel-storage.com/companies/c/products/p/foto.webp';
+
+      const saved = await request(app.getHttpServer())
+        .patch(`/api/v1/catalog/products/${product.id}`)
+        .set(auth(session.accessToken))
+        .send({ imageUrl: blobUrl })
+        .expect(200);
+      expect(saved.body.imageUrl).toBe(blobUrl);
+
+      for (const invalid of [
+        'https://exemplo.com/foto.jpg',
+        'http://abc123xyz.public.blob.vercel-storage.com/foto.webp',
+        'javascript:alert(1)',
+        '/uploads/../../etc/passwd',
+      ]) {
+        await request(app.getHttpServer())
+          .patch(`/api/v1/catalog/products/${product.id}`)
+          .set(auth(session.accessToken))
+          .send({ imageUrl: invalid })
+          .expect(400);
+      }
+
+      const detail = await request(app.getHttpServer())
+        .get(`/api/v1/catalog/products/${product.id}`)
+        .set(auth(session.accessToken))
+        .expect(200);
+      expect(detail.body.imageUrl).toBe(blobUrl);
+
+      const cleared = await request(app.getHttpServer())
+        .patch(`/api/v1/catalog/products/${product.id}`)
+        .set(auth(session.accessToken))
+        .send({ imageUrl: null })
+        .expect(200);
+      expect(cleared.body.imageUrl).toBeNull();
+    });
+
     it('desativa e reativa um produto (BR US-PROD-002)', async () => {
       const session = await registerCompany(app);
       const product = await createProduct(app, session.accessToken);

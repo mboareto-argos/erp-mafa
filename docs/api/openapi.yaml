@@ -451,6 +451,12 @@ paths:
                   type: string
                   nullable: true
                   description: Código de barras da variação padrão; null remove (BR §10.3).
+                imageUrl:
+                  type: string
+                  nullable: true
+                  description: >
+                    URL da foto principal no armazenamento do app (Vercel Blob ou /uploads/ no
+                    ambiente local); outras origens são recusadas (ADR-0003). null remove.
       responses:
         "200":
           description: OK
@@ -2356,6 +2362,7 @@ components:
         status: { type: string, enum: [active, inactive] }
         categoryId: { type: string, format: uuid, nullable: true }
         brandId: { type: string, format: uuid, nullable: true }
+        imageUrl: { type: string, nullable: true, description: Foto principal (ADR-0003) }
         variants:
           type: array
           description: Variantes operacionais do produto; usar id em compras, estoque e vendas.

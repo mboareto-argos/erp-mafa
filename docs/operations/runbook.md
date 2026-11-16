@@ -68,3 +68,21 @@ nova.
 
 Se o passo 3 falhar no meio, nada do código novo foi publicado ainda: corrija e rode de novo
 (`migrate deploy` só aplica o que falta) ou restaure a branch de backup.
+
+## Fotos de produto (Vercel Blob — ADR-0003)
+
+Configuração única, no painel do Vercel:
+
+1. **Storage → Create → Blob**, nome `erp-mafa-fotos`, acesso **público**.
+2. **Connect Project** → projeto **web** (`erp-mafa-web`), marcando Production e Preview.
+   Isso cria a variável `BLOB_READ_WRITE_TOKEN` no projeto web. A API não precisa dela.
+3. Faça um novo deploy do web (ou o merge do PR que usa a variável) para ela valer.
+
+Sem o token, o resto do app funciona normalmente; só o envio de foto responde
+"O armazenamento de fotos não está configurado…".
+
+- Caminho dos arquivos: `companies/<company_id>/products/<product_id>/<aleatório>.jpg`.
+- A foto chega reduzida pelo celular (lado maior 1600 px, JPEG ~80%), ~100–400 KB cada.
+- Trocar ou remover a foto apaga o arquivo antigo do Blob.
+- As URLs são públicas: não usar este store para documentos sensíveis.
+- Ambiente local sem token: as fotos vão para `apps/web/public/uploads/` (ignorado pelo Git).

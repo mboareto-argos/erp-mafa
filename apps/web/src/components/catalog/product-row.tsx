@@ -1,5 +1,6 @@
 'use client';
 
+import { ProductImage } from '@/components/catalog/product-image';
 import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -20,6 +21,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 export type ProductListItem = {
+  imageUrl?: string | null;
   id: string;
   sku: string;
   name: string;
@@ -540,7 +542,11 @@ export function ProductRow({
   return (
     <tr>
       <td data-label="Produto">
-        <Link className="text-link" href={`/produtos/${product.id}`}>
+        <Link
+          className="text-link inline-flex items-center gap-2"
+          href={`/produtos/${product.id}`}
+        >
+          <ProductImage src={product.imageUrl} alt="" className="size-9" />
           <strong>{product.name}</strong>
         </Link>
         <small className="table-detail">Unidade: {product.unit}</small>

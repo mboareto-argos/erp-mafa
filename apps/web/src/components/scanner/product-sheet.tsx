@@ -1,5 +1,6 @@
 'use client';
 
+import { ProductImage } from '@/components/catalog/product-image';
 import { useState } from 'react';
 import Link from 'next/link';
 import { ScanBarcode, ShoppingCart } from 'lucide-react';
@@ -53,12 +54,20 @@ export function ProductSheet({
       <DrawerContent className="mx-auto max-w-lg">
         {product && (
           <div className="grid gap-4 px-4 pb-4">
-            <DrawerHeader className="px-0">
-              <DrawerTitle className="text-xl">{product.name}</DrawerTitle>
-              <DrawerDescription>
-                {product.sku}
-                {barcode && barcode !== product.sku ? ` · ${barcode}` : ''}
-              </DrawerDescription>
+            <DrawerHeader className="flex items-center gap-3 px-0">
+              <ProductImage
+                src={product.imageUrl}
+                alt={product.imageUrl ? `Foto de ${product.name}` : ''}
+                className="size-20 rounded-lg"
+                sizes="80px"
+              />
+              <span className="min-w-0">
+                <DrawerTitle className="text-xl">{product.name}</DrawerTitle>
+                <DrawerDescription>
+                  {product.sku}
+                  {barcode && barcode !== product.sku ? ` · ${barcode}` : ''}
+                </DrawerDescription>
+              </span>
             </DrawerHeader>
 
             <div className="flex items-end justify-between gap-3">

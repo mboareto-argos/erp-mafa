@@ -1,5 +1,6 @@
 'use client';
 
+import { ProductImage } from '@/components/catalog/product-image';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -598,6 +599,11 @@ export function NewPurchaseFlow({
                               'border-brand-accent bg-brand-accent-subtle',
                           )}
                         >
+                          <ProductImage
+                            src={product.imageUrl}
+                            alt=""
+                            className="size-11"
+                          />
                           <span className="min-w-0 flex-1">
                             <strong className="line-clamp-2 text-sm font-semibold text-neutral-900">
                               {product.name}
