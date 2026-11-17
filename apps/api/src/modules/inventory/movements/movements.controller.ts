@@ -16,7 +16,23 @@ export class MovementsController {
   list(
     @CurrentTenant() tenant: CurrentTenantContext,
     @Query('productVariantId') productVariantId?: string,
+    // Opcionais, para a tela de Estoque não carregar o histórico inteiro:
+    // `productVariantIds` (lista separada por vírgula, até 100) e `take`
+    // (as N mais recentes, até 200). Sem eles, a resposta é a de sempre.
+    @Query('productVariantIds') productVariantIds?: string,
+    @Query('take') take?: string,
   ) {
-    return this.inventory.getMovements(tenant.companyId, productVariantId);
+    const ids = productVariantIds
+      ?.split(',')
+      .map((id) => id.trim())
+      .filter((id) => /^[0-9a-f-]{36}$/i.test(id))
+      .slice(0, 100);
+    const limit = take
+      ? Math.min(Math.max(Math.trunc(Number(take)) || 1, 1), 200)
+      : undefined;
+    return this.inventory.getMovements(tenant.companyId, productVariantId, {
+      productVariantIds: ids,
+      take: limit,
+    });
   }
 }

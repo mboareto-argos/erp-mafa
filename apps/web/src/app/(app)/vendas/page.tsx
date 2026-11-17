@@ -1,5 +1,8 @@
 import { AppIcon } from '@/components/layout/app-icon';
-import { ListingMetrics } from '@/components/listings/listing-ui';
+import {
+  ListingMetrics,
+  ListingPagination,
+} from '@/components/listings/listing-ui';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import {
@@ -8,14 +11,14 @@ import {
 } from '@/components/sales/sale-actions';
 import { backendAuthenticatedRequest, getSession } from '@/lib/session';
 
-type Product = {
-  id: string;
-  name: string;
-  sku: string;
-  status: string;
-  variants: { id: string }[];
-  prices: { salePrice: string }[];
+type SalesPage = {
+  items: SaleListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  summary: { confirmedCount: number; confirmedTotal: string };
 };
+const PAGE_SIZE = 20;
 type Method = { id: string; name: string; status: string };
 
 const money = (value: string | number) =>
@@ -39,21 +42,29 @@ const saleStatus: Record<string, string> = {
 export default async function SalesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ new?: string; edit?: string }>;
+  searchParams: Promise<{ new?: string; edit?: string; page?: string }>;
 }) {
   // Links antigos (?new=sale, ?edit=ID) levam para a Nova venda em tela cheia.
-  const { new: newAction, edit: editId } = await searchParams;
+  const { new: newAction, edit: editId, page } = await searchParams;
+  const currentPage = Math.max(Number(page ?? '1') || 1, 1);
   if (editId) redirect(`/vendas/nova?rascunho=${editId}`);
   if (newAction === 'sale') redirect('/vendas/nova');
 
-  const [sales, products, methods, session] = await Promise.all([
-    backendAuthenticatedRequest('/sales') as Promise<SaleListItem[]>,
-    backendAuthenticatedRequest('/catalog/products') as Promise<Product[]>,
+  // Uma página por vez; os números do topo vêm calculados da API sobre o
+  // histórico inteiro. Do catálogo só interessa saber se existe produto.
+  const [result, catalog, methods, session] = await Promise.all([
+    backendAuthenticatedRequest(
+      `/sales?page=${currentPage}&pageSize=${PAGE_SIZE}`,
+    ) as Promise<SalesPage>,
+    backendAuthenticatedRequest(
+      '/catalog/products?page=1&pageSize=1',
+    ) as Promise<{ total: number }>,
     backendAuthenticatedRequest('/payments/methods') as Promise<Method[]>,
     getSession() as Promise<{ permissions: string[] } | null>,
   ]);
   const canManage = session?.permissions.includes('manage_sales') ?? false;
-  const confirmed = sales.filter((sale) => sale.status === 'confirmed');
+  const sales = result.items;
+  const hasProducts = catalog.total > 0;
 
   return (
     <main className="page-content">
@@ -65,7 +76,7 @@ export default async function SalesPage({
           </p>
         </div>
       </div>
-      {canManage && products.length > 0 && (
+      {canManage && hasProducts && (
         <div className="page-workspace-action">
           <Link
             className="button button-primary compact-button"
@@ -79,21 +90,19 @@ export default async function SalesPage({
         metrics={[
           {
             label: 'Vendas cadastradas',
-            value: sales.length,
+            value: result.total,
             detail: 'No histórico disponível',
             icon: 'sales',
           },
           {
             label: 'Confirmadas',
-            value: confirmed.length,
+            value: result.summary.confirmedCount,
             detail: 'Com estoque e pagamento atualizados',
             icon: 'sales',
           },
           {
             label: 'Valor confirmado',
-            value: money(
-              confirmed.reduce((total, sale) => total + Number(sale.total), 0),
-            ),
+            value: money(result.summary.confirmedTotal),
             detail: 'No histórico disponível',
             icon: 'finance',
           },
@@ -121,12 +130,12 @@ export default async function SalesPage({
                         <AppIcon name="sales" />
                       </span>
                       <strong>
-                        {products.length === 0
+                        {!hasProducts
                           ? 'Cadastre um produto antes de fazer uma venda'
                           : 'Nenhuma venda registrada ainda'}
                       </strong>
                       <p>
-                        {products.length === 0
+                        {!hasProducts
                           ? 'O produto é necessário para validar a disponibilidade e preservar o custo histórico.'
                           : 'Quando uma venda for criada, ela aparecerá nesta listagem.'}
                       </p>
@@ -172,6 +181,11 @@ export default async function SalesPage({
           </table>
         </div>
       </section>
+      <ListingPagination
+        page={result.page}
+        total={result.total}
+        pageSize={result.pageSize}
+      />
     </main>
   );
 }

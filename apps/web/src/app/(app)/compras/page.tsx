@@ -1,5 +1,8 @@
 import { AppIcon } from '@/components/layout/app-icon';
-import { ListingMetrics } from '@/components/listings/listing-ui';
+import {
+  ListingMetrics,
+  ListingPagination,
+} from '@/components/listings/listing-ui';
 import {
   PurchaseActions,
   type PurchaseListItem,
@@ -7,6 +10,15 @@ import {
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { backendAuthenticatedRequest, getSession } from '@/lib/session';
+
+type PurchasesPage = {
+  items: PurchaseListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  summary: { receivedCount: number; receivedItems: number };
+};
+const PAGE_SIZE = 20;
 
 const purchaseStatus: Record<string, string> = {
   draft: 'Rascunho',
@@ -35,29 +47,23 @@ const purchaseTotal = (purchase: PurchaseListItem) =>
 export default async function PurchasesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ new?: string; edit?: string }>;
+  searchParams: Promise<{ new?: string; edit?: string; page?: string }>;
 }) {
   // Links antigos (?new=purchase, ?edit=ID) levam para a Nova compra em tela cheia.
-  const { new: newAction, edit: editId } = await searchParams;
+  const { new: newAction, edit: editId, page } = await searchParams;
+  const currentPage = Math.max(Number(page ?? '1') || 1, 1);
   if (editId) redirect(`/compras/nova?rascunho=${editId}`);
   if (newAction === 'purchase') redirect('/compras/nova');
 
-  const [purchases, session] = await Promise.all([
-    backendAuthenticatedRequest('/purchasing/purchases') as Promise<
-      PurchaseListItem[]
-    >,
+  // Uma página por vez; os números do topo vêm calculados da API.
+  const [result, session] = await Promise.all([
+    backendAuthenticatedRequest(
+      `/purchasing/purchases?page=${currentPage}&pageSize=${PAGE_SIZE}`,
+    ) as Promise<PurchasesPage>,
     getSession() as Promise<{ permissions: string[] } | null>,
   ]);
   const canManage = session?.permissions.includes('manage_purchasing') ?? false;
-  const received = purchases.filter(
-    (purchase) => purchase.status === 'received',
-  );
-  const receivedItems = purchases.reduce(
-    (total, purchase) =>
-      total +
-      purchase.items.filter((item) => Number(item.quantityReceived) > 0).length,
-    0,
-  );
+  const purchases = result.items;
 
   return (
     <main className="page-content">
@@ -81,20 +87,20 @@ export default async function PurchasesPage({
         metrics={[
           {
             label: 'Compras cadastradas',
-            value: purchases.length,
+            value: result.total,
             detail: 'No histórico disponível',
             icon: 'purchases',
           },
           {
             label: 'Recebidas',
-            value: received.length,
+            value: result.summary.receivedCount,
             detail: 'Com estoque atualizado',
             icon: 'inventory',
           },
           {
             label: 'Itens recebidos',
-            value: receivedItems,
-            detail: 'Em todas as compras listadas',
+            value: result.summary.receivedItems,
+            detail: 'No histórico disponível',
             icon: 'products',
           },
         ]}
@@ -174,6 +180,11 @@ export default async function PurchasesPage({
           </table>
         </div>
       </section>
+      <ListingPagination
+        page={result.page}
+        total={result.total}
+        pageSize={result.pageSize}
+      />
     </main>
   );
 }

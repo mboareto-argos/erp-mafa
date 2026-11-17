@@ -1,4 +1,8 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
+import {
+  type PageRequest,
+  skipTake,
+} from '../../../common/pagination/pagination';
 import { Prisma, PurchaseStatus } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AppError } from '../../../common/errors/app-error';
@@ -95,12 +99,40 @@ export class PurchasesService {
     return purchase;
   }
 
-  list(companyId: string) {
-    return this.prisma.purchase.findMany({
-      where: { companyId, deletedAt: null },
-      include: INCLUDE_DETAILS,
-      orderBy: { createdAt: 'desc' },
-    });
+  // Sem `page`, o array completo de sempre. Com `page`, uma página e os
+  // números do topo da tela calculados no banco.
+  async list(companyId: string, pageRequest: PageRequest | null = null) {
+    const where = { companyId, deletedAt: null };
+    if (!pageRequest)
+      return this.prisma.purchase.findMany({
+        where,
+        include: INCLUDE_DETAILS,
+        orderBy: { createdAt: 'desc' },
+      });
+    const [items, total, receivedCount, receivedItems] = await Promise.all([
+      this.prisma.purchase.findMany({
+        where,
+        include: INCLUDE_DETAILS,
+        orderBy: { createdAt: 'desc' },
+        ...skipTake(pageRequest),
+      }),
+      this.prisma.purchase.count({ where }),
+      this.prisma.purchase.count({ where: { ...where, status: 'received' } }),
+      this.prisma.purchaseItem.count({
+        where: {
+          companyId,
+          deletedAt: null,
+          quantityReceived: { gt: 0 },
+          purchase: where,
+        },
+      }),
+    ]);
+    return {
+      items,
+      total,
+      ...pageRequest,
+      summary: { receivedCount, receivedItems },
+    };
   }
 
   async get(companyId: string, id: string) {

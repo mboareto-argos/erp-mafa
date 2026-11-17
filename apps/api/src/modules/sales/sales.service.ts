@@ -10,6 +10,7 @@ import { CreateSaleDto } from './dto/create-sale.schema';
 import { ConfirmSaleDto } from './dto/confirm-sale.schema';
 import { ReturnSaleDto } from './dto/return-sale.schema';
 import { ReceivablesService } from '../receivables/receivables.service';
+import { type PageRequest, skipTake } from '../../common/pagination/pagination';
 import {
   calculateSaleTotals,
   calculateCmvAndProfit,
@@ -134,12 +135,41 @@ export class SalesService {
     });
   }
 
-  list(companyId: string) {
-    return this.prisma.sale.findMany({
-      where: { companyId, deletedAt: null },
-      include: INCLUDE_DETAILS,
-      orderBy: { createdAt: 'desc' },
-    });
+  // Sem `page`, o array completo de sempre. Com `page`, uma página e os
+  // números do topo da tela calculados no banco (não na página visível).
+  async list(companyId: string, pageRequest: PageRequest | null = null) {
+    const where: Prisma.SaleWhereInput = { companyId, deletedAt: null };
+    if (!pageRequest)
+      return this.prisma.sale.findMany({
+        where,
+        include: INCLUDE_DETAILS,
+        orderBy: { createdAt: 'desc' },
+      });
+    const [items, total, confirmed] = await Promise.all([
+      this.prisma.sale.findMany({
+        where,
+        include: INCLUDE_DETAILS,
+        orderBy: { createdAt: 'desc' },
+        ...skipTake(pageRequest),
+      }),
+      this.prisma.sale.count({ where }),
+      this.prisma.sale.aggregate({
+        where: { ...where, status: 'confirmed' },
+        _count: { _all: true },
+        _sum: { total: true },
+      }),
+    ]);
+    return {
+      items,
+      total,
+      ...pageRequest,
+      summary: {
+        confirmedCount: confirmed._count._all,
+        confirmedTotal: (
+          confirmed._sum.total ?? new Prisma.Decimal(0)
+        ).toString(),
+      },
+    };
   }
 
   async get(companyId: string, id: string) {
