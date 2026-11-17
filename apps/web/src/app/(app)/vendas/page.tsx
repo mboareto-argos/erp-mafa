@@ -29,6 +29,7 @@ const dateTime = (value: string) =>
   new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
     timeStyle: 'short',
+    timeZone: 'America/Sao_Paulo',
   }).format(new Date(value));
 const saleStatus: Record<string, string> = {
   draft: 'Rascunho',
@@ -60,7 +61,10 @@ export default async function SalesPage({
       '/catalog/products?page=1&pageSize=1',
     ) as Promise<{ total: number }>,
     backendAuthenticatedRequest('/payments/methods') as Promise<Method[]>,
-    getSession() as Promise<{ permissions: string[] } | null>,
+    getSession() as Promise<{
+      permissions: string[];
+      company?: { name: string };
+    } | null>,
   ]);
   const canManage = session?.permissions.includes('manage_sales') ?? false;
   const sales = result.items;
@@ -172,6 +176,7 @@ export default async function SalesPage({
                         sale={sale}
                         canManage={canManage}
                         methods={methods}
+                        storeName={session?.company?.name ?? ''}
                       />
                     </td>
                   </tr>

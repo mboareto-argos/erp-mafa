@@ -33,6 +33,10 @@ export type PaymentMethod = {
   feeRate?: string | number | null;
   feeFixed?: string | number | null;
   financialAccountId?: string | null;
+  /** Chave Pix para o QR Code da venda (BR §10.12, regra 8). */
+  pixKey?: string | null;
+  pixMerchantName?: string | null;
+  pixMerchantCity?: string | null;
 };
 
 export function addToCart(

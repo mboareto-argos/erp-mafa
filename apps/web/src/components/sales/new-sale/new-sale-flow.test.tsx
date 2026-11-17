@@ -45,11 +45,12 @@ const methods = [
   },
 ];
 
-function renderFlow() {
+function renderFlow(methodList = methods) {
   return render(
     <NewSaleFlow
       products={products}
-      methods={methods}
+      methods={methodList}
+      storeName="MAFA Store"
       customers={[{ id: 'c1', name: 'Ana Paula' }]}
       stock={{ v1: 5, v2: 0 }}
       accounts={{ acc: 'Conta PJ' }}
@@ -139,7 +140,11 @@ describe('NewSaleFlow', () => {
       })
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ id: 'sale-1', status: 'confirmed' }),
+        json: async () => ({
+          id: 'sale-1',
+          status: 'confirmed',
+          receiptLinks: [{ token: 'tok-1' }],
+        }),
       });
     vi.stubGlobal('fetch', fetchMock);
     renderFlow();
@@ -150,6 +155,8 @@ describe('NewSaleFlow', () => {
     await userEvent.click(screen.getByRole('radio', { name: 'Pix' }));
     await userEvent.click(screen.getByRole('button', { name: 'Continuar' }));
     expect(screen.getByText(/que entra em Conta PJ/)).toBeInTheDocument();
+    // Sem chave Pix cadastrada, o QR não aparece — só a orientação.
+    expect(screen.getByText(/cadastre a chave Pix/)).toBeInTheDocument();
     await userEvent.click(
       screen.getByRole('button', { name: 'Confirmar venda' }),
     );
@@ -175,7 +182,53 @@ describe('NewSaleFlow', () => {
     expect(JSON.parse(confirmInit.body)).toEqual({
       payments: [{ paymentMethodId: 'pix', amount: 249.9 }],
     });
-    expect(router.push).toHaveBeenCalledWith('/vendas');
+    // Depois de confirmar: tela da venda concluída com o recibo (regra 26).
+    expect(
+      await screen.findByRole('heading', { name: 'Venda registrada' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Ver recibo/ })).toHaveAttribute(
+      'href',
+      '/recibo/tok-1',
+    );
+    expect(
+      screen.getByRole('button', { name: /Compartilhar recibo/ }),
+    ).toBeInTheDocument();
+  });
+
+  it('Pix com chave: mostra o QR com o valor da venda salva (BR §10.12, regra 8)', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 'sale-9', total: '249.9' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const withKey = methods.map((method) =>
+      method.type === 'pix'
+        ? {
+            ...method,
+            pixKey: '11222333000181',
+            pixMerchantName: 'MAFA Store',
+            pixMerchantCity: 'Sao Paulo',
+          }
+        : method,
+    );
+    renderFlow(withKey);
+    await userEvent.click(
+      screen.getByRole('button', { name: /Adicionar Yara/ }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Pix' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+    await userEvent.click(
+      screen.getByRole('button', { name: /Mostrar QR Code do Pix/ }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/sales',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(await screen.findByText('Pix de R$ 249,90')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Copiar Pix copia e cola/ }),
+    ).toBeInTheDocument();
   });
 
   it('fiado exige cliente antes de avançar', async () => {

@@ -40,7 +40,10 @@ export default async function NewSalePage({
 }: {
   searchParams: Promise<{ rascunho?: string; adicionar?: string }>;
 }) {
-  const session = (await getSession()) as { permissions: string[] } | null;
+  const session = (await getSession()) as {
+    permissions: string[];
+    company?: { name: string };
+  } | null;
   const permissions = session?.permissions ?? [];
   // Tela inteira só existe para quem pode vender (DS-PERM-001); o backend
   // valida de novo em cada chamada (TA-SEC-001).
@@ -95,6 +98,7 @@ export default async function NewSalePage({
       canCreateCustomer={permissions.includes('manage_customers')}
       canManageCatalog={permissions.includes('manage_catalog')}
       initialAdd={adicionar}
+      storeName={session?.company?.name ?? ''}
       draft={
         editableDraft
           ? {

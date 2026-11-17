@@ -1150,6 +1150,20 @@ A implementação poderá simplificar os status no MVP, desde que preserve a cap
 24. Uma venda cancelada não deverá contar como faturamento.
 25. Devoluções deverão reduzir a receita líquida e ajustar CMV conforme regra.
 
+## Recibo da venda
+
+*Incluído em 17/11/2026, aprovado pelo proprietário da MAFA Store.*
+
+26. **Recibo por link (R1).** Toda venda confirmada deverá ter um recibo acessível por um link
+    secreto, não adivinhável, que abre sem login, para o cliente ver, baixar em PDF ou
+    imprimir. O recibo mostra: nome da loja, data, itens (brindes identificados como brinde),
+    descontos, total, formas de pagamento, parcelas do fiado com vencimentos e o nome do
+    cliente. Nunca mostra custo, lucro ou dados internos, e traz o aviso "Não é documento
+    fiscal". Venda cancelada ou devolvida aparece assim no recibo. O link pode ser enviado pelo
+    WhatsApp do cliente ou compartilhado, e o usuário pode gerar um link novo, que invalida o
+    anterior. A página do recibo é a única exceção à exigência de login e só expõe os dados do
+    próprio recibo.
+
 ## Cálculos da venda
 
 ### Subtotal
@@ -1271,6 +1285,18 @@ Configurar como vendas e despesas são pagas.
 5. Mudanças futuras na configuração da forma de pagamento não deverão alterar vendas antigas.
 6. O recebimento líquido e o valor pago pelo cliente deverão ser diferenciados.
 7. Pagamentos em dinheiro poderão registrar troco.
+
+## QR Code Pix na venda
+
+*Incluído em 17/11/2026, aprovado pelo proprietário da MAFA Store.*
+
+8. **QR Code Pix (P1).** A forma de pagamento Pix poderá ter uma chave Pix cadastrada, com o
+   nome do recebedor e a cidade. Somente quem gerencia formas de pagamento poderá cadastrar ou
+   alterar a chave, e cada alteração deverá ser registrada na auditoria. Na venda paga por Pix,
+   o sistema deverá mostrar um QR Code e o código "Pix copia e cola" com o valor exato a pagar
+   (no fiado com entrada em Pix, o valor da entrada) e um identificador curto da venda. O
+   sistema não confirma sozinho que o Pix foi recebido: o usuário confirma a venda depois de
+   conferir o recebimento no banco.
 
 ---
 

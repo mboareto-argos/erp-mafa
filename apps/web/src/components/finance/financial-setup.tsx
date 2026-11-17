@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { SelectField } from '@/components/ui/select-field';
+import { PixKeyEditor } from './pix-key-editor';
 
 type Account = {
   id: string;
@@ -36,6 +37,9 @@ type Method = {
   status: string;
   feeRate?: string | null;
   feeFixed?: string | null;
+  pixKey?: string | null;
+  pixMerchantName?: string | null;
+  pixMerchantCity?: string | null;
 };
 const money = (value: string | number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
@@ -385,11 +389,14 @@ export function FinancialSetup({
   methods,
   canManageAccounts,
   canManageMethods,
+  companyName,
 }: {
   accounts: Account[];
   methods: Method[];
   canManageAccounts: boolean;
   canManageMethods: boolean;
+  /** Sugestão para o nome de quem recebe o Pix. */
+  companyName?: string;
 }) {
   const router = useRouter();
   const refresh = () => router.refresh();
@@ -523,6 +530,13 @@ export function FinancialSetup({
                     </td>
                     <td data-label="Tipo">
                       {methodType[method.type] ?? method.type}
+                      {method.type === 'pix' && (
+                        <span className="table-detail">
+                          {method.pixKey
+                            ? `Chave ${method.pixKey}`
+                            : 'Sem chave: a venda não mostra QR Code'}
+                        </span>
+                      )}
                     </td>
                     <td data-label="Conta">
                       {accounts.find(
@@ -542,6 +556,17 @@ export function FinancialSetup({
                     </td>
                     {canManageMethods && (
                       <td className="table-actions-cell" data-label="Ações">
+                        {method.status === 'active' &&
+                          method.type === 'pix' && (
+                            <PixKeyEditor
+                              methodId={method.id}
+                              methodName={method.name}
+                              pixKey={method.pixKey}
+                              merchantName={method.pixMerchantName}
+                              merchantCity={method.pixMerchantCity}
+                              companyName={companyName}
+                            />
+                          )}
                         {method.status === 'active' && (
                           <DeactivateAction
                             resource="payments/methods"

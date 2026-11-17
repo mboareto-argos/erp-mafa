@@ -66,7 +66,10 @@ export default async function FinancialPage({
 }: {
   searchParams: Promise<{ new?: string; tab?: string }>;
 }) {
-  const session = (await getSession()) as { permissions: string[] } | null;
+  const session = (await getSession()) as {
+    permissions: string[];
+    company?: { name: string };
+  } | null;
   const has = (permission: string) =>
     session?.permissions.includes(permission) ?? false;
   const query = await searchParams;
@@ -339,6 +342,7 @@ export default async function FinancialPage({
           methods={methods}
           canManageAccounts={has('manage_financial_accounts')}
           canManageMethods={has('manage_payment_methods')}
+          companyName={session?.company?.name}
         />
       )}
       {!newAction && !canSeeAnything && (

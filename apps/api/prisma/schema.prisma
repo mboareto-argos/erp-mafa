@@ -73,6 +73,7 @@ model Company {
   kitAssemblies              KitAssembly[]
   campaigns                  Campaign[]
   campaignDeliveries         CampaignDelivery[]
+  saleReceiptLinks           SaleReceiptLink[]
   inventoryCountItems        InventoryCountItem[]
   suppliers                  Supplier[]
   purchases                  Purchase[]
@@ -139,6 +140,7 @@ model User {
   createdKitAssemblies              KitAssembly[]              @relation("KitAssemblyCreatedBy")
   createdCampaigns                  Campaign[]                 @relation("CampaignCreatedBy")
   sentCampaignDeliveries            CampaignDelivery[]         @relation("CampaignDeliverySentBy")
+  createdSaleReceiptLinks           SaleReceiptLink[]          @relation("SaleReceiptLinkCreatedBy")
   approvedStockAdjustments          StockAdjustment[]          @relation("StockAdjustmentApprovedBy")
   createdStockReservations          StockReservation[]         @relation("StockReservationCreatedBy")
   createdInventoryCounts            InventoryCount[]           @relation("InventoryCountCreatedBy")
@@ -1120,6 +1122,11 @@ model PaymentMethod {
   // venda a vista confirmada com esta forma de pagamento gera uma
   // FinancialTransaction real (ver Fase 4, SalesService.confirm()).
   financialAccountId String?             @map("financial_account_id") @db.Uuid
+  // QR Code Pix na venda (BR §10.12, regra 8): chave Pix (normalizada),
+  // nome do recebedor e cidade, usados para montar o "Pix copia e cola".
+  pixKey             String?             @map("pix_key")
+  pixMerchantName    String?             @map("pix_merchant_name")
+  pixMerchantCity    String?             @map("pix_merchant_city")
   status             PaymentMethodStatus @default(active)
   createdAt          DateTime            @default(now()) @map("created_at")
   updatedAt          DateTime            @updatedAt @map("updated_at")
@@ -1177,6 +1184,8 @@ model Sale {
   receivables       Receivable[]
   stockReservations StockReservation[]
 
+  receiptLinks SaleReceiptLink[]
+
   @@index([companyId, status])
   @@map("sales")
 }
@@ -1216,6 +1225,28 @@ model SaleItem {
 
   @@index([companyId, saleId])
   @@map("sale_items")
+}
+
+// Link público do recibo (BR §10.10, regra 26). Exceção documentada ao RLS,
+// como `invitations`: o recibo abre sem login, então o token precisa ser
+// encontrado antes de existir uma empresa no contexto. A tabela guarda só o
+// vínculo token → empresa/venda; os dados do recibo são lidos depois, dentro
+// da transação com RLS da empresa. Um link ativo por venda (revoked_at nulo).
+model SaleReceiptLink {
+  id        String    @id @default(uuid()) @db.Uuid
+  companyId String    @map("company_id") @db.Uuid
+  saleId    String    @map("sale_id") @db.Uuid
+  token     String    @unique
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by") @db.Uuid
+  revokedAt DateTime? @map("revoked_at")
+
+  company       Company @relation(fields: [companyId], references: [id])
+  sale          Sale    @relation(fields: [saleId], references: [id])
+  createdByUser User?   @relation("SaleReceiptLinkCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([companyId, saleId])
+  @@map("sale_receipt_links")
 }
 
 // Criado so' na confirmacao — imutavel dali em diante (sem updated_at,
