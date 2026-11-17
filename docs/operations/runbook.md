@@ -89,3 +89,31 @@ Sem o store conectado, o resto do app funciona normalmente; só o envio de foto 
 - Trocar ou remover a foto apaga o arquivo antigo do Blob.
 - As URLs são públicas: não usar este store para documentos sensíveis.
 - Ambiente local sem store conectado: as fotos vão para `apps/web/public/uploads/` (ignorado pelo Git).
+
+## Domínio do app (app.argosdev.com.br)
+
+O site (projeto **web** na Vercel) responde em `app.argosdev.com.br`. A API continua no
+endereço dela: o site chama a API pelo servidor (`API_BASE_URL`), sem CORS, então nada na API
+muda com o domínio.
+
+1. **Vercel → projeto web → Settings → Domains → Add**: `app.argosdev.com.br`.
+   - A Vercel mostra o registro DNS a criar. Normalmente é um **CNAME** `app` →
+     `cname.vercel-dns.com`; às vezes ela mostra um valor próprio do projeto. **Use exatamente
+     o valor que a Vercel mostrar.**
+2. **No DNS de argosdev.com.br** (no Registro.br ou onde o DNS estiver hospedado): criar o
+   CNAME `app` com o valor da Vercel. Não mexer nos registros que já existem (site, e-mail).
+3. Esperar a Vercel marcar o domínio como **Valid Configuration**. O certificado HTTPS é
+   emitido sozinho, em alguns minutos.
+4. **Variável de ambiente:** se existir `NEXT_PUBLIC_APP_NAME` no projeto web, remover ou
+   trocar para `Vendaí` (ela sobrescreve o nome do app instalado). Depois, **Redeploy**.
+5. **Opcional — gestao.mafastore.com.br:** no mesmo projeto, adicionar
+   `gestao.mafastore.com.br`, escolher **Redirect to `app.argosdev.com.br`** (308) e criar o
+   CNAME `gestao` no DNS de mafastore.com.br com o valor indicado pela Vercel.
+
+Depois da troca:
+
+- O endereço antigo `*.vercel.app` continua funcionando.
+- O login vale por endereço: no domínio novo é preciso entrar de novo uma vez.
+- O app instalado no celular fica preso ao endereço em que foi instalado. Para ter o ícone e
+  o nome novos: remover o ícone antigo, abrir `app.argosdev.com.br` e instalar de novo
+  (Android: menu → Instalar app; iPhone: Compartilhar → Adicionar à Tela de Início).

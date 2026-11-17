@@ -1,4 +1,5 @@
 import { InvitationAcceptForm } from '@/components/settings/invitation-accept-form';
+import { BrandLogo } from '@/components/brand/brand-logo';
 import { backendRequest } from '@/lib/session';
 
 type Invitation = {
@@ -21,7 +22,7 @@ export default async function InvitationPage({
     <main className="auth-page">
       <aside className="auth-aside">
         <span className="brand">
-          <span className="brand-mark">M</span> MAFA Store
+          <BrandLogo />
         </span>
         <div>
           <h1>Você foi convidado para organizar a operação.</h1>

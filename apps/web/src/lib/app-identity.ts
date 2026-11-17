@@ -1,10 +1,12 @@
 import tokens from '@erp-mafa/design-tokens/tokens.json';
+import { PRODUCT_NAME } from './brand';
 
-// Identidade do app instalável (PWA). Hoje há uma só empresa por
-// implantação; NEXT_PUBLIC_APP_NAME permite trocar o nome sem mudar código
+// Identidade do app instalável (PWA). O nome é o do produto (Vendaí), não o
+// da empresa — a empresa (ex.: MAFA Store) aparece dentro do app.
+// NEXT_PUBLIC_APP_NAME ainda permite trocar o nome sem mudar código
 // (white-label — DS §6). As cores vêm dos tokens do Design System.
 export const APP_NAME =
-  process.env.NEXT_PUBLIC_APP_NAME?.trim() || 'MAFA Store';
+  process.env.NEXT_PUBLIC_APP_NAME?.trim() || PRODUCT_NAME;
 export const APP_DESCRIPTION =
   'Vendas, compras, estoque e financeiro da loja no celular.';
 export const APP_ACCENT = tokens.color.brand.accent;

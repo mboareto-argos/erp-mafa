@@ -1,4 +1,5 @@
 import { CompanySelector } from '@/components/auth/company-selector';
+import { BrandLogo } from '@/components/brand/brand-logo';
 import Link from 'next/link';
 
 export default function SelectCompanyPage() {
@@ -6,7 +7,7 @@ export default function SelectCompanyPage() {
     <main className="auth-page">
       <aside className="auth-aside">
         <Link className="brand" href="/">
-          <span className="brand-mark">M</span> MAFA Store
+          <BrandLogo />
         </Link>
         <div>
           <h1>Escolha a empresa que você quer acessar.</h1>
