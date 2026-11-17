@@ -5,11 +5,13 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   UseGuards,
 } from '@nestjs/common';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { JwtAuthGuard } from '../../tenancy/jwt-auth.guard';
 import { PermissionsGuard } from '../../tenancy/permissions.guard';
+import { setPixKeySchema, type SetPixKeyDto } from './dto/pix-key.schema';
 import { RequirePermission } from '../../tenancy/require-permission.decorator';
 import { CurrentTenant } from '../../tenancy/current-tenant.decorator';
 import type { CurrentTenantContext } from '../../tenancy/jwt-payload.interface';
@@ -47,5 +49,15 @@ export class PaymentMethodsController {
     @Param('id') id: string,
   ) {
     return this.paymentMethods.deactivate(tenant.companyId, id);
+  }
+
+  @Put(':id/pix')
+  @RequirePermission('manage_payment_methods')
+  setPixKey(
+    @CurrentTenant() tenant: CurrentTenantContext,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(setPixKeySchema)) dto: SetPixKeyDto,
+  ) {
+    return this.paymentMethods.setPixKey(tenant, id, dto);
   }
 }

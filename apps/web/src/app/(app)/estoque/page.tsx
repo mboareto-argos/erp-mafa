@@ -60,6 +60,7 @@ const dateTime = (value: string) =>
   new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
     timeStyle: 'short',
+    timeZone: 'America/Sao_Paulo',
   }).format(new Date(value));
 const movementLabel: Record<InventoryMovement['type'], string> = {
   in: 'Entrada',

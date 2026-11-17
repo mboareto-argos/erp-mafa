@@ -151,3 +151,11 @@ Aceite do cliente em receber ofertas, com data e origem; sem ele o cliente não 
 Mensagem de oferta, promoção ou data especial (texto e foto opcional) para um público de
 clientes que aceitaram receber ofertas, enviada um a um pelo WhatsApp do próprio usuário
 (BR §10.9, regras 10 e 11).
+
+## Pix copia e cola
+Código do Pix (padrão BR Code do Banco Central) com a chave da loja e o valor da venda, mostrado
+também como QR Code para o cliente pagar (BR §10.12, regra 8). Não confirma o pagamento sozinho.
+
+## Recibo da venda
+Comprovante da venda confirmada, aberto por um link secreto sem login, para o cliente ver,
+baixar em PDF ou imprimir. Não é documento fiscal (BR §10.10, regra 26).

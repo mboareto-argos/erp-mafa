@@ -10,6 +10,7 @@ import { CreateSaleDto } from './dto/create-sale.schema';
 import { ConfirmSaleDto } from './dto/confirm-sale.schema';
 import { ReturnSaleDto } from './dto/return-sale.schema';
 import { ReceivablesService } from '../receivables/receivables.service';
+import { ReceiptsService } from './receipts/receipts.service';
 import { type PageRequest, skipTake } from '../../common/pagination/pagination';
 import {
   calculateSaleTotals,
@@ -56,6 +57,8 @@ const INCLUDE_DETAILS = {
     orderBy: { installmentNumber: 'asc' },
   },
   returns: { include: { items: true } },
+  // Link ativo do recibo (BR §10.10, regra 26).
+  receiptLinks: { where: { revokedAt: null }, select: { token: true } },
 } satisfies Prisma.SaleInclude;
 
 @Injectable()
@@ -66,6 +69,7 @@ export class SalesService {
     private readonly cashFlow: CashFlowService,
     private readonly audit: AuditService,
     private readonly receivables: ReceivablesService,
+    private readonly receipts: ReceiptsService,
   ) {}
 
   // Rascunho — RN 10.10.1: nao altera estoque nem custo.
@@ -593,6 +597,11 @@ export class SalesService {
       }
 
       const { cmv, grossProfit } = calculateCmvAndProfit(costItems, sale.total);
+      await this.receipts.createLink(tx, {
+        companyId: tenant.companyId,
+        saleId,
+        userId: tenant.userId,
+      });
 
       const confirmedSale = await tx.sale.update({
         where: { id: saleId },

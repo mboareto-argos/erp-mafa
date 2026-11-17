@@ -9,6 +9,7 @@ import {
   CreditCard,
   Gift,
   HandCoins,
+  CircleCheck,
   Plus,
   QrCode,
   Wallet,
@@ -24,6 +25,9 @@ import { ProductSheet } from '@/components/scanner/product-sheet';
 import { ScanSearchField } from '@/components/scanner/scan-search-field';
 import { UnknownCodeSheet } from '@/components/scanner/unknown-code-sheet';
 import { findByCode } from '@/lib/catalog';
+import { pixPayload, pixTxid } from '@/lib/pix';
+import { PixQr } from '@/components/sales/pix-qr';
+import { ReceiptShare } from '@/components/sales/receipt-share';
 import {
   CalculatedBox,
   Stepper,
@@ -111,6 +115,7 @@ export function NewSaleFlow({
   canManageCatalog = false,
   initialAdd,
   draft,
+  storeName = '',
 }: {
   products: CatalogProduct[];
   methods: PaymentMethod[];
@@ -122,6 +127,8 @@ export function NewSaleFlow({
   canManageCatalog?: boolean;
   /** Variação a colocar no carrinho ao abrir (ex.: "Vender" na página do produto). */
   initialAdd?: string;
+  /** Nome da loja, para a mensagem do recibo. */
+  storeName?: string;
   draft: Draft | null;
 }) {
   const router = useRouter();
@@ -177,7 +184,17 @@ export function NewSaleFlow({
   const [editingPrice, setEditingPrice] = useState<string>();
   const [saleId, setSaleId] = useState(draft?.id);
   const [idempotencyKey, setIdempotencyKey] = useState<string>();
-  const [pending, setPending] = useState<'confirm' | 'draft'>();
+  const [pending, setPending] = useState<'confirm' | 'draft' | 'pix'>();
+  // QR do Pix desta venda (BR §10.12, regra 8) e a venda concluída, com o
+  // link do recibo (§10.10, regra 26).
+  const [pixQr, setPixQr] = useState<{
+    payload: string;
+    amountCents: number;
+  } | null>(null);
+  const [done, setDone] = useState<{
+    receiptToken: string | null;
+    totalCents: number;
+  } | null>(null);
   const [error, setError] = useState<string>();
   const [restored, setRestored] = useState(false);
 
@@ -303,6 +320,7 @@ export function NewSaleFlow({
 
   function goBack() {
     setError(undefined);
+    setPixQr(null);
     setStep((current) => Math.max(current - 1, 0));
   }
 
@@ -349,6 +367,48 @@ export function NewSaleFlow({
     router.refresh();
   }
 
+  // Forma Pix usada agora: à vista, ou a entrada do fiado.
+  const pixMethod =
+    payment?.mode === 'now'
+      ? methodById(payment.methodId)
+      : payment?.mode === 'credit' && payment.upfrontCents > 0
+        ? methodById(payment.upfrontMethodId)
+        : undefined;
+  const pixApplies = pixMethod?.type === 'pix';
+
+  // Salva a venda (rascunho) para o QR levar o identificador dela e o valor
+  // calculado pela API.
+  async function showPixQr() {
+    if (!pixMethod?.pixKey || !payment) return;
+    setPending('pix');
+    setError(undefined);
+    try {
+      const sale = await saveSale();
+      const amountCents =
+        payment.mode === 'now'
+          ? sale.totalCents
+          : Math.min(payment.upfrontCents, sale.totalCents);
+      setPixQr({
+        amountCents,
+        payload: pixPayload({
+          key: pixMethod.pixKey,
+          merchantName: pixMethod.pixMerchantName || storeName,
+          merchantCity: pixMethod.pixMerchantCity || 'BRASIL',
+          amountCents,
+          txid: pixTxid(sale.id),
+        }),
+      });
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : 'Não foi possível gerar o Pix.',
+      );
+    } finally {
+      setPending(undefined);
+    }
+  }
+
   async function confirm() {
     if (!payment) return;
     setPending('confirm');
@@ -362,16 +422,28 @@ export function NewSaleFlow({
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
         body: JSON.stringify(confirmPayload(sale.totalCents, payment)),
       });
-      const body = (await response.json()) as { message?: string };
+      const body = (await response.json()) as {
+        message?: string;
+        receiptLinks?: { token: string }[];
+      };
       if (!response.ok) {
         // Nova tentativa depois de corrigir algo precisa de outra chave.
         setIdempotencyKey(undefined);
         throw new Error(body.message ?? 'Não foi possível confirmar a venda.');
       }
-      finish(
+      try {
+        localStorage.removeItem(DRAFT_KEY);
+      } catch {
+        // idem
+      }
+      notify.success(
         'Venda registrada',
         `${formatCents(sale.totalCents)}${selectedCustomer ? ` · ${selectedCustomer.name}` : ''}`,
       );
+      setDone({
+        receiptToken: body.receiptLinks?.[0]?.token ?? null,
+        totalCents: sale.totalCents,
+      });
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -427,6 +499,48 @@ export function NewSaleFlow({
           </p>
           <Button asChild variant="secondary" className="justify-self-start">
             <Link href="/financeiro">Ir para Financeiro</Link>
+          </Button>
+        </div>
+      </main>
+    );
+
+  if (done)
+    return (
+      <main className="page-content grid max-w-lg gap-5">
+        <div className="grid justify-items-center gap-2 text-center">
+          <CircleCheck
+            className="size-12 text-success-600"
+            aria-hidden="true"
+          />
+          <h1 className="text-2xl font-semibold text-neutral-900">
+            Venda registrada
+          </h1>
+          <p className="text-sm text-neutral-700">
+            {formatCents(done.totalCents)}
+            {selectedCustomer ? ` · ${selectedCustomer.name}` : ''}
+          </p>
+        </div>
+        {done.receiptToken && (
+          <ReceiptShare
+            token={done.receiptToken}
+            storeName={storeName}
+            customerName={selectedCustomer?.name}
+            customerWhatsapp={selectedCustomer?.whatsapp}
+          />
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          <Button asChild variant="secondary">
+            <a href="/vendas/nova">Nova venda</a>
+          </Button>
+          <Button
+            type="button"
+            variant="tertiary"
+            onClick={() => {
+              router.push('/vendas');
+              router.refresh();
+            }}
+          >
+            Ver vendas
           </Button>
         </div>
       </main>
@@ -1077,6 +1191,32 @@ export function NewSaleFlow({
                   negativo.
                 </p>
               )}
+              {pixApplies &&
+                (pixMethod?.pixKey ? (
+                  pixQr ? (
+                    <PixQr
+                      payload={pixQr.payload}
+                      amountCents={pixQr.amountCents}
+                    />
+                  ) : (
+                    <Button
+                      type="button"
+                      size="lg"
+                      variant="secondary"
+                      onClick={showPixQr}
+                      loading={pending === 'pix'}
+                      disabled={Boolean(pending)}
+                    >
+                      <QrCode aria-hidden="true" />
+                      Mostrar QR Code do Pix
+                    </Button>
+                  )
+                ) : (
+                  <p className="rounded-md bg-neutral-50 px-4 py-3 text-sm text-neutral-700">
+                    Para mostrar o QR Code do Pix aqui, cadastre a chave Pix em
+                    Financeiro → Formas de pagamento.
+                  </p>
+                ))}
             </section>
           )}
         </div>

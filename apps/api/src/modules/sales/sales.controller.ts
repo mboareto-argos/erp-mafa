@@ -20,8 +20,11 @@ import { SalesService } from './sales.service';
 import { createSaleSchema, type CreateSaleDto } from './dto/create-sale.schema';
 import {
   confirmSaleSchema,
+  receiptLinkSchema,
   type ConfirmSaleDto,
+  type ReceiptLinkDto,
 } from './dto/confirm-sale.schema';
+import { ReceiptsService } from './receipts/receipts.service';
 import { returnSaleSchema, type ReturnSaleDto } from './dto/return-sale.schema';
 import { IdempotencyService } from '../idempotency/idempotency.service';
 
@@ -31,6 +34,7 @@ export class SalesController {
   constructor(
     private readonly sales: SalesService,
     private readonly idempotency: IdempotencyService,
+    private readonly receipts: ReceiptsService,
   ) {}
 
   @Post()
@@ -81,6 +85,18 @@ export class SalesController {
       idempotencyKey,
       () => this.sales.reserve(tenant, id),
     );
+  }
+
+  // Link do recibo (BR §10.10, regra 26): devolve o ativo (cria se faltar);
+  // { rotate: true } invalida o atual e gera outro.
+  @Post(':id/receipt-link')
+  @RequirePermission('manage_sales')
+  receiptLink(
+    @CurrentTenant() tenant: CurrentTenantContext,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(receiptLinkSchema)) dto: ReceiptLinkDto,
+  ) {
+    return this.receipts.ensureLink(tenant, id, dto.rotate);
   }
 
   @Post(':id/confirm')

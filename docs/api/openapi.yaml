@@ -1412,6 +1412,36 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/PaymentMethod" }
+  /payments/methods/{id}/pix:
+    put:
+      tags: [payments]
+      summary: >
+        Chave Pix da forma de pagamento para o QR Code da venda (BR §10.12 regra 8; requer
+        manage_payment_methods). Só em forma do tipo pix. A chave é validada e normalizada;
+        cada alteração vai para a auditoria.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [key]
+                  properties: { key: { type: string, nullable: true, enum: [null] } }
+                - type: object
+                  required: [keyType, key, merchantName, merchantCity]
+                  properties:
+                    keyType: { type: string, enum: [cpf, cnpj, phone, email, random] }
+                    key: { type: string }
+                    merchantName: { type: string, maxLength: 25 }
+                    merchantCity: { type: string, maxLength: 15 }
+      responses:
+        "200": { description: Forma de pagamento atualizada }
+        "400": { description: INVALID_PIX_KEY ou PIX_KEY_NOT_ALLOWED }
+        "404": { description: Não encontrada (inclusive de outra empresa) }
   /payments/methods/{id}/deactivate:
     patch:
       tags: [payments]
@@ -1584,6 +1614,40 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /sales/{id}/receipt-link:
+    post:
+      tags: [sales]
+      summary: >
+        Link do recibo (BR §10.10 regra 26; requer manage_sales). Devolve o link ativo (cria se
+        faltar); com rotate=true revoga o atual e cria outro.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { rotate: { type: boolean, default: false } }
+      responses:
+        "201":
+          description: Token do link
+          content:
+            application/json:
+              schema: { type: object, properties: { token: { type: string } } }
+        "404": { description: Venda não encontrada }
+        "409": { description: RECEIPT_NOT_AVAILABLE (venda ainda não confirmada) }
+  /public/receipts/{token}:
+    get:
+      tags: [sales]
+      summary: >
+        Recibo público, sem login (ADR-0004). Só os campos do recibo: loja, itens, totais,
+        pagamentos, parcelas, nome do cliente e estado — nunca custo ou lucro.
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Recibo }
+        "404": { description: Token inexistente ou revogado }
   /sales/{id}/confirm:
     post:
       tags: [sales]

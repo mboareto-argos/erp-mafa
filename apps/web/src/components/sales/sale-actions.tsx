@@ -1,4 +1,5 @@
 'use client';
+import { ReceiptDrawer } from './receipt-drawer';
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -31,7 +32,7 @@ export type SaleListItem = {
   cmvCalculated: string | null;
   grossProfitCalculated: string | null;
   createdAt: string;
-  customer: { id: string; name: string } | null;
+  customer: { id: string; name: string; whatsapp?: string | null } | null;
   items: Array<{
     id: string;
     productVariantId: string;
@@ -839,11 +840,20 @@ export function SaleActions({
   sale,
   canManage,
   methods,
+  storeName = '',
 }: {
   sale: SaleListItem;
   canManage: boolean;
   methods: Method[];
+  storeName?: string;
 }) {
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  // Recibo (BR §10.10, regra 26): toda venda que já foi confirmada.
+  const hasReceipt =
+    canManage &&
+    ['confirmed', 'partially_returned', 'returned', 'cancelled'].includes(
+      sale.status,
+    );
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
@@ -883,6 +893,20 @@ export function SaleActions({
               <small>Ver resumo completo</small>
             </div>
           </DropdownMenuItem>
+          {hasReceipt && (
+            <DropdownMenuItem
+              className="dropdown-item view"
+              onSelect={() => setReceiptOpen(true)}
+            >
+              <span>
+                <AppIcon name="list" />
+              </span>
+              <div>
+                <strong>Recibo</strong>
+                <small>Enviar ao cliente por link</small>
+              </div>
+            </DropdownMenuItem>
+          )}
           {canEdit && (
             <DropdownMenuItem asChild>
               <Link
@@ -962,6 +986,16 @@ export function SaleActions({
         open={detailsOpen}
         onOpenChange={setDetailsOpen}
       />
+      {hasReceipt && (
+        <ReceiptDrawer
+          saleId={sale.id}
+          open={receiptOpen}
+          onOpenChange={setReceiptOpen}
+          storeName={storeName}
+          customerName={sale.customer?.name}
+          customerWhatsapp={sale.customer?.whatsapp}
+        />
+      )}
       {canReserve && (
         <ReserveSale
           saleId={sale.id}

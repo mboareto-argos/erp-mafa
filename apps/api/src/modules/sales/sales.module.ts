@@ -5,10 +5,12 @@ import { CashFlowModule } from '../cash-flow/cash-flow.module';
 import { SalesController } from './sales.controller';
 import { SalesService } from './sales.service';
 import { ReceivablesModule } from '../receivables/receivables.module';
+import { ReceiptsService } from './receipts/receipts.service';
+import { PublicReceiptsController } from './receipts/public-receipts.controller';
 
 @Module({
   imports: [TenancyModule, InventoryModule, CashFlowModule, ReceivablesModule],
-  controllers: [SalesController],
-  providers: [SalesService],
+  controllers: [SalesController, PublicReceiptsController],
+  providers: [SalesService, ReceiptsService],
 })
 export class SalesModule {}

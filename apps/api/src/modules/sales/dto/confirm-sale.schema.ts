@@ -16,3 +16,9 @@ export const confirmSaleSchema = z.object({
 });
 
 export type ConfirmSaleDto = z.infer<typeof confirmSaleSchema>;
+
+export const receiptLinkSchema = z
+  .object({ rotate: z.boolean().default(false) })
+  .strict();
+
+export type ReceiptLinkDto = z.infer<typeof receiptLinkSchema>;

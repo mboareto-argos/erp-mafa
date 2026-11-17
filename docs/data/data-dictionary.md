@@ -674,6 +674,9 @@ Sem prazo de recebimento nem configuração de parcelas ainda (venda só à vist
 | fee_rate | numeric(7,4)? | percentual |
 | fee_fixed | numeric(14,2)? | |
 | financial_account_id | uuid? FK → financial_accounts | adicionado na migration `20260804190647_add_finance` — conta de destino (§10.12); quando presente, uma venda à vista confirmada gera uma `financial_transaction` real |
+| pix_key | text? | chave Pix normalizada (CPF/CNPJ só dígitos, celular `+55…`, e-mail/aleatória em minúsculas) para o QR Code da venda (BR §10.12, regra 8) — migration `20261117132716_pix_key_and_receipt_links` |
+| pix_merchant_name | text? | nome de quem recebe (até 25 caracteres no BR Code) |
+| pix_merchant_city | text? | cidade de quem recebe (até 15 caracteres) |
 | status | enum(active, inactive) | |
 | created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
 
@@ -720,6 +723,32 @@ padrão de `purchase_items.quantity_received`.
 | created_at / updated_at / created_by / deleted_at | — | TA-DATA-001 |
 
 Índice: `(company_id, sale_id)`.
+
+**Chave Pix:** `PUT /payments/methods/:id/pix` (`manage_payment_methods`), só em forma do tipo
+`pix`; `{ key: null }` remove. Cada alteração gera `audit_logs` (`payment_method.pix_key_updated`).
+O "Pix copia e cola" é montado no web (`lib/pix.ts`) com o valor da venda; o sistema não confirma
+o recebimento sozinho.
+
+### `sale_receipt_links`
+Link público do recibo (BR §10.10, regra 26; ADR-0004) — migration
+`20261117132716_pix_key_and_receipt_links`. **Sem RLS** (exceção documentada, como
+`invitations`): o recibo abre sem login, então o token é resolvido antes de haver empresa no
+contexto. Guarda só o vínculo; os dados do recibo são lidos depois com RLS.
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| id | uuid PK | |
+| company_id | uuid FK → companies | |
+| sale_id | uuid FK → sales | |
+| token | text UNIQUE | 32 bytes aleatórios em base64url |
+| created_at / created_by | — | criado na confirmação da venda (ou ao abrir o recibo de venda antiga) |
+| revoked_at | timestamp? | preenchido ao gerar link novo; link revogado responde 404 |
+
+Índice: `(company_id, sale_id)`.
+
+**API:** `POST /sales/:id/receipt-link` (`manage_sales`) devolve o link ativo (cria se faltar);
+`{ rotate: true }` revoga e cria outro. `GET /public/receipts/:token` (sem login) devolve só os
+campos do recibo.
 
 ### `sale_payments`
 Criado só na confirmação — imutável dali em diante (sem `updated_at`, mesma lógica de
