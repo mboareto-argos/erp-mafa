@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { BrandLogo } from '@/components/brand/brand-logo';
 import { RegisterForm } from '@/components/auth/register-form';
 
 export default function RegisterPage() {
@@ -6,7 +7,7 @@ export default function RegisterPage() {
     <main className="auth-page">
       <aside className="auth-aside">
         <Link className="brand" href="/">
-          <span className="brand-mark">M</span> MAFA Store
+          <BrandLogo />
         </Link>
         <div>
           <h1>Vamos organizar sua loja.</h1>

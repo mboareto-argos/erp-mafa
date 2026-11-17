@@ -1,4 +1,5 @@
 import { LoginForm } from '@/components/auth/login-form';
+import { BrandLogo } from '@/components/brand/brand-logo';
 import Link from 'next/link';
 
 export default function LoginPage() {
@@ -6,7 +7,7 @@ export default function LoginPage() {
     <main className="auth-page">
       <aside className="auth-aside">
         <Link className="brand" href="/">
-          <span className="brand-mark">M</span> MAFA Store
+          <BrandLogo />
         </Link>
         <div>
           <h1>Controle sua loja sem depender de planilhas.</h1>

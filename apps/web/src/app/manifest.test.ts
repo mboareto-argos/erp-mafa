@@ -5,6 +5,8 @@ describe('manifesto do app instalável', () => {
   it('abre em tela cheia no Início, com ícones (inclusive maskable) e atalhos', () => {
     const value = manifest();
     expect(value).toMatchObject({
+      name: 'Vendaí',
+      short_name: 'Vendaí',
       display: 'standalone',
       start_url: '/inicio',
       lang: 'pt-BR',

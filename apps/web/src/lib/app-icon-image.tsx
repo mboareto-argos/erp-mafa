@@ -1,24 +1,24 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { ImageResponse } from 'next/og';
-import { APP_ACCENT, APP_INK, APP_NAME } from './app-identity';
+import {
+  LOGO_CHECK_PATH,
+  LOGO_CHECK_WIDTH,
+  LOGO_GOLD,
+  LOGO_HOLE,
+  LOGO_INK,
+  LOGO_TAG_PATH,
+} from './brand';
 
 /**
- * Ícone do app: a inicial da loja sobre o dourado (mesmo "M" do cabeçalho).
+ * Ícone do app: a etiqueta de preço do Vendaí sobre o dourado.
  * `safeZone` encolhe o desenho para os ícones "maskable" do Android, que o
  * sistema recorta em círculo/gota — o conteúdo precisa caber nos 80% centrais.
+ * `rounded: false` para o iPhone, que arredonda sozinho.
  */
-// Inter Bold, a mesma fonte do app (DS §4.4). Os ícones são gerados no
-// build (estáticos), quando o arquivo da fonte está disponível.
-const interBold = () =>
-  readFile(join(process.cwd(), 'src/app/fonts/inter-700.ttf'));
-
 export async function appIconImage(
   size: number,
   { rounded = true, safeZone = false } = {},
 ) {
-  const letter = APP_NAME.trim().charAt(0).toUpperCase() || 'M';
-  const scale = safeZone ? 0.62 : 0.78;
+  const art = size * (safeZone ? 0.72 : 1);
   return new ImageResponse(
     <div
       style={{
@@ -27,34 +27,28 @@ export async function appIconImage(
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: APP_ACCENT,
+        background: LOGO_GOLD,
         borderRadius: rounded ? size * 0.22 : 0,
       }}
     >
-      <span
-        style={{
-          color: APP_INK,
-          fontSize: size * scale * 0.82,
-          fontWeight: 700,
-          fontFamily: 'Inter',
-          lineHeight: 1,
-          marginTop: size * 0.02,
-        }}
-      >
-        {letter}
-      </span>
+      <svg width={art} height={art} viewBox="0 0 100 100">
+        <path d={LOGO_TAG_PATH} fill={LOGO_INK} />
+        <circle
+          cx={LOGO_HOLE.cx}
+          cy={LOGO_HOLE.cy}
+          r={LOGO_HOLE.r}
+          fill={LOGO_GOLD}
+        />
+        <path
+          d={LOGO_CHECK_PATH}
+          fill="none"
+          stroke={LOGO_GOLD}
+          strokeWidth={LOGO_CHECK_WIDTH}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
     </div>,
-    {
-      width: size,
-      height: size,
-      fonts: [
-        {
-          name: 'Inter',
-          data: await interBold(),
-          weight: 700,
-          style: 'normal',
-        },
-      ],
-    },
+    { width: size, height: size },
   );
 }
