@@ -73,6 +73,9 @@ export function ContactPicker({
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
+  // Aceite de ofertas (BR §10.9, regra 9): só cliente, sempre desmarcado —
+  // o aceite precisa ser pedido ao cliente, nunca presumido.
+  const [acceptsOffers, setAcceptsOffers] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -96,6 +99,10 @@ export function ContactPicker({
         body: JSON.stringify({
           name: name.trim(),
           ...(whatsapp.trim() ? { whatsapp: whatsapp.trim() } : {}),
+          // Cadastro no balcão: a origem do aceite é "pessoalmente".
+          ...(kind === 'customer' && acceptsOffers
+            ? { marketingConsentSource: 'in_person' }
+            : {}),
         }),
       });
       const body = (await response.json()) as PickerContact & {
@@ -111,6 +118,7 @@ export function ContactPicker({
       setQuery('');
       setName('');
       setWhatsapp('');
+      setAcceptsOffers(false);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -191,6 +199,24 @@ export function ContactPicker({
             placeholder="(11) 99999-0000"
           />
         </label>
+        {kind === 'customer' && (
+          <label className="flex min-h-11 items-start gap-3 text-sm text-neutral-900">
+            <input
+              type="checkbox"
+              checked={acceptsOffers}
+              onChange={(event) => setAcceptsOffers(event.target.checked)}
+              className="mt-0.5 size-5 shrink-0 accent-brand-accent"
+            />
+            <span>
+              <strong className="block font-semibold">
+                Aceita receber ofertas
+              </strong>
+              <span className="text-neutral-500">
+                Pergunte ao cliente. Só quem aceita entra nas campanhas.
+              </span>
+            </span>
+          </label>
+        )}
         {error && (
           <p
             id={`${id}-error`}

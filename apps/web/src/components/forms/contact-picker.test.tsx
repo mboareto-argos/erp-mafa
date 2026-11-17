@@ -58,6 +58,43 @@ describe('ContactPicker', () => {
     expect(onChange).toHaveBeenCalledWith('new-1');
   });
 
+  it('cliente que aceita ofertas já é cadastrado com o aceite (BR §10.9, regra 9)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'new-2', name: 'Bia' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <ContactPicker
+        kind="customer"
+        contacts={[]}
+        value=""
+        onChange={vi.fn()}
+        onCreated={vi.fn()}
+        canCreate
+      />,
+    );
+    await userEvent.type(
+      screen.getByRole('searchbox', { name: 'Buscar cliente' }),
+      'Bia',
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Cadastrar "Bia"' }),
+    );
+    const consent = screen.getByRole('checkbox', {
+      name: /Aceita receber ofertas/,
+    });
+    expect(consent).not.toBeChecked();
+    await userEvent.click(consent);
+    await userEvent.click(
+      screen.getByRole('button', { name: /Cadastrar e usar/ }),
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      name: 'Bia',
+      marketingConsentSource: 'in_person',
+    });
+  });
+
   it('sem permissão de cadastrar cliente, o atalho não aparece (DS-PERM-001)', () => {
     render(
       <ContactPicker
@@ -97,6 +134,7 @@ describe('ContactPicker', () => {
     await userEvent.click(
       screen.getByRole('button', { name: 'Cadastrar "Importadora Oriente"' }),
     );
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     await userEvent.click(
       screen.getByRole('button', { name: /Cadastrar e usar/ }),
     );
