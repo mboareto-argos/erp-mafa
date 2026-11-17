@@ -680,9 +680,20 @@ export class InventoryService {
     });
   }
 
-  getMovements(companyId: string, productVariantId?: string) {
+  getMovements(
+    companyId: string,
+    productVariantId?: string,
+    options: { productVariantIds?: string[]; take?: number } = {},
+  ) {
     return this.prisma.stockMovement.findMany({
-      where: { companyId, ...(productVariantId ? { productVariantId } : {}) },
+      where: {
+        companyId,
+        ...(productVariantId ? { productVariantId } : {}),
+        ...(options.productVariantIds
+          ? { productVariantId: { in: options.productVariantIds } }
+          : {}),
+      },
+      ...(options.take ? { take: options.take } : {}),
       include: {
         adjustment: {
           select: { reason: true, requiresApproval: true, approvedBy: true },

@@ -74,6 +74,7 @@ const originLabel: Record<InventoryMovement['originType'], string> = {
   adjustment: 'Ajuste manual',
   return: 'Devolução',
   sale: 'Venda',
+  kit_assembly: 'Montagem de kit',
 };
 const stateLabel: Record<InventoryState, string> = {
   healthy: 'Regular',
@@ -93,22 +94,29 @@ export default async function InventoryPage({
     inventory?: string;
   }>;
 }) {
-  const [balances, lowStock, products, movements, session, counts, customers] =
-    await Promise.all([
-      backendAuthenticatedRequest('/inventory/balances') as Promise<Balance[]>,
-      backendAuthenticatedRequest('/inventory/low-stock') as Promise<
-        LowStock[]
-      >,
-      backendAuthenticatedRequest('/catalog/products') as Promise<Product[]>,
-      backendAuthenticatedRequest('/inventory/movements') as Promise<
-        InventoryMovement[]
-      >,
-      getSession() as Promise<{ permissions: string[] } | null>,
-      backendAuthenticatedRequest('/inventory/counts') as Promise<
-        InventoryCount[]
-      >,
-      backendAuthenticatedRequest('/customers') as Promise<Customer[]>,
-    ]);
+  const [
+    balances,
+    lowStock,
+    products,
+    recentMovements,
+    session,
+    counts,
+    customers,
+  ] = await Promise.all([
+    backendAuthenticatedRequest('/inventory/balances') as Promise<Balance[]>,
+    backendAuthenticatedRequest('/inventory/low-stock') as Promise<LowStock[]>,
+    backendAuthenticatedRequest('/catalog/products') as Promise<Product[]>,
+    // Só as 20 mais recentes para o quadro geral; o histórico de cada
+    // produto vem abaixo, apenas para os da página visível.
+    backendAuthenticatedRequest('/inventory/movements?take=20') as Promise<
+      InventoryMovement[]
+    >,
+    getSession() as Promise<{ permissions: string[] } | null>,
+    backendAuthenticatedRequest('/inventory/counts') as Promise<
+      InventoryCount[]
+    >,
+    backendAuthenticatedRequest('/customers') as Promise<Customer[]>,
+  ]);
   const canAdjust = session?.permissions.includes('adjust_stock') ?? false;
   const canReserve = session?.permissions.includes('manage_sales') ?? false;
   const {
@@ -163,6 +171,12 @@ export default async function InventoryPage({
     (currentPage - 1) * pageSize,
     currentPage * pageSize,
   );
+  const visibleVariantIds = visibleRows.map((row) => row.productVariantId);
+  const movements = visibleVariantIds.length
+    ? ((await backendAuthenticatedRequest(
+        `/inventory/movements?productVariantIds=${visibleVariantIds.join(',')}`,
+      )) as InventoryMovement[])
+    : [];
   const movementsByVariant = new Map<string, InventoryMovement[]>();
   movements.forEach((movement) =>
     movementsByVariant.set(movement.productVariantId, [
@@ -388,7 +402,7 @@ export default async function InventoryPage({
                 </>
               }
             >
-              {movements.length === 0 ? (
+              {recentMovements.length === 0 ? (
                 <tr className="table-empty-row">
                   <td className="table-empty-cell" colSpan={6}>
                     <div className="table-empty-content">
@@ -404,7 +418,7 @@ export default async function InventoryPage({
                   </td>
                 </tr>
               ) : (
-                movements.slice(0, 20).map((movement) => (
+                recentMovements.map((movement) => (
                   <tr key={movement.id}>
                     <td data-label="Produto">
                       <strong>

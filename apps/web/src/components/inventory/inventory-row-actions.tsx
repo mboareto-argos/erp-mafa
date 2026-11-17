@@ -25,7 +25,7 @@ export type InventoryMovement = {
   productVariantId: string;
   type: 'in' | 'out' | 'adjustment' | 'return' | 'reservation' | 'release';
   quantity: string;
-  originType: 'purchase' | 'adjustment' | 'return' | 'sale';
+  originType: 'purchase' | 'adjustment' | 'return' | 'sale' | 'kit_assembly';
   createdAt: string;
   adjustment: {
     reason: string;
@@ -74,6 +74,7 @@ const originLabel: Record<InventoryMovement['originType'], string> = {
   adjustment: 'Ajuste manual',
   return: 'Devolução',
   sale: 'Venda',
+  kit_assembly: 'Montagem de kit',
 };
 
 function InventoryDetails({

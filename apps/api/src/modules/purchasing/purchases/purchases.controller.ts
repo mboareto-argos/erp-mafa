@@ -6,8 +6,10 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
+import { parsePage } from '../../../common/pagination/pagination';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { JwtAuthGuard } from '../../tenancy/jwt-auth.guard';
 import { PermissionsGuard } from '../../tenancy/permissions.guard';
@@ -48,8 +50,12 @@ export class PurchasesController {
 
   @Get()
   @RequirePermission('view_purchasing')
-  list(@CurrentTenant() tenant: CurrentTenantContext) {
-    return this.purchases.list(tenant.companyId);
+  list(
+    @CurrentTenant() tenant: CurrentTenantContext,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.purchases.list(tenant.companyId, parsePage(page, pageSize));
   }
 
   @Get(':id')

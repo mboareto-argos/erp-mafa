@@ -1,3 +1,4 @@
+import { parsePage } from '../../common/pagination/pagination';
 import {
   Body,
   Controller,
@@ -6,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
@@ -42,8 +44,12 @@ export class SalesController {
 
   @Get()
   @RequirePermission('view_sales')
-  list(@CurrentTenant() tenant: CurrentTenantContext) {
-    return this.sales.list(tenant.companyId);
+  list(
+    @CurrentTenant() tenant: CurrentTenantContext,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.sales.list(tenant.companyId, parsePage(page, pageSize));
   }
 
   @Patch(':id')
