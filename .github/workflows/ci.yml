@@ -1,0 +1,80 @@
+name: CI
+
+# Verificação automática em todo PR e na main: tipos, lint do web e testes
+# (unitários, Vitest e integração da API com Postgres + RLS, incluindo os
+# cenários multiempresa — AGENTS.md "Como executar validações").
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    name: Web (tipos, lint e testes)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Tipos das rotas do Next
+        run: pnpm --filter @erp-mafa/web exec next typegen
+      - name: Checagem de tipos
+        run: pnpm --filter @erp-mafa/web exec tsc --noEmit
+      - name: Lint
+        run: pnpm --filter @erp-mafa/web exec eslint src
+      - name: Testes (Vitest)
+        run: pnpm --filter @erp-mafa/web test
+
+  api:
+    name: API (build e testes)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: erp_mafa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Mesmo papel de scripts/init-postgres-dbs.sql: sem BYPASSRLS, para os
+      # testes de integração exercitarem o RLS de verdade.
+      - name: Papel da aplicação no Postgres
+        run: >
+          psql "postgresql://postgres:postgres@localhost:5432/erp_mafa_test"
+          -c "CREATE ROLE erp_mafa_app LOGIN PASSWORD 'ErpMafaApp!2026Local'
+          NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;"
+      - name: Build
+        run: pnpm --filter @erp-mafa/api build
+      - name: Testes unitários
+        run: pnpm --filter @erp-mafa/api test
+      # Aplica as migrations, roda o seed e todos os testes de integração
+      # (apps/api/.env.test aponta para este Postgres).
+      - name: Testes de integração (inclui multiempresa)
+        run: pnpm --filter @erp-mafa/api test:integration
