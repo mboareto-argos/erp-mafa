@@ -20,4 +20,7 @@ export function isAllowedProductImageUrl(value: string) {
 export const productImageUrlSchema = z
   .string()
   .max(500)
-  .refine(isAllowedProductImageUrl, 'Foto inválida: envie a imagem pelo próprio sistema.');
+  .refine(
+    isAllowedProductImageUrl,
+    'Foto inválida: envie a imagem pelo próprio sistema.',
+  );

@@ -3,9 +3,13 @@ import { isAllowedProductImageUrl } from './product-image-url.schema';
 describe('isAllowedProductImageUrl (ADR-0003)', () => {
   it('aceita o Vercel Blob público do app (https) e /uploads/ do ambiente local', () => {
     expect(
-      isAllowedProductImageUrl('https://abc123.public.blob.vercel-storage.com/companies/c/products/p/x.jpg'),
+      isAllowedProductImageUrl(
+        'https://abc123.public.blob.vercel-storage.com/companies/c/products/p/x.jpg',
+      ),
     ).toBe(true);
-    expect(isAllowedProductImageUrl('/uploads/companies/c/products/p/x.jpg')).toBe(true);
+    expect(
+      isAllowedProductImageUrl('/uploads/companies/c/products/p/x.jpg'),
+    ).toBe(true);
   });
 
   it('recusa qualquer outra origem', () => {

@@ -91,14 +91,24 @@ describe('Edição, reativação, reprecificação e paginação — Products, S
       const created = await request(app.getHttpServer())
         .post('/api/v1/catalog/products')
         .set(auth(session.accessToken))
-        .send({ sku: 'HAY-100', name: 'Hayaati EDP 100 ml', unit: 'un', barcode: ' 6291108730515 ' })
+        .send({
+          sku: 'HAY-100',
+          name: 'Hayaati EDP 100 ml',
+          unit: 'un',
+          barcode: ' 6291108730515 ',
+        })
         .expect(201);
       expect(created.body.variants[0].barcode).toBe('6291108730515');
 
       const duplicate = await request(app.getHttpServer())
         .post('/api/v1/catalog/products')
         .set(auth(session.accessToken))
-        .send({ sku: 'OUTRO', name: 'Outro', unit: 'un', barcode: '6291108730515' })
+        .send({
+          sku: 'OUTRO',
+          name: 'Outro',
+          unit: 'un',
+          barcode: '6291108730515',
+        })
         .expect(409);
       expect(duplicate.body.error.code).toBe('BARCODE_IN_USE');
       expect(duplicate.body.error.field).toBe('barcode');
@@ -118,9 +128,9 @@ describe('Edição, reativação, reprecificação e paginação — Products, S
         .get('/api/v1/catalog/products')
         .set(auth(session.accessToken))
         .expect(200);
-      const listed = (list.body as { id: string; variants: { barcode: string | null }[] }[]).find(
-        (product) => product.id === created.body.id,
-      );
+      const listed = (
+        list.body as { id: string; variants: { barcode: string | null }[] }[]
+      ).find((product) => product.id === created.body.id);
       expect(listed?.variants[0].barcode).toBe('7891234567895');
 
       const cleared = await request(app.getHttpServer())
@@ -133,8 +143,11 @@ describe('Edição, reativação, reprecificação e paginação — Products, S
 
     it('foto do produto: aceita só arquivo do armazenamento do app e pode ser removida (BR §10.3)', async () => {
       const session = await registerCompany(app);
-      const product = await createProduct(app, session.accessToken, { sku: 'FOTO-1' });
-      const blobUrl = 'https://abc123xyz.public.blob.vercel-storage.com/companies/c/products/p/foto.webp';
+      const product = await createProduct(app, session.accessToken, {
+        sku: 'FOTO-1',
+      });
+      const blobUrl =
+        'https://abc123xyz.public.blob.vercel-storage.com/companies/c/products/p/foto.webp';
 
       const saved = await request(app.getHttpServer())
         .patch(`/api/v1/catalog/products/${product.id}`)

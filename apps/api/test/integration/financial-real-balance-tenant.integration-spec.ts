@@ -57,14 +57,14 @@ describe('Financeiro real — saldo inicial, conferência e conta do proprietár
         .get(`/api/v1/reporting/dre?from=${from}&to=${to}`)
         .set(auth(token))
         .expect(200)
-    ).body;
+    ).body as Record<string, any>;
   const dashboard = async (token: string) =>
     (
       await request(app.getHttpServer())
         .get(`/api/v1/reporting/dashboard?from=${from}&to=${to}`)
         .set(auth(token))
         .expect(200)
-    ).body;
+    ).body as Record<string, any>;
 
   it('saldo inicial: uma única vez, pode ser negativo e não é receita (regra 8)', async () => {
     const session = await registerCompany(app);
@@ -144,7 +144,7 @@ describe('Financeiro real — saldo inicial, conferência e conta do proprietár
       .set(auth(session.accessToken))
       .expect(200);
     expect(
-      audit.body.map((entry: { action: string }) => entry.action),
+      (audit.body as { action: string }[]).map((entry) => entry.action),
     ).toContain('financial_account.balance_reconciled');
     expect((await dre(session.accessToken)).expenses).toBe('0');
   });

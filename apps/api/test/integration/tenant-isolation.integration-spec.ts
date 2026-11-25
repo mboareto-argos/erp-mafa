@@ -95,14 +95,23 @@ describe('Isolamento multiempresa — Catalog', () => {
   });
 
   it('mesmo código de barras pode existir em empresas diferentes (unicidade é por empresa)', async () => {
-    const companyA = await registerCompany(app, { companyName: 'Empresa A-EAN' });
-    const companyB = await registerCompany(app, { companyName: 'Empresa B-EAN' });
+    const companyA = await registerCompany(app, {
+      companyName: 'Empresa A-EAN',
+    });
+    const companyB = await registerCompany(app, {
+      companyName: 'Empresa B-EAN',
+    });
 
     for (const company of [companyA, companyB]) {
       await request(app.getHttpServer())
         .post('/api/v1/catalog/products')
         .set('Authorization', `Bearer ${company.accessToken}`)
-        .send({ sku: 'EAN-SHARED', name: 'Perfume importado', unit: 'un', barcode: '6291108730515' })
+        .send({
+          sku: 'EAN-SHARED',
+          name: 'Perfume importado',
+          unit: 'un',
+          barcode: '6291108730515',
+        })
         .expect(201);
     }
   });

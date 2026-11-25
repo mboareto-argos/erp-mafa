@@ -86,7 +86,10 @@ describe('Configurações + usuários — fluxo completo (integração)', () => 
       .get('/api/v1/audit?entityType=category')
       .set(auth)
       .expect(200);
-    expect(audit.body.map((item: { action: string }) => item.action)).toEqual(
+    const actions = (audit.body as { action: string }[]).map(
+      (item) => item.action,
+    );
+    expect(actions).toEqual(
       expect.arrayContaining([
         'category.created',
         'category.updated',
