@@ -1,10 +1,11 @@
 import { UsersService } from './users.service';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { AuditService } from '../../audit/audit.service';
 
 describe('UsersService — hash de senha', () => {
-  // hashPassword/verifyPassword não tocam o banco — PrismaService pode ser
-  // um stub aqui.
-  const service = new UsersService({} as PrismaService);
+  // hashPassword/verifyPassword não tocam o banco nem a auditoria — os dois
+  // podem ser stubs aqui.
+  const service = new UsersService({} as PrismaService, {} as AuditService);
 
   it('nunca guarda a senha em formato reversível (RN 10.1.7) — hash é diferente do texto original', async () => {
     const hash = await service.hashPassword('minha-senha-123');

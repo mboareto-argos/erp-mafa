@@ -19,6 +19,8 @@ const COUNTED_SALE_STATUSES: SaleStatus[] = [
   'returned',
 ];
 
+type TopProducts = Awaited<ReturnType<ReportingService['getTopProducts']>>;
+
 @Injectable()
 export class ReportingService {
   constructor(
@@ -102,7 +104,7 @@ export class ReportingService {
           this.getSalesTrend(tenant.companyId, from, to),
           this.getTopProducts(tenant.companyId, from, to, 5, 'quantity'),
         ])
-      : [[], { products: [] }];
+      : [[], { products: [] as TopProducts['products'] }];
     const topProducts = topProductsResult.products.map((product) => ({
       productId: product.productId,
       sku: product.sku,

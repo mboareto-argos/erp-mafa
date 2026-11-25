@@ -200,16 +200,20 @@ describe('Sales — fluxo completo à vista (integração)', () => {
         installmentPlan: { count: 3, firstDueDate: '2026-09-10' },
       })
       .expect(201);
-    expect(
-      confirmed.body.receivables.map(
-        (item: { amountOriginal: string }) => item.amountOriginal,
-      ),
-    ).toEqual(['33.33', '33.33', '33.34']);
-    expect(
-      confirmed.body.receivables.map((item: { dueDate: string }) =>
-        item.dueDate.slice(0, 10),
-      ),
-    ).toEqual(['2026-09-10', '2026-10-10', '2026-11-10']);
+    const receivables = confirmed.body.receivables as {
+      amountOriginal: string;
+      dueDate: string;
+    }[];
+    expect(receivables.map((item) => item.amountOriginal)).toEqual([
+      '33.33',
+      '33.33',
+      '33.34',
+    ]);
+    expect(receivables.map((item) => item.dueDate.slice(0, 10))).toEqual([
+      '2026-09-10',
+      '2026-10-10',
+      '2026-11-10',
+    ]);
   });
 
   it('cancelar venda confirmada restaura estoque e estorna o caixa (RN 10.10.15)', async () => {

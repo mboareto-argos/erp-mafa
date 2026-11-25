@@ -1,6 +1,6 @@
 name: CI
 
-# Verificação automática em todo PR e na main: tipos, lint do web e testes
+# Verificação automática em todo PR e na main: tipos, lint e testes
 # (unitários, Vitest e integração da API com Postgres + RLS, incluindo os
 # cenários multiempresa — AGENTS.md "Como executar validações").
 on:
@@ -38,7 +38,7 @@ jobs:
         run: pnpm --filter @erp-mafa/web test
 
   api:
-    name: API (build e testes)
+    name: API (tipos, lint, build e testes)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -70,6 +70,10 @@ jobs:
           psql "postgresql://postgres:postgres@localhost:5432/erp_mafa_test"
           -c "CREATE ROLE erp_mafa_app LOGIN PASSWORD 'ErpMafaApp!2026Local'
           NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;"
+      - name: Checagem de tipos (inclui os testes)
+        run: pnpm --filter @erp-mafa/api exec tsc --noEmit
+      - name: Lint
+        run: pnpm --filter @erp-mafa/api exec eslint src test
       - name: Build
         run: pnpm --filter @erp-mafa/api build
       - name: Testes unitários
